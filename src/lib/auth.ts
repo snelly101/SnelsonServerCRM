@@ -16,7 +16,8 @@ const microsoftEnabled = Boolean(process.env.MICROSOFT_CLIENT_ID && process.env.
  */
 export const auth = betterAuth({
   baseURL: process.env.BETTER_AUTH_URL ?? process.env.APP_URL,
-  secret: process.env.BETTER_AUTH_SECRET,
+  // During `next build` no runtime secret exists; a placeholder keeps page-data collection quiet. Runtime still requires the real value.
+  secret: process.env.BETTER_AUTH_SECRET ?? (process.env.NEXT_PHASE === "phase-production-build" ? "build-placeholder-secret-not-used-at-runtime" : undefined),
   database: drizzleAdapter(db, {
     provider: "pg",
     schema: {
