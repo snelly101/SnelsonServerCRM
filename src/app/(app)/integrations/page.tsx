@@ -9,6 +9,7 @@ import { xeroConnectionSummary } from "@/services/xero";
 import { XeroSyncButton, XeroTestButton } from "./xero/controls";
 import { NinjaSyncButton, NinjaTestButton } from "./ninjaone/controls";
 import { ninjaConnectionSummary } from "@/services/ninjaone";
+import { workerHealth } from "@/lib/system-status";
 import { PageHeader, Card, EmptyState, Stat } from "@/components/ui/page";
 import { Badge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
@@ -23,14 +24,19 @@ const STATUS_TONE: Record<string, string> = { connected: "green", error: "red", 
 
 export default async function IntegrationsPage() {
   const me = await requirePermission("integration.read");
-  const [health, runs, conflicts, bp, counts, settings, xero, ninja] = await Promise.all([integrationHealth(), listSyncRuns(undefined, 15), listOpenConflicts(), bpConnectionSummary(), proposalCounts(), getAppSettings(), xeroConnectionSummary(), ninjaConnectionSummary()]);
+  const [health, runs, conflicts, bp, counts, settings, xero, ninja, worker] = await Promise.all([integrationHealth(), listSyncRuns(undefined, 15), listOpenConflicts(), bpConnectionSummary(), proposalCounts(), getAppSettings(), xeroConnectionSummary(), ninjaConnectionSummary(), workerHealth()]);
   const canManage = can(me.role, "integration.manage");
   const canSync = can(me.role, "integration.sync");
   const demo = process.env.DEMO_MODE === "true";
 
   return (
     <>
-      <PageHeader title="Integrations" description="Connection status, mapping, manual sync, history and unresolved conflicts." />
+      <PageHeader title="Integrations" description="Connection status, mapping, manual sync, history and unresolved conflicts." actions={<Badge tone={worker.status === "alive" ? "green" : "red"}>worker {worker.status === "alive" ? `alive · seen ${fmtRelative(worker.lastSeen)}` : worker.status}</Badge>} />
+      {worker.status !== "alive" && (
+        <Alert tone="error" title={worker.status === "never" ? "Background worker has never checked in" : "Background worker looks stopped"} className="mb-4">
+          {worker.lastSeen ? `Last heartbeat ${fmtRelative(worker.lastSeen)}. ` : ""}Scheduled syncs, reminders and webhook processing will not run until <code>npm run worker</code> (or the cron tick) is running. Uptime monitors can watch <code>/api/health</code>.
+        </Alert>
+      )}
       {demo && (
         <Alert tone="warn" title="Demo mode is on" className="mb-4">
           Providers without credentials use synthetic data and are shown as <strong>Demo (not connected)</strong>. Nothing marked demo is live or verified.

@@ -139,4 +139,20 @@ Outbound access was opened during this phase, so the connector is built on prima
 3. Review the billable node classes for your billing policy, then check the Devices page queue.
 
 
-## Phase 6 — Reporting, reliability, deployment docs
+## Phase 6 — Reporting, reliability, deployment docs ✅
+
+### What works
+
+- **Reports page** (`/reports`, every role; the invoices tab needs `report.finance.read`): open pipeline by stage (count, first-year value, weighted, MRR-if-won, past-close counts); **weighted forecast** for the next six months by expected close month with past-due and unscheduled rows, formula printed and marked *estimate*; **recurring revenue** with the documented MRR formula on the page, MRR/ARR, gross margin on MRR (marked *estimate* when any line lacks a cost), customer concentration, MRR by customer with share and margin, MRR by service category; **renewals** in 30/60/90-day buckets with MRR at stake, notice deadlines passed, review dates overdue; **overdue tasks** by owner and the oldest fifty; **outstanding invoices** from the Xero mirror with a freshness label and per-customer breakdown; **devices** with active/billable counts and the estimated unbilled/over-billed amount from open discrepancies; **integration health** with worker heartbeat, per-provider status, runs/failures/item errors in 24 h and open conflicts. Six reports export to CSV through the audited export route.
+- **Worker heartbeat.** Both runners (`npm run worker` and the cron `jobs:tick`) write a heartbeat at start and every 5 minutes into `system_status`. The Integrations page shows *worker alive / stale / never* and a red banner when it is not alive; `GET /api/health` (unauthenticated, no data) returns 200 only when the database answers and a heartbeat landed within 15 minutes, otherwise 503, for uptime monitors and the Docker healthcheck.
+- **Data retention job** (`system.retention`, nightly 03:15): sync runs and their errors after 90 days, processed webhook payloads after 30 days. Audit log, activities, mirrored records, links and discrepancies are kept; customer data is never deleted by a job. Documented in `docs/architecture.md`.
+- **Deployment docs finalised** for the Debian 12 VPS: health endpoint, worker monitoring, restore drill, update procedure, secrets checklist, and the shared-hosting cron variant.
+
+### What was tested
+
+- **6 new unit/integration tests (82 total):** MRR formula across monthly/quarterly/annual lines with one-off excluded, per-customer margin and estimate flags, category grouping, CSV header and rows; pipeline by stage and forecast buckets (next month, past-due, unscheduled); renewal buckets and notice deadlines; overdue tasks by owner excluding done and future; finance/device/health reports label demo data and never show a demo connector as connected; heartbeat alive → stale; retention deletes only old processed rows.
+- **2 new browser tests (16 total):** finance user walks every report tab and downloads a CSV; sales user has no invoices tab, gets 403 on the invoice export, and `/api/health` answers with database and worker fields.
+
+### Remaining dependencies
+
+None in code. Going live needs the VPS (docs/deployment.md), then the three sets of API credentials entered in the web UI (Better Proposals token, Xero app + connect, NinjaOne client id/secret).

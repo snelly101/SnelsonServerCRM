@@ -1,5 +1,7 @@
+import os from "node:os";
 import type { PgBoss } from "pg-boss";
 import { logger } from "@/lib/logger";
+import { setSystemStatus } from "@/lib/system-status";
 
 /**
  * Job registry. Each phase adds queues here:
@@ -18,17 +20,32 @@ export const QUEUES = {
   xeroReconcile: "xero.reconcile",
   xeroInbound: "xero.inbound",
   ninjaSync: "ninjaone.sync",
+  retention: "system.retention",
 } as const;
 
-export async function registerJobs(boss: PgBoss) {
+/** Records that a job runner is alive. Read by /api/health and the Integrations page as "worker last seen". */
+export async function heartbeat(mode: "worker" | "tick") {
+  await setSystemStatus("worker.heartbeat", { mode, pid: process.pid, hostname: os.hostname() });
+}
+
+export async function registerJobs(boss: PgBoss, mode: "worker" | "tick" = "worker") {
   // Keep finished job rows for a week so the Integrations page can show history.
   await boss.createQueue(QUEUES.heartbeat, { deleteAfterSeconds: 7 * 24 * 3600 });
   await boss.work(QUEUES.heartbeat, async ([job]) => {
+    await heartbeat(mode);
     logger.debug({ jobId: job.id }, "heartbeat");
   });
-  // A cheap scheduled job that proves the worker is alive; the Integrations
-  // page (Phase 6) reads the last completed heartbeat as "worker last seen".
+  // A cheap scheduled job that proves the worker is alive, plus one beat at start-up.
   await boss.schedule(QUEUES.heartbeat, "*/5 * * * *", {}, { retryLimit: 0 });
+  await heartbeat(mode);
+
+  // Nightly data retention (sync history, processed webhook payloads). Never touches customer data.
+  await boss.createQueue(QUEUES.retention, { deleteAfterSeconds: 30 * 24 * 3600, retryLimit: 1 });
+  await boss.work(QUEUES.retention, async () => {
+    const { runRetention } = await import("@/services/retention");
+    await runRetention();
+  });
+  await boss.schedule(QUEUES.retention, "15 3 * * *", {}, { retryLimit: 1, singletonKey: "retention" });
 
   // Daily at 06:00: renewal/review reminder tasks and contract expiry. Idempotent via task source keys.
   await boss.createQueue(QUEUES.reminders, { deleteAfterSeconds: 30 * 24 * 3600, retryLimit: 3, retryBackoff: true });

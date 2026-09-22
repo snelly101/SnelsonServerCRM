@@ -16,7 +16,7 @@ async function main() {
   const boss = new PgBoss({ connectionString: process.env.DATABASE_URL!, schema: "pgboss" });
   boss.on("error", (err) => logger.error({ err }, "pg-boss error"));
   await boss.start();
-  await registerJobs(boss);
+  await registerJobs(boss, "tick");
   logger.info({ seconds: TICK_SECONDS }, "Job tick started");
   await new Promise((r) => setTimeout(r, TICK_SECONDS * 1000));
   await boss.stop({ graceful: true, timeout: 8_000 });

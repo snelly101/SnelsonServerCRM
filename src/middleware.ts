@@ -8,7 +8,7 @@ import { getSessionCookie } from "better-auth/cookies";
  */
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  const isPublic = pathname.startsWith("/login") || pathname.startsWith("/api/auth") || pathname.startsWith("/api/webhooks");
+  const isPublic = pathname.startsWith("/login") || pathname.startsWith("/api/auth") || pathname.startsWith("/api/webhooks") || pathname === "/api/health";
   const hasSession = Boolean(getSessionCookie(req));
   if (!isPublic && !hasSession) {
     const url = req.nextUrl.clone();
