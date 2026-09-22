@@ -6,7 +6,15 @@ export const XERO_API_BASE = "https://api.xero.com/api.xro/2.0";
 export const XERO_IDENTITY = "https://identity.xero.com";
 export const XERO_CONNECTIONS = "https://api.xero.com/connections";
 export const XERO_AUTHORIZE = "https://login.xero.com/identity/connect/authorize";
-export const XERO_SCOPES = "openid profile email offline_access accounting.contacts accounting.transactions accounting.settings.read";
+/**
+ * Granular scopes (required for apps created on or after 2 March 2026; the broad
+ * accounting.transactions scope is rejected with invalid_scope for those apps):
+ *  - accounting.contacts      read contacts, create/update the ones the CRM owns
+ *  - accounting.invoices      read sales invoices, create DRAFT invoices
+ *  - accounting.payments.read read payments (never written)
+ *  - accounting.settings.read accounts, tax rates, branding themes, organisation
+ */
+export const XERO_SCOPES = "openid profile email offline_access accounting.contacts accounting.invoices accounting.payments.read accounting.settings.read";
 
 export type XeroAppConfig = { clientId: string; clientSecret: string; redirectUri: string };
 
