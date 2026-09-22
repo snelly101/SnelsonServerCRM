@@ -1,0 +1,79 @@
+# Production stack for a single VPS (Debian 12 + Docker).
+# See docs/deployment.md for first-time setup.
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: crm
+      POSTGRES_USER: crm
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crm -d crm"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    # Postgres is only reachable from the other containers, never from the internet.
+
+  migrate:
+    build: { context: ., target: worker }
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://crm:${POSTGRES_PASSWORD}@db:5432/crm
+    command: ["npm", "run", "db:migrate"]
+    depends_on:
+      db: { condition: service_healthy }
+
+  web:
+    build: { context: ., target: web }
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://crm:${POSTGRES_PASSWORD}@db:5432/crm
+      PORT: "3000"
+    depends_on:
+      db: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    expose: ["3000"]
+
+  worker:
+    build: { context: ., target: worker }
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://crm:${POSTGRES_PASSWORD}@db:5432/crm
+    depends_on:
+      db: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      CRM_DOMAIN: ${CRM_DOMAIN:?set CRM_DOMAIN in .env, e.g. crm.example.com}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [web]
+
+  backup:
+    image: postgres:16
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./backups:/backups
+      - ./deploy/backup.sh:/backup.sh:ro
+    entrypoint: ["/bin/sh", "-c", "while true; do /backup.sh; sleep 86400; done"]
+    depends_on:
+      db: { condition: service_healthy }
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

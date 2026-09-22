@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --color-brand-50: #eef4ff;
+  --color-brand-100: #dbe6fe;
+  --color-brand-200: #bfd3fe;
+  --color-brand-300: #93b4fd;
+  --color-brand-400: #608cfa;
+  --color-brand-500: #3b66f5;
+  --color-brand-600: #2547e9;
+  --color-brand-700: #1d36d6;
+  --color-brand-800: #1e2fad;
+  --color-brand-900: #1e2c89;
+}
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  @apply bg-slate-50 text-slate-900 antialiased;
+}
+
+*:focus-visible {
+  @apply outline-none ring-2 ring-brand-500 ring-offset-2 ring-offset-white;
+}
+
+@layer components {
+/* Tables */
+.tbl {
+  @apply w-full text-sm;
+}
+.tbl th {
+  @apply text-left text-xs font-semibold uppercase tracking-wide text-slate-500 px-3 py-2 border-b border-slate-200 bg-slate-50 whitespace-nowrap;
+}
+.tbl td {
+  @apply px-3 py-2 border-b border-slate-100 align-middle;
+}
+.tbl tbody tr:hover {
+  @apply bg-brand-50/40;
+}
+
+.field-label {
+  @apply block text-sm font-medium text-slate-700 mb-1;
+}
+.field-help {
+  @apply mt-1 text-xs text-slate-500;
+}
+.field-error {
+  @apply mt-1 text-xs text-red-600;
+}
+.input {
+  @apply block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-slate-400 disabled:bg-slate-100 disabled:text-slate-500 aria-[invalid=true]:border-red-500;
+}
+}

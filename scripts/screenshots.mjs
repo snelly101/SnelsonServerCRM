@@ -1,0 +1,15 @@
+import { chromium } from "@playwright/test";
+const b = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium-1194/chrome-linux/chrome" });
+const p = await b.newPage({ viewport: { width: 1360, height: 860 } });
+await p.goto("http://localhost:3000/login");
+await p.getByLabel("Email").fill("admin@example.com");
+await p.getByLabel("Password").fill("Admin12345!");
+await p.getByRole("button", { name: "Sign in" }).click();
+await p.waitForURL("http://localhost:3000/");
+await p.screenshot({ path: "docs/screenshots/dashboard.png" });
+await p.goto("http://localhost:3000/companies");
+await p.screenshot({ path: "docs/screenshots/companies.png" });
+const href = await p.getByRole("link", { name: "Northern Freight Solutions Ltd" }).getAttribute("href");
+await p.goto("http://localhost:3000" + href);
+await p.screenshot({ path: "docs/screenshots/company-overview.png", fullPage: true });
+await b.close();
