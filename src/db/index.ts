@@ -8,9 +8,11 @@ declare global {
 
 function createPool() {
   const url = process.env.DATABASE_URL;
-  if (!url) throw new Error("DATABASE_URL is not set");
+  // `next build` imports server modules while collecting page data but never queries.
+  // Allow the pool to be constructed then; at runtime a missing URL is still a hard error.
+  if (!url && process.env.NEXT_PHASE !== "phase-production-build") throw new Error("DATABASE_URL is not set");
   return new Pool({
-    connectionString: url,
+    connectionString: url ?? "postgres://build-placeholder/unused",
     max: Number(process.env.DB_POOL_MAX ?? 10),
     idleTimeoutMillis: 30_000,
   });
