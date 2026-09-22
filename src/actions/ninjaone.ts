@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireActionPermission } from "@/lib/session";
 import { runAction, type ActionResult } from "@/lib/action-result";
-import { connectNinjaOne, linkLocation, linkOrganization, reviewDiscrepancy, runDiscrepancyCheck, saveNinjaConfig, syncNinjaOne, testNinjaOne, unlinkLocation, unlinkOrganization } from "@/services/ninjaone";
+import { connectNinjaOne, importAllOrganizations, importOrganizationAsCompany, linkLocation, linkOrganization, reviewDiscrepancy, runDiscrepancyCheck, saveNinjaConfig, syncNinjaOne, testNinjaOne, unlinkLocation, unlinkOrganization } from "@/services/ninjaone";
 
 const revalidate = () => {
   revalidatePath("/integrations", "layout");
@@ -103,5 +103,23 @@ export async function recheckDiscrepanciesAction(): Promise<ActionResult<{ open:
     const r = await runDiscrepancyCheck(u.id);
     revalidate();
     return r;
+  });
+}
+
+export async function importOrganizationAction(orgId: string): Promise<ActionResult<{ action: string; companyId?: string; reason?: string }>> {
+  return runAction(async () => {
+    const u = await requireActionPermission("integration.manage");
+    const r = await importOrganizationAsCompany(z.string().min(1).parse(orgId), u.id);
+    revalidate();
+    return { action: r.action, companyId: r.companyId, reason: r.reason };
+  });
+}
+
+export async function importAllOrganizationsAction(): Promise<ActionResult<{ created: number; linked: number; skipped: { name: string; reason?: string }[] }>> {
+  return runAction(async () => {
+    const u = await requireActionPermission("integration.manage");
+    const r = await importAllOrganizations(u.id);
+    revalidate();
+    return { created: r.created, linked: r.linked, skipped: r.skipped.map((s) => ({ name: s.name, reason: s.reason })) };
   });
 }

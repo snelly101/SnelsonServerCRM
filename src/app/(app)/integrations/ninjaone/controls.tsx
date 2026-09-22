@@ -3,12 +3,12 @@
 import Link from "next/link";
 import { useActionState, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { RefreshCw, Stethoscope, Link2, Unlink } from "lucide-react";
+import { RefreshCw, Stethoscope, Link2, Unlink, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Field, Select, Input, SubmitButton, FormMessage, Checkbox } from "@/components/ui/form";
 import { NINJA_NODE_CLASSES as NODE_CLASSES } from "@/connectors/ninjaone/types";
-import { connectNinjaOneAction, linkLocationAction, linkOrganizationAction, saveNinjaConfigAction, syncNinjaOneAction, testNinjaOneAction, unlinkLocationAction, unlinkOrganizationAction } from "@/actions/ninjaone";
+import { connectNinjaOneAction, importAllOrganizationsAction, importOrganizationAction, linkLocationAction, linkOrganizationAction, saveNinjaConfigAction, syncNinjaOneAction, testNinjaOneAction, unlinkLocationAction, unlinkOrganizationAction } from "@/actions/ninjaone";
 
 export function NinjaTestButton() {
   const [pending, start] = useTransition();
@@ -186,6 +186,9 @@ export function OrgMappingTable({ rows, companies, canManage }: { rows: OrgRow[]
                       <Button size="sm" variant="ghost" disabled={!choice[r.orgId]} onClick={() => run(() => linkOrganizationAction(r.orgId, choice[r.orgId]))}>
                         <Link2 className="h-3.5 w-3.5" /> Link
                       </Button>
+                      <Button size="sm" variant="ghost" title="Create a new customer company named after this organisation and link it" onClick={() => run(async () => { const res = await importOrganizationAction(r.orgId); return res.ok && res.data.action === "skipped" ? { ok: false, error: `Skipped: ${res.data.reason}` } : res; })}>
+                        <Plus className="h-3.5 w-3.5" /> Create company
+                      </Button>
                     </div>
                   </div>
                 ) : (
@@ -239,5 +242,19 @@ export function OrgMappingTable({ rows, companies, canManage }: { rows: OrgRow[]
         </tbody>
       </table>
     </div>
+  );
+}
+
+export function ImportAllOrganizationsButton() {
+  const [pending, start] = useTransition();
+  const [msg, setMsg] = useState<string | null>(null);
+  const router = useRouter();
+  return (
+    <span className="inline-flex items-center gap-2">
+      <Button size="sm" variant="secondary" loading={pending} onClick={() => start(async () => { const r = await importAllOrganizationsAction(); setMsg(r.ok ? `${r.data.created} companies created, ${r.data.linked} linked to existing${r.data.skipped.length ? `, ${r.data.skipped.length} skipped` : ""}` : r.error); router.refresh(); })}>
+        <Plus className="h-3.5 w-3.5" /> Create companies for all unlinked
+      </Button>
+      {msg && <span className="text-xs text-slate-600">{msg}</span>}
+    </span>
   );
 }

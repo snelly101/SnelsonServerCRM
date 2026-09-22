@@ -11,6 +11,9 @@ import { buildAuthorizeUrl, exchangeCode, listTenants, xeroAppConfig, xeroDate, 
 import type { XeroContactRaw, XeroInvoiceRaw, XeroPaymentRaw } from "@/connectors/xero/types";
 import { createLink, getConnection, getCredentials, getLink, getLinkByExternal, listLinks, markEventProcessed, raiseConflict, recordInboundEvent, runOutbound, runSync, setConnectionConfig, setCredentials, updateConnection } from "./integrations";
 import { monthlyValue } from "@/lib/money";
+import { companySchema, contactSchema } from "@/lib/validation";
+import { createCompany, findDuplicateCompanies } from "./companies";
+import { createContact } from "./contacts";
 
 // ---------------------------------------------------------------------------
 // OAuth connect / tenant selection
@@ -635,3 +638,93 @@ const fmt = (v: string | number | null, currency: string | null) => {
   const n = v === null ? 0 : Number(v);
   return new Intl.NumberFormat("en-GB", { style: "currency", currency: currency ?? "GBP" }).format(n);
 };
+
+// ---------------------------------------------------------------------------
+// Import: Xero customers that have no CRM company yet
+// ---------------------------------------------------------------------------
+type XeroAddress = { AddressType?: string; AddressLine1?: string; AddressLine2?: string; AddressLine3?: string; City?: string; Region?: string; PostalCode?: string; Country?: string };
+
+function contactToCompanyInput(c: typeof xeroContacts.$inferSelect) {
+  const addresses = (c.addresses ?? []) as XeroAddress[];
+  const addr = addresses.find((a) => a.AddressType === "STREET" && (a.AddressLine1 || a.City)) ?? addresses.find((a) => a.AddressLine1 || a.City) ?? null;
+  const phone = (c.phones ?? []).find((p) => p.type === "DEFAULT" && p.number) ?? (c.phones ?? []).find((p) => p.number) ?? null;
+  const country = addr?.Country?.trim();
+  const countryCode = !country ? "" : country.length === 2 ? country : /united kingdom|^uk$|great britain|england|scotland|wales/i.test(country) ? "GB" : "";
+  return {
+    name: c.name,
+    status: "customer" as const,
+    email: c.emailAddress ?? "",
+    phone: phone ? [phone.countryCode, phone.areaCode, phone.number].filter(Boolean).join(" ") : "",
+    companyNumber: c.companyNumber ?? "",
+    vatNumber: c.taxNumber ?? "",
+    addressLine1: addr?.AddressLine1 ?? "",
+    addressLine2: [addr?.AddressLine2, addr?.AddressLine3].filter(Boolean).join(", "),
+    city: addr?.City ?? "",
+    region: addr?.Region ?? "",
+    postcode: addr?.PostalCode ?? "",
+    country: countryCode,
+    notes: "",
+  };
+}
+
+/** Active Xero customers with no CRM link, each with the best existing-company match (if any) so the UI can offer Link instead of Create. */
+export async function listUnlinkedXeroCustomers() {
+  const links = await listLinks("xero", "company");
+  const linkedExternal = new Set(links.map((l) => l.externalId));
+  const linkedLocal = new Set(links.map((l) => l.localId));
+  const rows = await db.select().from(xeroContacts).where(and(eq(xeroContacts.contactStatus, "ACTIVE"), eq(xeroContacts.isCustomer, true))).orderBy(xeroContacts.name);
+  const out = [];
+  for (const c of rows) {
+    if (linkedExternal.has(c.contactId)) continue;
+    const dupes = await findDuplicateCompanies({ name: c.name, email: c.emailAddress, companyNumber: c.companyNumber, vatNumber: c.taxNumber });
+    const match = dupes.find((d) => d.confidence === "high" || d.reason === "exact_name") ?? dupes[0] ?? null;
+    out.push({ contactId: c.contactId, name: c.name, emailAddress: c.emailAddress, outstanding: Number(c.outstanding ?? 0), overdue: Number(c.overdue ?? 0), match: match ? { ...match, alreadyLinked: linkedLocal.has(match.id) } : null });
+  }
+  return out;
+}
+
+export type XeroImportResult = { contactId: string; name: string; action: "created" | "linked" | "skipped"; companyId?: string; reason?: string };
+
+/**
+ * Turns one Xero customer into a CRM company (status customer, address, VAT/company number, phone, email)
+ * and links it. If a high-confidence duplicate company already exists and is unlinked, links that instead of
+ * creating a second record. Idempotent: an already-linked contact is skipped.
+ */
+export async function importXeroContactAsCompany(contactId: string, actorUserId: string, opts?: { linkExistingId?: string | null }): Promise<XeroImportResult> {
+  const [c] = await db.select().from(xeroContacts).where(eq(xeroContacts.contactId, contactId)).limit(1);
+  if (!c) throw new ActionError("That Xero contact is not in the mirror. Run a sync first.");
+  if (await getLinkByExternal("xero", "company", contactId)) return { contactId, name: c.name, action: "skipped", reason: "already linked" };
+  const links = await listLinks("xero", "company");
+  const linkedLocal = new Set(links.map((l) => l.localId));
+  let targetId = opts?.linkExistingId ?? null;
+  if (!targetId) {
+    // Company number, VAT number, email domain or an exact (normalised) name are safe enough to link rather than create a second record.
+    const dupes = (await findDuplicateCompanies({ name: c.name, email: c.emailAddress, companyNumber: c.companyNumber, vatNumber: c.taxNumber })).filter((d) => d.confidence === "high" || d.reason === "exact_name");
+    const free = dupes.find((d) => !linkedLocal.has(d.id));
+    if (dupes.length && !free) return { contactId, name: c.name, action: "skipped", reason: `looks like "${dupes[0].name}", which is already linked to another Xero contact` };
+    targetId = free?.id ?? null;
+  } else if (linkedLocal.has(targetId)) {
+    throw new ActionError("That company is already linked to another Xero contact.");
+  }
+  if (targetId) {
+    await linkCompanyToXeroContact(targetId, contactId, actorUserId);
+    return { contactId, name: c.name, action: "linked", companyId: targetId };
+  }
+  const input = companySchema.parse(contactToCompanyInput(c));
+  const companyId = await createCompany(input, actorUserId, { skipDuplicateCheck: true });
+  await createLink({ provider: "xero", entityType: "company", localId: companyId, externalId: contactId, externalName: c.name, source: "import" }, actorUserId);
+  await db.update(xeroInvoices).set({ companyId }).where(and(eq(xeroInvoices.contactId, contactId), isNull(xeroInvoices.companyId)));
+  if (c.firstName || c.lastName) {
+    await createContact(contactSchema.parse({ companyId, firstName: c.firstName || c.lastName, lastName: c.firstName ? (c.lastName ?? "") : "", email: c.emailAddress ?? "", roles: ["billing"], isPrimary: true }), actorUserId, { skipDuplicateCheck: true }).catch(() => undefined);
+  }
+  await logActivity({ type: "sync", companyId, title: `Imported from Xero contact "${c.name}"`, actorUserId, source: "xero" });
+  await audit({ actorUserId, action: "xero.contact.import", entityType: "company", entityId: companyId, details: { contactId, name: c.name } });
+  return { contactId, name: c.name, action: "created", companyId };
+}
+
+export async function importAllXeroCustomers(actorUserId: string) {
+  const pending = await listUnlinkedXeroCustomers();
+  const results: XeroImportResult[] = [];
+  for (const p of pending) results.push(await importXeroContactAsCompany(p.contactId, actorUserId));
+  return { created: results.filter((r) => r.action === "created").length, linked: results.filter((r) => r.action === "linked").length, skipped: results.filter((r) => r.action === "skipped"), results };
+}

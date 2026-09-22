@@ -10,7 +10,7 @@ import { Alert } from "@/components/ui/alert";
 import { ConfirmButton } from "@/components/ui/confirm-button";
 import { disconnectAction } from "@/actions/integrations";
 import { fmtDateTime, fmtRelative } from "@/lib/format";
-import { NinjaConfigForm, NinjaConnectForm, NinjaSyncButton, NinjaTestButton, OrgMappingTable } from "./controls";
+import { ImportAllOrganizationsButton, NinjaConfigForm, NinjaConnectForm, NinjaSyncButton, NinjaTestButton, OrgMappingTable } from "./controls";
 
 export const metadata = { title: "NinjaOne" };
 
@@ -90,7 +90,7 @@ export default async function NinjaOnePage() {
         </Card>
       </div>
 
-      <Card title={`Organisation mapping · ${mapping.linkedCount} of ${mapping.organisations.length} linked`} padded={false} className="mt-4">
+      <Card title={`Organisation mapping · ${mapping.linkedCount} of ${mapping.organisations.length} linked`} padded={false} className="mt-4" actions={canManage && mapping.linkedCount < mapping.organisations.length ? <ImportAllOrganizationsButton /> : undefined}>
         <OrgMappingTable rows={mapping.organisations} companies={mapping.companies} canManage={canManage} />
       </Card>
 

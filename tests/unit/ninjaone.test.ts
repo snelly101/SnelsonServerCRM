@@ -1,14 +1,14 @@
 import { describe, expect, it, beforeAll, vi } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { billingDiscrepancies, ninjaDevices, ninjaOrganizations, sites } from "@/db/schema";
+import { billingDiscrepancies, companies, ninjaDevices, ninjaOrganizations, sites } from "@/db/schema";
 import { createCompany } from "@/services/companies";
 import { companySchema } from "@/lib/validation";
 import { createContract } from "@/services/contracts";
 import { contractSchema } from "@/lib/validation-sales";
 import { LiveNinjaOneClient, ninjaTime } from "@/connectors/ninjaone/live";
 import { demoNinjaAddDevice, demoNinjaDeviceIds, demoNinjaRemoveDevice, demoNinjaReset } from "@/connectors/ninjaone/demo";
-import { companyDeviceOverview, deviceFreshness, deviceTotals, linkLocation, linkOrganization, listDevices, listDiscrepancies, ninjaConnectionSummary, ninjaMappingOverview, reviewDiscrepancy, runDiscrepancyCheck, saveNinjaConfig, syncNinjaOne, unlinkOrganization } from "@/services/ninjaone";
+import { companyDeviceOverview, deviceFreshness, deviceTotals, importAllOrganizations, importOrganizationAsCompany, linkLocation, linkOrganization, listDevices, listDiscrepancies, ninjaConnectionSummary, ninjaMappingOverview, reviewDiscrepancy, runDiscrepancyCheck, saveNinjaConfig, syncNinjaOne, unlinkOrganization } from "@/services/ninjaone";
 import { getLink, listOpenConflicts } from "@/services/integrations";
 import { ActionError } from "@/lib/action-result";
 import { makeUser } from "./helpers";
@@ -214,5 +214,22 @@ describe("NinjaOne sync, mapping and discrepancies (demo adapter)", () => {
     expect((await listOpenConflicts()).length).toBe(before + 1);
     await syncNinjaOne("manual", admin.id);
     expect((await db.select().from(ninjaOrganizations).where(eq(ninjaOrganizations.orgId, "101")))[0].externalStatus).toBe("active");
+  });
+
+  it("creates companies from organisations, linking an obvious existing company instead of duplicating; idempotent", async () => {
+    // Northern Freight was unlinked above; its company still exists → link rather than create
+    const freight = await importOrganizationAsCompany("102", admin.id);
+    expect(freight).toMatchObject({ action: "linked", companyId: freightId });
+    expect((await importOrganizationAsCompany("102", admin.id)).action).toBe("skipped");
+    const internal = await importOrganizationAsCompany("106", admin.id);
+    expect(internal.action).toBe("created");
+    const [co] = await db.select().from(companies).where(eq(companies.id, internal.companyId!));
+    expect(co).toMatchObject({ name: "Internal - Snelson Server", status: "customer" });
+    expect((await getLink("ninjaone", "company", co.id))?.externalId).toBe("106");
+    expect((await db.select().from(ninjaDevices).where(eq(ninjaDevices.companyId, co.id))).length).toBe(6);
+    const all = await importAllOrganizations(admin.id);
+    expect(all.results.every((r) => r.action !== "skipped" || r.reason === "already linked" || /already linked to another/.test(r.reason ?? ""))).toBe(true);
+    const again = await importAllOrganizations(admin.id);
+    expect(again.created + again.linked).toBe(0);
   });
 });

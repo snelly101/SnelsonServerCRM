@@ -5,6 +5,8 @@ import { audit, logActivity } from "@/lib/audit";
 import { ActionError } from "@/lib/action-result";
 import { getAppSettings } from "@/lib/settings";
 import { normalizeCompanyName } from "@/lib/utils";
+import { companySchema } from "@/lib/validation";
+import { createCompany, findDuplicateCompanies } from "./companies";
 import { getNinjaOneClient, type NinjaConfig, type NinjaCredentials } from "@/connectors/ninjaone";
 import { LiveNinjaOneClient, ninjaTime } from "@/connectors/ninjaone/live";
 import type { NinjaDeviceRaw, NinjaRegion } from "@/connectors/ninjaone/types";
@@ -403,4 +405,35 @@ export async function companyDeviceOverview(companyId: string) {
   const [totals, devices, discrepancies] = await Promise.all([deviceTotals(companyId), listDevices({ companyId, pageSize: 500 }), listDiscrepancies({ companyId })]);
   const resolved = await getNinjaOneClient();
   return { link, org: org ?? null, totals, devices: devices.rows, activeCutoff: devices.activeCutoff, discrepancies, consoleUrl: resolved?.client.consoleUrl("organization", link.externalId) ?? null, mode: resolved?.mode ?? null };
+}
+
+// ---------------------------------------------------------------------------
+// Import: create a CRM company from a NinjaOne organisation and link it
+// ---------------------------------------------------------------------------
+export type NinjaImportResult = { orgId: string; name: string; action: "created" | "linked" | "skipped"; companyId?: string; reason?: string };
+
+export async function importOrganizationAsCompany(orgId: string, actorUserId: string): Promise<NinjaImportResult> {
+  const [o] = await db.select().from(ninjaOrganizations).where(eq(ninjaOrganizations.orgId, orgId)).limit(1);
+  if (!o) throw new ActionError("Organisation not found in the mirror. Run a sync first.");
+  const links = await listLinks("ninjaone", "company");
+  if (links.some((l) => l.externalId === orgId)) return { orgId, name: o.name, action: "skipped", reason: "already linked" };
+  const linkedLocal = new Set(links.map((l) => l.localId));
+  const dupes = (await findDuplicateCompanies({ name: o.name })).filter((d) => d.confidence === "high" || d.reason === "exact_name");
+  const free = dupes.find((d) => !linkedLocal.has(d.id));
+  if (dupes.length && !free) return { orgId, name: o.name, action: "skipped", reason: `looks like "${dupes[0].name}", which is already linked to another organisation` };
+  if (free) {
+    await linkOrganization(orgId, free.id, actorUserId);
+    return { orgId, name: o.name, action: "linked", companyId: free.id };
+  }
+  const companyId = await createCompany(companySchema.parse({ name: o.name, status: "customer" }), actorUserId, { skipDuplicateCheck: true });
+  await linkOrganization(orgId, companyId, actorUserId);
+  await audit({ actorUserId, action: "ninjaone.organization.import", entityType: "company", entityId: companyId, details: { orgId, name: o.name } });
+  return { orgId, name: o.name, action: "created", companyId };
+}
+
+export async function importAllOrganizations(actorUserId: string) {
+  const orgs = await db.select({ orgId: ninjaOrganizations.orgId }).from(ninjaOrganizations).where(eq(ninjaOrganizations.externalStatus, "active")).orderBy(asc(ninjaOrganizations.name));
+  const results: NinjaImportResult[] = [];
+  for (const o of orgs) results.push(await importOrganizationAsCompany(o.orgId, actorUserId));
+  return { created: results.filter((r) => r.action === "created").length, linked: results.filter((r) => r.action === "linked").length, skipped: results.filter((r) => r.action === "skipped"), results };
 }
