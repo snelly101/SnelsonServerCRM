@@ -2,7 +2,7 @@
 
 A CRM built for an IT Managed Service Provider. It manages the customer lifecycle from lead to renewal and integrates with **Better Proposals** (proposals), **Xero** (accounting) and **NinjaOne** (RMM).
 
-> **Status:** Phases 1–4 complete — authentication and roles, companies/contacts/sites, sales pipeline, service catalogue, opportunities, contracts with MRR, tasks and onboarding, the shared integration framework, the **Better Proposals** connector (polling, exactly-once acceptance) and the **Xero** connector (OAuth with explicit organisation choice, incremental sync + webhooks, customer mapping, approved draft invoices with idempotency, Finance page). Phase 5 adds NinjaOne. See [docs/phases.md](docs/phases.md).
+> **Status:** Phases 1–5 complete — authentication and roles, companies/contacts/sites, sales pipeline, service catalogue, opportunities, contracts with MRR, tasks and onboarding, the shared integration framework, the **Better Proposals** connector (polling, exactly-once acceptance) and the **Xero** connector (OAuth with explicit organisation choice, incremental sync + webhooks, customer mapping, approved draft invoices with idempotency, Finance page) and the **NinjaOne** connector (read-only device mirror, organisation/location mapping, contracted-vs-observed device discrepancies for review). Phase 6 adds reporting and deployment polish. See [docs/phases.md](docs/phases.md).
 
 ## Stack
 

@@ -112,6 +112,31 @@ Outbound access was opened during this phase, so the connector is built on prima
 3. In the CRM: Integrations → Xero → *Connect to Xero* → choose the organisation → set invoice defaults → map customers.
 
 
-## Phase 5 — NinjaOne
+## Phase 5 — NinjaOne ✅
+
+### Verified against vendor documentation
+
+- OpenAPI spec `https://eu.ninjarmm.com/apidocs-beta/NinjaRMM-API-v2.yaml` (organisations, locations, `devices-detailed`, `queries/device-health` cursor paging, node classes), the OAuth article (API Services → `client_credentials`, scope `monitoring`), and a live probe of `POST https://eu.ninjarmm.com/ws/oauth/token` (rejects bad credentials with a JSON error, confirming the endpoint and content type).
+
+### What works
+
+- **Connect in the web UI.** Integrations → NinjaOne: region (EU default), client id and client secret. Credentials are **verified against the live token endpoint before they are stored** (encrypted, AES-256-GCM); the short-lived access token is cached encrypted alongside them. Test, Sync now, Disconnect. Only the `monitoring` scope is ever requested and the live client has no write method at all.
+- **Read-only mirror.** Hourly job (`ninjaone.sync`, `:20`) pages through organisations, their locations, `devices-detailed` (`after` paging) and `device-health` (cursor paging). Devices carry name, type (`nodeClass`), OS, last-seen, online/offline, approval status, health, patch/threat/alert counts, IPs and the raw record. Organisations and devices that disappear from NinjaOne are kept and marked `deleted`, never dropped; a linked organisation disappearing raises a review conflict.
+- **Mapping is always a human decision.** Organisation → company suggestions by normalised name only (exact vs similar), shown next to a free company picker; nothing links automatically, one organisation can never map to two companies and vice versa. Locations link to sites only after the organisation is linked, and only to that company's sites. Linking assigns devices to the company/site; unlinking clears them and dismisses open items.
+- **Counting rules.** Settings → General *Device active window* (default 30 days) decides what is active; Integrations → NinjaOne *Counting rules* choose which node classes are billable (workstations, servers, VMs by default; printers, switches and hypervisor hosts excluded) and whether only APPROVED devices count.
+- **Discrepancy engine.** For every line marked *Compare with NinjaOne* on an active contract of a linked company: observed = active, approved, billable-class devices at the organisation (or at the linked location when the line is site-specific; unlinked sites are skipped, never guessed). A difference opens a review item with the contracted qty, observed qty, difference and an estimated unbilled/over-billed amount per period. Re-checks after every sync, link change and rule change keep items current: matched counts resolve the item, *accepted* items re-open only if the gap grows, *dismissed* stays dismissed. Reviewing records who decided and why in the audit log and the company timeline. **Nothing changes a contract or invoice.**
+- **Devices page** (all roles): totals (total, active, online, servers, needs attention, unmapped), the discrepancy queue with accept/dismiss (account manager, finance, admin), and a filterable, searchable, pageable device list with freshness labels (live/cached/stale) and NinjaOne console deep links. **Company → Devices tab** with counts, contract-vs-observed, device list and *Open in NinjaOne*. **Contract → Device count check** shows observed vs contracted per line. Dashboard shows active devices, open discrepancies and connector status.
+
+### What was tested
+
+- **10 new unit/integration tests (76 total):** live client fetches one token for concurrent calls, sends Bearer, re-fetches on 401, pages health by cursor, exposes no write method; epoch timestamps; freshness thresholds; demo mode is never "connected"; sync mirrors orgs/locations/devices/health and is idempotent; suggestions never auto-link, org link required before site link, one org cannot serve two companies; observed counts exclude stale devices and non-billable classes and respect site scope (Harrowgate 19 vs 18 → +1, Northern Freight 38 vs 40 → −2, site lines matched); accept then gap-grows re-open then match resolves; deleted devices retained and excluded from active lists; rule changes re-count; unlink clears ownership/site links/open items; a vanished linked organisation raises a conflict and recovers.
+- **3 new browser tests (14 total):** account manager sees demo devices, totals and the discrepancy queue and accepts one; company Devices tab and contract device check show observed counts; admin sees the NinjaOne page as *Demo (not connected)* with 5 of 6 organisations mapped, technician gets no connect form and no review buttons.
+
+### Remaining dependencies (live verification)
+
+1. In NinjaOne (EU): Administration → Apps → API → Client app IDs → Add → *API Services (machine-to-machine)*, scope **Monitoring** only. Note the client id and secret.
+2. In the CRM: Integrations → NinjaOne → region EU → paste id and secret → *Verify and connect* → *Sync now* → link organisations to companies (and locations to sites for site-specific lines).
+3. Review the billable node classes for your billing policy, then check the Devices page queue.
+
 
 ## Phase 6 — Reporting, reliability, deployment docs

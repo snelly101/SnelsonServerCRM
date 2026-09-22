@@ -3,3 +3,4 @@ export * from "./core";
 export * from "./sales";
 export * from "./integrations";
 export * from "./xero";
+export * from "./ninjaone";

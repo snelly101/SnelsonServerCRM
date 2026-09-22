@@ -17,6 +17,7 @@ export const QUEUES = {
   xeroSync: "xero.sync",
   xeroReconcile: "xero.reconcile",
   xeroInbound: "xero.inbound",
+  ninjaSync: "ninjaone.sync",
 } as const;
 
 export async function registerJobs(boss: PgBoss) {
@@ -71,4 +72,13 @@ export async function registerJobs(boss: PgBoss) {
     if (res.processed) logger.info(res, "xero inbound events processed");
   });
   await boss.schedule(QUEUES.xeroInbound, "* * * * *", {}, { retryLimit: 0, singletonKey: "xero-inbound" });
+
+  // NinjaOne (read-only): organisations, locations, devices and health hourly; discrepancy check runs inside.
+  await boss.createQueue(QUEUES.ninjaSync, { deleteAfterSeconds: 7 * 24 * 3600, retryLimit: 2, retryBackoff: true, expireInSeconds: 1800 });
+  await boss.work(QUEUES.ninjaSync, async ([job]) => {
+    const { syncNinjaOne } = await import("@/services/ninjaone");
+    const res = await syncNinjaOne("schedule");
+    logger.info({ jobId: job.id, result: res && { status: res.status, ...res.counters } }, "ninjaone sync");
+  });
+  await boss.schedule(QUEUES.ninjaSync, "20 * * * *", {}, { retryLimit: 2, singletonKey: "ninja-sync" });
 }

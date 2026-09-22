@@ -33,11 +33,14 @@ import { listProposals } from "@/services/proposals";
 import { ExternalLink } from "lucide-react";
 import { companyFinancialSummary, xeroConnectionSummary } from "@/services/xero";
 import { fmtRelative } from "@/lib/format";
+import { companyDeviceOverview } from "@/services/ninjaone";
+import { DeviceTable, FRESHNESS_LABEL, FRESHNESS_TONE } from "@/components/device-table";
+import { DiscrepancyTable } from "@/app/(app)/devices/discrepancies";
 
 export default async function CompanyPage({ params }: { params: Promise<{ id: string }> }) {
   const me = await requirePermission("company.read");
   const { id } = await params;
-  const [company, timeline, defs, settings, opportunities, companyContracts, companyTasks, onboardingList, owners, proposalList, finance, xero] = await Promise.all([
+  const [company, timeline, defs, settings, opportunities, companyContracts, companyTasks, onboardingList, owners, proposalList, finance, xero, devices] = await Promise.all([
     getCompany(id),
     getCompanyTimeline(id),
     listCustomFieldDefs("company"),
@@ -50,6 +53,7 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
     listProposals({ companyId: id, pageSize: 50 }),
     can(me.role, "finance.read") ? companyFinancialSummary(id) : Promise.resolve(null),
     xeroConnectionSummary(),
+    can(me.role, "device.read") ? companyDeviceOverview(id) : Promise.resolve(null),
   ]);
   if (!company) notFound();
   const activeContracts = companyContracts.filter((c) => c.status === "active");
@@ -147,7 +151,9 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
               <TabsTrigger value="invoices" count={finance?.count}>
                 Invoices
               </TabsTrigger>
-              <TabsTrigger value="devices">Devices</TabsTrigger>
+              <TabsTrigger value="devices" count={devices?.totals.active}>
+                Devices
+              </TabsTrigger>
               <TabsTrigger value="tasks" count={companyTasks.rows.filter((t) => t.status === "open").length}>
                 Tasks
               </TabsTrigger>
@@ -531,11 +537,52 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
               )}
             </TabsContent>
 
-            {(["devices"] as const).map((tab) => (
-              <TabsContent key={tab} value={tab}>
-                <EmptyState title={`${tab[0].toUpperCase()}${tab.slice(1)} arrive in a later phase`} description={PHASE_NOTES[tab]} />
-              </TabsContent>
-            ))}
+            <TabsContent value="devices">
+              {!devices ? (
+                <EmptyState title="Not linked to a NinjaOne organisation" description="Link this company on Integrations → NinjaOne to see its managed devices and compare them with the contract." action={can(me.role, "integration.manage") ? <ButtonLink href="/integrations/ninjaone" variant="secondary">Open NinjaOne mapping</ButtonLink> : undefined} />
+              ) : (
+                <div className="space-y-4">
+                  <Card
+                    title={`Devices · ${devices.org?.name ?? devices.link.externalName ?? "NinjaOne organisation"}`}
+                    actions={
+                      <span className="flex items-center gap-2">
+                        {devices.mode === "demo" && <Badge tone="amber">demo</Badge>}
+                        <Badge tone={FRESHNESS_TONE[devices.totals.freshness]}>{FRESHNESS_LABEL[devices.totals.freshness]}</Badge>
+                        {devices.consoleUrl && (
+                          <a href={devices.consoleUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-brand-700 hover:underline">
+                            Open in NinjaOne <ExternalLink className="h-3 w-3" />
+                          </a>
+                        )}
+                      </span>
+                    }
+                  >
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                      {[
+                        ["Total", devices.totals.total],
+                        [`Active (${devices.totals.activeDays}d)`, devices.totals.active],
+                        ["Billable class", devices.totals.billable],
+                        ["Servers", devices.totals.servers],
+                        ["Needs attention", devices.totals.needsAttention],
+                      ].map(([label, value]) => (
+                        <div key={String(label)}>
+                          <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>
+                          <div className="text-lg font-semibold">{value}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="mt-2 text-[11px] text-slate-500">{devices.totals.lastFetched ? `Fetched ${fmtRelative(new Date(devices.totals.lastFetched))}` : "Not fetched yet"} · read-only mirror of NinjaOne</p>
+                  </Card>
+                  {devices.discrepancies.length > 0 && (
+                    <Card title="Contract vs observed" padded={false}>
+                      <DiscrepancyTable rows={devices.discrepancies} canReview={can(me.role, "discrepancy.review")} currency={settings.currency} compact />
+                    </Card>
+                  )}
+                  <Card padded={false}>
+                    <DeviceTable rows={devices.devices} showCompany={false} />
+                  </Card>
+                </div>
+              )}
+            </TabsContent>
           </Tabs>
         </div>
 
@@ -553,7 +600,3 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
     </>
   );
 }
-
-const PHASE_NOTES: Record<string, string> = {
-  devices: "Phase 5 imports NinjaOne devices.",
-};

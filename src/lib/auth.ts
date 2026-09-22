@@ -66,7 +66,8 @@ export const auth = betterAuth({
     window: 60,
     max: 100,
     customRules: {
-      "/sign-in/email": { window: 60, max: 10 },
+      // Per-IP sign-in attempts per minute. Override only for automated browser tests.
+      "/sign-in/email": { window: 60, max: Number(process.env.AUTH_SIGN_IN_MAX_PER_MINUTE) || 10 },
     },
   },
   advanced: {

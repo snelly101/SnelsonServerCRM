@@ -2,7 +2,7 @@ import "dotenv/config";
 import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { hashPassword } from "better-auth/crypto";
 import * as schema from "./schema";
 import { normalizeCompanyName, extractDomain, normalizeEmail } from "@/lib/utils";
@@ -202,6 +202,25 @@ export async function seed(url = process.env.DATABASE_URL) {
       for (const [name, contactId] of links) {
         const [co] = await db.select({ id: schema.companies.id }).from(schema.companies).where(eq(schema.companies.name, name)).limit(1);
         if (co) await linkCompanyToXeroContact(co.id, contactId, userIds["admin@example.com"]).catch(() => undefined);
+      }
+      // Mirror demo NinjaOne data and link organisations/locations so device counts and discrepancies have content.
+      const { syncNinjaOne, linkOrganization, linkLocation } = await import("@/services/ninjaone");
+      await syncNinjaOne("manual", userIds["admin@example.com"]).catch((err) => console.warn("demo ninjaone sync skipped:", err));
+      const orgLinks: [string, string, [string, string][]][] = [
+        ["Harrowgate Dental Practice", "101", [["1011", "Head office"]]],
+        ["Northern Freight Solutions Ltd", "102", [["1021", "Head office"], ["1022", "Branch office"]]],
+        ["Ridgeway Architects LLP", "103", [["1031", "Head office"]]],
+        ["Greenfield Primary Academy", "104", [["1041", "Head office"]]],
+        ["Bramley & Sons Accountants", "105", [["1051", "Head office"]]],
+      ];
+      for (const [name, orgId, locs] of orgLinks) {
+        const [co] = await db.select({ id: schema.companies.id }).from(schema.companies).where(eq(schema.companies.name, name)).limit(1);
+        if (!co) continue;
+        await linkOrganization(orgId, co.id, userIds["admin@example.com"]).catch((err) => console.warn("demo ninjaone link skipped:", err));
+        for (const [locationId, siteName] of locs) {
+          const [site] = await db.select({ id: schema.sites.id }).from(schema.sites).where(and(eq(schema.sites.companyId, co.id), eq(schema.sites.name, siteName))).limit(1);
+          if (site) await linkLocation(locationId, site.id, userIds["admin@example.com"]).catch((err) => console.warn("demo ninjaone location link skipped:", err));
+        }
       }
     }
     await db.insert(schema.auditLog).values({ actorType: "system", action: "seed.run", entityType: "database", details: { users: SEED_USERS.length, companies: COMPANIES.length } });

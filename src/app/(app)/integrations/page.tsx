@@ -7,6 +7,8 @@ import { integrationHealth, listOpenConflicts, listSyncRuns, PROVIDER_LABELS, ty
 import { bpConnectionSummary, proposalCounts } from "@/services/proposals";
 import { xeroConnectionSummary } from "@/services/xero";
 import { XeroSyncButton, XeroTestButton } from "./xero/controls";
+import { NinjaSyncButton, NinjaTestButton } from "./ninjaone/controls";
+import { ninjaConnectionSummary } from "@/services/ninjaone";
 import { PageHeader, Card, EmptyState, Stat } from "@/components/ui/page";
 import { Badge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
@@ -21,7 +23,7 @@ const STATUS_TONE: Record<string, string> = { connected: "green", error: "red", 
 
 export default async function IntegrationsPage() {
   const me = await requirePermission("integration.read");
-  const [health, runs, conflicts, bp, counts, settings, xero] = await Promise.all([integrationHealth(), listSyncRuns(undefined, 15), listOpenConflicts(), bpConnectionSummary(), proposalCounts(), getAppSettings(), xeroConnectionSummary()]);
+  const [health, runs, conflicts, bp, counts, settings, xero, ninja] = await Promise.all([integrationHealth(), listSyncRuns(undefined, 15), listOpenConflicts(), bpConnectionSummary(), proposalCounts(), getAppSettings(), xeroConnectionSummary(), ninjaConnectionSummary()]);
   const canManage = can(me.role, "integration.manage");
   const canSync = can(me.role, "integration.sync");
   const demo = process.env.DEMO_MODE === "true";
@@ -37,9 +39,8 @@ export default async function IntegrationsPage() {
       <div className="mb-4 grid gap-3 md:grid-cols-3">
         {health.connections.map((c) => {
           const provider = c.provider as Provider;
-          const isDemo = provider === "betterproposals" ? bp.demo : provider === "xero" ? xero.demo : demo && c.status === "not_configured";
+          const isDemo = provider === "betterproposals" ? bp.demo : provider === "xero" ? xero.demo : ninja.demo;
           const label = isDemo ? "Demo (not connected)" : c.status.replace("_", " ");
-          const phase = provider === "ninjaone" ? 5 : null;
           return (
             <Card
               key={c.provider}
@@ -77,24 +78,23 @@ export default async function IntegrationsPage() {
                 </p>
               )}
               <div className="mt-3 flex flex-wrap gap-2">
-                {phase ? (
-                  <span className="text-xs text-slate-500">Connector arrives in Phase {phase}.</span>
+                <Link href={`/integrations/${provider}`} className="inline-flex h-8 items-center rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium hover:bg-slate-50">
+                  {canManage ? "Configure" : "Details"}
+                </Link>
+                {provider === "xero" ? (
+                  <>
+                    {canManage && xero.configured && <XeroTestButton />}
+                    {canSync && xero.configured && <XeroSyncButton />}
+                  </>
+                ) : provider === "ninjaone" ? (
+                  <>
+                    {canManage && ninja.configured && <NinjaTestButton />}
+                    {canSync && ninja.configured && <NinjaSyncButton />}
+                  </>
                 ) : (
                   <>
-                    <Link href={`/integrations/${provider}`} className="inline-flex h-8 items-center rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium hover:bg-slate-50">
-                      {canManage ? "Configure" : "Details"}
-                    </Link>
-                    {provider === "xero" ? (
-                      <>
-                        {canManage && xero.configured && <XeroTestButton />}
-                        {canSync && xero.configured && <XeroSyncButton />}
-                      </>
-                    ) : (
-                      <>
-                        {canManage && <TestButton provider={provider} />}
-                        {canSync && bp.configured && <SyncNowButton provider={provider} />}
-                      </>
-                    )}
+                    {canManage && <TestButton provider={provider} />}
+                    {canSync && bp.configured && <SyncNowButton provider={provider} />}
                   </>
                 )}
               </div>

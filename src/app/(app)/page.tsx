@@ -14,6 +14,8 @@ import { TaskList } from "@/components/task-list";
 import { can } from "@/lib/permissions";
 import { fmtMoney, fmtDate } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
+import { deviceTotals, listDiscrepancies, ninjaConnectionSummary } from "@/services/ninjaone";
+import { integrationHealth } from "@/services/integrations";
 
 export const metadata = { title: "Dashboard" };
 
@@ -46,6 +48,7 @@ export default async function DashboardPage() {
       .orderBy(desc(activities.at))
       .limit(12),
   ]);
+  const [ninja, devices, openDiscrepancies, health] = await Promise.all([ninjaConnectionSummary(), deviceTotals(), listDiscrepancies({ status: "open" }), integrationHealth()]);
   const [pipeline, contractsTotals, myTasks, counts, renewals] = await Promise.all([
     pipelineTotals(),
     contractTotals(),
@@ -133,11 +136,40 @@ export default async function DashboardPage() {
             </ul>
           )}
         </Card>
-        <Card title="Coming in later phases">
-          <ul className="space-y-1.5 text-sm text-slate-600">
-            <li>Proposal progress (Better Proposals, Phase 3)</li>
-            <li>Outstanding invoices (Xero, Phase 4)</li>
-            <li>Device totals and integration health (NinjaOne, Phase 5)</li>
+        <Card title="Devices and integrations">
+          {ninja.configured ? (
+            <div className="grid grid-cols-3 gap-3 text-sm">
+              <div>
+                <div className="text-xs uppercase tracking-wide text-slate-500">Active devices</div>
+                <div className="text-lg font-semibold">{devices.active}</div>
+                <div className="text-[11px] text-slate-500">{ninja.demo ? "demo data" : `of ${devices.total} mirrored`}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-wide text-slate-500">Needs attention</div>
+                <div className={`text-lg font-semibold ${devices.needsAttention ? "text-amber-700" : ""}`}>{devices.needsAttention}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-wide text-slate-500">Count discrepancies</div>
+                <div className={`text-lg font-semibold ${openDiscrepancies.length ? "text-amber-700" : ""}`}>
+                  <Link href="/devices" className="hover:underline">
+                    {openDiscrepancies.length}
+                  </Link>
+                </div>
+                <div className="text-[11px] text-slate-500">open for review</div>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-500">Connect NinjaOne to see device totals here.</p>
+          )}
+          <ul className="mt-3 space-y-1 border-t border-slate-100 pt-3 text-sm">
+            {health.connections.map((c) => (
+              <li key={c.provider} className="flex items-center justify-between">
+                <Link href={`/integrations/${c.provider}`} className="text-slate-700 hover:underline">
+                  {c.provider === "betterproposals" ? "Better Proposals" : c.provider === "xero" ? "Xero" : "NinjaOne"}
+                </Link>
+                <Badge tone={c.status === "connected" ? "green" : c.status === "not_configured" ? "amber" : "red"}>{c.status === "not_configured" ? "not connected" : c.status}</Badge>
+              </li>
+            ))}
           </ul>
         </Card>
       </div>

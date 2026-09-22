@@ -16,9 +16,11 @@ import { ConfirmButton } from "@/components/ui/confirm-button";
 import { RevenueSummaryBadges } from "@/components/lines-editor";
 import { TaskList } from "@/components/task-list";
 import { TaskDialog } from "@/components/task-dialog";
-import { fmtDate, fmtMoney } from "@/lib/format";
+import { fmtDate, fmtMoney, fmtRelative } from "@/lib/format";
 import { PrepareInvoiceButton } from "@/components/prepare-invoice-button";
 import { FREQUENCY_LABELS, PRICING_LABELS, REVENUE_LABELS } from "@/lib/validation-sales";
+import { companyDeviceOverview } from "@/services/ninjaone";
+import { DiscrepancyTable } from "@/app/(app)/devices/discrepancies";
 
 const STATUS_TONE: Record<string, string> = { draft: "slate", active: "green", expired: "amber", cancelled: "red" };
 
@@ -27,7 +29,8 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
   const { id } = await params;
   const contract = await getContract(id);
   if (!contract) notFound();
-  const [settings, tasks, owners] = await Promise.all([getAppSettings(), listTasks({ contractId: id, status: "all", pageSize: 100 }), listOwners()]);
+  const [settings, tasks, owners, devices] = await Promise.all([getAppSettings(), listTasks({ contractId: id, status: "all", pageSize: 100 }), listOwners(), can(me.role, "device.read") ? companyDeviceOverview(contract.companyId) : Promise.resolve(null)]);
+  const contractDiscrepancies = devices?.discrepancies.filter((d) => d.contractId === id) ?? [];
   const c = settings.currency;
   const today = new Date().toISOString().slice(0, 10);
   const canWrite = can(me.role, "contract.write");
@@ -118,20 +121,39 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
             <p className="mt-3 text-xs text-slate-500">MRR = Σ recurring lines (contracted qty × unit price ÷ months per billing period). One-off and hardware lines are excluded from MRR and shown separately.</p>
           </Card>
 
-          <Card title="Device count check">
+          <Card title="Device count check" padded={contractDiscrepancies.length === 0}>
             {deviceLines.length === 0 ? (
               <p className="text-sm text-slate-500">No per-device lines are marked for comparison. Edit the contract and tick “Compare with NinjaOne device count” on a per-device line.</p>
-            ) : (
+            ) : !devices ? (
               <div className="text-sm text-slate-700">
-                <p className="mb-2">{deviceLines.length} line{deviceLines.length === 1 ? "" : "s"} will be compared with observed device counts once NinjaOne is connected (Phase 5). Discrepancies appear here for review; billing is never changed automatically.</p>
+                <p className="mb-2">{deviceLines.length} line{deviceLines.length === 1 ? "" : "s"} will be compared with observed device counts once this company is linked to a NinjaOne organisation. Discrepancies appear here for review; billing is never changed automatically.</p>
                 <ul className="list-disc pl-5 text-slate-600">
                   {deviceLines.map((l) => (
                     <li key={l.id}>
-                      {l.description}: contracted <strong>{Number(l.quantity)}</strong>, observed <span className="italic text-slate-400">unavailable (not connected)</span>
+                      {l.description}: contracted <strong>{Number(l.quantity)}</strong>, observed <span className="italic text-slate-400">unavailable (not linked)</span>
                     </li>
                   ))}
                 </ul>
+                {can(me.role, "integration.manage") && (
+                  <Link href="/integrations/ninjaone" className="mt-2 inline-block text-xs text-brand-700 hover:underline">
+                    Link on Integrations → NinjaOne
+                  </Link>
+                )}
               </div>
+            ) : contractDiscrepancies.length === 0 ? (
+              <div className="text-sm text-slate-700">
+                <p className="mb-1">
+                  All {deviceLines.length} compared line{deviceLines.length === 1 ? "" : "s"} match the observed count ({devices.totals.billable} billable active devices{devices.mode === "demo" ? ", demo data" : ""}).
+                </p>
+                <p className="text-xs text-slate-500">Observed counts are {devices.totals.freshness}{devices.totals.lastFetched ? `, fetched ${fmtRelative(new Date(devices.totals.lastFetched))}` : ""}. Site-scoped lines whose site is not linked to a NinjaOne location are skipped.</p>
+              </div>
+            ) : (
+              <>
+                <DiscrepancyTable rows={contractDiscrepancies} canReview={can(me.role, "discrepancy.review")} currency={c} compact />
+                <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500">
+                  Observed counts are {devices.totals.freshness}{devices.mode === "demo" ? " (demo data)" : ""}. Accepting records the decision only; amend the contract to change billing.
+                </p>
+              </>
             )}
           </Card>
 

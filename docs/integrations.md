@@ -12,7 +12,7 @@ All three vendors were verified against primary sources on 22 Sep 2026: the Bett
 | **Scopes** | n/a | `openid profile email offline_access accounting.contacts accounting.transactions accounting.settings.read` | `monitoring` only (read-only). Never `management` (writes, scripts) or `control` (remote access) |
 | **Read** | `GET /proposal`, `/proposal/{new,sent,opened,signed,paid}`, `/proposal/:id`, `/proposal/count`, `/template`, `/template/:id`, `/company`, `/company/:id`, `/quote`, `/quote/:id`, `/doctype`, `/currency`, `/settings`, `/settings/brand`, `/settings/merge_tag`. Pagination `page`/`per_page`. Fields include `Signed`, `DateSigned`, `SignedSignature`, `ProposalOpened`, `DateSent`, `OneOffTotal`, `MonthlyTotal`, `QuarterlyTotal`, `AnnualTotal`, `ProposalView`, `Preview`, `Contacts[]`, `CompanyCRMID`, `CRMOpportunityID` | `GET /Contacts` (`where`, `IDs`, `page`, `searchTerm`, `If-Modified-Since`), `/Invoices` (`Statuses`, `ContactIDs`, `page`), `/Invoices/{id}`, `/Payments`, `/Accounts`, `/TaxRates`, `/Currencies`, `/Organisation`, `/BrandingThemes`, `/Invoices/{id}/OnlineInvoice` | `GET /v2/organizations` (`pageSize`,`after`), `/v2/organizations-detailed`, `/v2/organization/{id}/locations`, `/v2/organization/{id}/devices`, `/v2/devices-detailed` (`df` filter, `pageSize`, `after`), `/v2/device/{id}`, `/v2/queries/device-health` (`cursor`), `/v2/queries/operating-systems`, `/v2/queries/antivirus-status`. Device fields: `id`, `organizationId`, `locationId`, `nodeClass` (WINDOWS_WORKSTATION, WINDOWS_SERVER, MAC, LINUX_*, VMWARE_*, NMS_*…), `displayName`, `systemName`, `offline`, `lastContact`, `lastUpdate`, `approvalStatus`. Health: `healthStatus`, patch/threat/alert counts, `avInstallStatus` |
 | **Write** | `POST /proposal/create` (form-encoded): `Company` (id **or name → creates**), `Template`, `Cover`, `DocumentType`, `Brand`, `Currency`, `Tax`, `TaxLabel`, `TaxAmount`, `Contacts[]{FirstName,Surname,Email,Signature}`, `MergeTags` (JSON string). `POST /company/create`, `/quote/create` (`CompanyID`, `templateID` — amount comes from the template), `/doctype/create`, `/proposal/cover/create`. **No line-item pricing** on any documented endpoint | `PUT /Contacts`, `PUT /Invoices` with `Status: DRAFT`, `Idempotency-Key` header (128 chars max). `POST /Invoices/{id}` to update a draft. Never `AUTHORISED` from the CRM | **None** (read-only integration by design) |
-| **Events** | **No webhooks documented** → poll every 15 min (`*/15 * * * *`), singleton job, plus "Sync now" | Webhooks for `CONTACT` and `INVOICE` (`CREATE`/`UPDATE`); payload `{events[], firstEventSequence, lastEventSequence, entropy}`; HMAC-SHA256 of the raw body with the webhook key, base64, in `x-xero-signature`; respond 200 within 5 s, 401 on bad signature. Nightly reconciliation with `If-Modified-Since` | No general webhooks in the Public API → poll devices hourly, organisations/locations daily |
+| **Events** | **No webhooks documented** → poll every 15 min (`*/15 * * * *`), singleton job, plus "Sync now" | Webhooks for `CONTACT` and `INVOICE` (`CREATE`/`UPDATE`); payload `{events[], firstEventSequence, lastEventSequence, entropy}`; HMAC-SHA256 of the raw body with the webhook key, base64, in `x-xero-signature`; respond 200 within 5 s, 401 on bad signature. Nightly reconciliation with `If-Modified-Since` | No general webhooks in the Public API → poll organisations, locations, devices and health hourly (`ninjaone.sync`) |
 | **Rate limits** | Not published → 250 ms minimum spacing, back off on 429 | 60 calls/min, 5,000/day, 5 concurrent, per org per app. `Retry-After` on 429; `X-MinLimit-Remaining`, `X-DayLimit-Remaining` headers | Not published → back off on 429 |
 | **Deep links** | `ProposalView` (app), `Preview` (customer view), per-contact `Link` | Invoice `OnlineInvoice` URL; `https://go.xero.com/...` for contacts/invoices | Device and organisation pages in the NinjaOne console |
 | **Hand-off (cannot do via API)** | Pricing tables, editing content, sending, e-signature → "Open in Better Proposals" | Approving, sending, allocating payments → stay in Xero | Remote commands, scripts, device deletion → stay in NinjaOne |
@@ -66,6 +66,33 @@ All three vendors were verified against primary sources on 22 Sep 2026: the Bett
 - Deleted/archived: archived Xero contacts keep their link (`external_status = archived`) and raise a review item; nothing local is deleted.
 - Demo: with `DEMO_MODE=true` and no tokens, an in-memory organisation with customers, invoices and payments is used and labelled *Demo (not connected)*.
 
-## NinjaOne (Phase 5)
+## NinjaOne (Phase 5, built)
 
-See the matrix above. The connector will use `client_credentials` with the `monitoring` scope against the EU instance and stay read-only.
+**Read-only by design.** The live client (`src/connectors/ninjaone/live.ts`) has no write methods; only the `monitoring` scope is requested.
+
+### Setup (all in the web UI)
+
+1. NinjaOne → Administration → Apps → API → *Client app IDs* → Add. Application platform **API Services (machine-to-machine)**, scope **Monitoring** only, any redirect URI (unused).
+2. CRM → Integrations → NinjaOne → choose the region (EU = `eu.ninjarmm.com`), paste the client id and secret → *Verify and connect*. The CRM requests a token with `grant_type=client_credentials&scope=monitoring` and only stores the credentials (encrypted) if that succeeds.
+3. *Sync now*, then link organisations to companies and locations to sites in the mapping table. Nothing is linked automatically.
+
+### What is mirrored
+
+| Endpoint | Used for | Paging |
+|---|---|---|
+| `GET /v2/organizations` | organisations → `ninja_organizations` | `pageSize`/`after` |
+| `GET /v2/organization/{id}/locations` | locations → `ninja_locations` | — |
+| `GET /v2/devices-detailed` | devices (name, class, OS, last contact, approval, IPs) → `ninja_devices` | `pageSize`/`after` |
+| `GET /v2/queries/device-health` | health status, patch/threat/alert counts | `cursor` |
+
+Schedule: `ninjaone.sync` hourly at :20 (worker) plus *Sync now*. Deleted organisations/devices are marked `deleted`, never removed. Timestamps are epoch seconds. Requests are spaced 200 ms apart and back off on 429/5xx; a 401 triggers one token re-fetch.
+
+### Counting and discrepancies
+
+- **Active** = `lastContact` within *Settings → General → Device active window* (default 30 days).
+- **Billable** = active **and** `nodeClass` in the configured list (default workstations, servers, VM guests) **and** (`approvalStatus = APPROVED` when "approved only" is on).
+- Each contract line with *Compare with NinjaOne* is compared with the billable count at the linked organisation, or at the linked location when the line names a site (unlinked site → skipped). Differences become review items (open → accepted / dismissed / resolved) on the Devices page, the company's Devices tab and the contract. Accepting or dismissing is audited; contracts and invoices are never changed by the CRM.
+
+### Not available via the API (hand-off)
+
+Remote control, scripts, reboots, device deletion, approving pending devices → done in the NinjaOne console. Device rows and company tabs deep-link to `https://<instance>/#/deviceDashboard/{id}/overview` and `customerDashboard/{orgId}`.
