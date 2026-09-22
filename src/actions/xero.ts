@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireActionPermission } from "@/lib/session";
 import { runAction, type ActionResult } from "@/lib/action-result";
-import { approveAndCreateInvoice, cancelInvoiceDraft, createXeroContactForCompany, linkCompanyToXeroContact, prepareInvoiceDraft, pushContactDetailsToXero, selectXeroTenant, syncXero, testXero, updateInvoiceDraft } from "@/services/xero";
+import { approveAndCreateInvoice, cancelInvoiceDraft, createXeroContactForCompany, importAllXeroCustomers, importXeroContactAsCompany, linkCompanyToXeroContact, prepareInvoiceDraft, pushContactDetailsToXero, selectXeroTenant, syncXero, testXero, updateInvoiceDraft } from "@/services/xero";
 import { removeLink, getLink } from "@/services/integrations";
 import type { InvoiceDraftLine } from "@/db/schema";
 
@@ -118,5 +118,23 @@ export async function cancelDraftAction(id: string): Promise<ActionResult<undefi
     await cancelInvoiceDraft(z.uuid().parse(id), u.id);
     revalidateXero();
     return undefined;
+  });
+}
+
+export async function importXeroContactAction(contactId: string, linkExistingId?: string | null): Promise<ActionResult<{ action: string; companyId?: string; reason?: string }>> {
+  return runAction(async () => {
+    const u = await requireActionPermission("integration.manage");
+    const r = await importXeroContactAsCompany(z.string().min(1).parse(contactId), u.id, { linkExistingId: linkExistingId ? z.uuid().parse(linkExistingId) : null });
+    revalidateXero();
+    return { action: r.action, companyId: r.companyId, reason: r.reason };
+  });
+}
+
+export async function importAllXeroCustomersAction(): Promise<ActionResult<{ created: number; linked: number; skipped: { name: string; reason?: string }[] }>> {
+  return runAction(async () => {
+    const u = await requireActionPermission("integration.manage");
+    const r = await importAllXeroCustomers(u.id);
+    revalidateXero();
+    return { created: r.created, linked: r.linked, skipped: r.skipped.map((s) => ({ name: s.name, reason: s.reason })) };
   });
 }

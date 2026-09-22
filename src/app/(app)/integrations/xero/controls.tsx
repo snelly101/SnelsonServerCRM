@@ -7,7 +7,7 @@ import { RefreshCw, Stethoscope, Link2, Plus, Unlink, Upload } from "lucide-reac
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Field, Select, Input, SubmitButton, FormMessage } from "@/components/ui/form";
-import { createXeroContactAction, linkXeroContactAction, pushContactToXeroAction, selectTenantAction, syncXeroAction, testXeroAction, unlinkXeroContactAction } from "@/actions/xero";
+import { createXeroContactAction, importAllXeroCustomersAction, importXeroContactAction, linkXeroContactAction, pushContactToXeroAction, selectTenantAction, syncXeroAction, testXeroAction, unlinkXeroContactAction } from "@/actions/xero";
 import { saveIntegrationConfigAction } from "@/actions/integrations";
 import type { XeroMatch } from "@/services/xero";
 
@@ -212,6 +212,92 @@ export function MappingTable({ rows, canManage, configured }: { rows: Row[]; can
                         <Plus className="h-3.5 w-3.5" /> Create in Xero
                       </Button>
                     )}
+                  </span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+type UnlinkedRow = { contactId: string; name: string; emailAddress: string | null; outstanding: number; overdue: number; match: { id: string; name: string; confidence: string; reason: string; alreadyLinked: boolean } | null };
+
+export function ImportAllXeroButton() {
+  const [pending, start] = useTransition();
+  const [msg, setMsg] = useState<string | null>(null);
+  const router = useRouter();
+  return (
+    <span className="inline-flex items-center gap-2">
+      <Button size="sm" loading={pending} onClick={() => start(async () => { const r = await importAllXeroCustomersAction(); setMsg(r.ok ? `${r.data.created} companies created, ${r.data.linked} linked to existing${r.data.skipped.length ? `, ${r.data.skipped.length} skipped` : ""}` : r.error); router.refresh(); })}>
+        <Plus className="h-3.5 w-3.5" /> Import all as companies
+      </Button>
+      {msg && <span className="text-xs text-slate-600">{msg}</span>}
+    </span>
+  );
+}
+
+export function UnlinkedCustomersTable({ rows, canManage, currency }: { rows: UnlinkedRow[]; canManage: boolean; currency: string }) {
+  const [msg, setMsg] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  const router = useRouter();
+  const money = (n: number) => new Intl.NumberFormat("en-GB", { style: "currency", currency }).format(n);
+  const run = (contactId: string, linkExistingId?: string) =>
+    start(async () => {
+      const r = await importXeroContactAction(contactId, linkExistingId ?? null);
+      setMsg(r.ok ? (r.data.action === "skipped" ? `Skipped: ${r.data.reason}` : null) : r.error);
+      router.refresh();
+    });
+  if (rows.length === 0) return <p className="p-4 text-sm text-slate-500">Every active Xero customer is linked to a CRM company.</p>;
+  return (
+    <div>
+      <p className="border-b border-slate-200 px-4 py-2 text-xs text-slate-500">Xero customers with no CRM company. <strong>Create company</strong> makes a customer record from the Xero contact (name, address, VAT and company number, email, phone) and links it. Where a likely duplicate already exists you are offered <strong>Link</strong> instead.</p>
+      {msg && <p className="px-4 py-2 text-sm text-red-700">{msg}</p>}
+      <table className={`tbl ${pending ? "opacity-70" : ""}`}>
+        <thead>
+          <tr>
+            <th>Xero customer</th>
+            <th>Email</th>
+            <th className="text-right">Outstanding</th>
+            <th>Existing match</th>
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.contactId}>
+              <td className="font-medium">{r.name}</td>
+              <td className="text-xs text-slate-600">{r.emailAddress ?? "—"}</td>
+              <td className="text-right tabular-nums">
+                {money(r.outstanding)}
+                {r.overdue > 0 && <div className="text-[11px] text-red-600">{money(r.overdue)} overdue</div>}
+              </td>
+              <td className="text-xs">
+                {r.match ? (
+                  <span>
+                    <Badge tone={r.match.confidence === "high" ? "green" : r.match.confidence === "medium" ? "amber" : "slate"}>{r.match.reason.replace(/_/g, " ")}</Badge>{" "}
+                    <Link href={`/companies/${r.match.id}`} className="text-brand-700 hover:underline">
+                      {r.match.name}
+                    </Link>
+                    {r.match.alreadyLinked && <span className="text-slate-400"> (linked to another Xero contact)</span>}
+                  </span>
+                ) : (
+                  <span className="text-slate-400">none</span>
+                )}
+              </td>
+              <td className="text-right">
+                {canManage && (
+                  <span className="inline-flex gap-1">
+                    {r.match && !r.match.alreadyLinked && (
+                      <Button size="sm" variant="ghost" onClick={() => run(r.contactId, r.match!.id)}>
+                        <Link2 className="h-3.5 w-3.5" /> Link
+                      </Button>
+                    )}
+                    <Button size="sm" variant="ghost" onClick={() => run(r.contactId)}>
+                      <Plus className="h-3.5 w-3.5" /> Create company
+                    </Button>
                   </span>
                 )}
               </td>

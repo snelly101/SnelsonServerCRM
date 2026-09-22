@@ -2,14 +2,14 @@ import { describe, expect, it, beforeAll, vi } from "vitest";
 import { createHmac } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { invoiceDrafts, xeroContacts, xeroInvoices, outboundRequests, inboundEvents } from "@/db/schema";
+import { companies, contacts, invoiceDrafts, xeroContacts, xeroInvoices, outboundRequests, inboundEvents } from "@/db/schema";
 import { createCompany } from "@/services/companies";
 import { companySchema } from "@/lib/validation";
 import { createContract } from "@/services/contracts";
 import { contractSchema } from "@/lib/validation-sales";
 import { LiveXeroClient, verifyWebhookSignature, xeroDate, xeroDateOnly } from "@/connectors/xero/live";
 import { demoXeroAuthorise, demoXeroPay, demoXeroReset, demoXeroTouchContact } from "@/connectors/xero/demo";
-import { approveAndCreateInvoice, companyFinancialSummary, createXeroContactForCompany, financeTotals, linkCompanyToXeroContact, prepareInvoiceDraft, processXeroInboundEvents, pushContactDetailsToXero, recordXeroWebhookEvents, suggestXeroContacts, syncXero } from "@/services/xero";
+import { approveAndCreateInvoice, companyFinancialSummary, createXeroContactForCompany, financeTotals, importAllXeroCustomers, importXeroContactAsCompany, linkCompanyToXeroContact, listUnlinkedXeroCustomers, prepareInvoiceDraft, processXeroInboundEvents, pushContactDetailsToXero, recordXeroWebhookEvents, suggestXeroContacts, syncXero } from "@/services/xero";
 import { getLink, listOpenConflicts, setConnectionConfig, updateConnection } from "@/services/integrations";
 import { ActionError } from "@/lib/action-result";
 import { makeUser } from "./helpers";
@@ -223,5 +223,35 @@ describe("Xero workflow (demo adapter)", () => {
     const { cancelInvoiceDraft } = await import("@/services/xero");
     await cancelInvoiceDraft(d, finance.id);
     await expect(approveAndCreateInvoice(d, finance.id)).rejects.toThrow(ActionError);
+  });
+
+  it("imports unlinked Xero customers as companies: creates with address and contact, links obvious duplicates, never touches suppliers, idempotent", async () => {
+    const before = await listUnlinkedXeroCustomers();
+    expect(before.map((r) => r.contactId)).not.toContain("demo-c-2"); // already linked
+    expect(before.map((r) => r.contactId)).not.toContain("demo-c-6"); // supplier, not a customer
+    expect(before.some((r) => r.contactId === "demo-c-4")).toBe(true);
+
+    const created = await importXeroContactAsCompany("demo-c-4", admin.id);
+    expect(created.action).toBe("created");
+    const [co] = await db.select().from(companies).where(eq(companies.id, created.companyId!));
+    expect(co).toMatchObject({ name: "Greenfield Primary Academy", status: "customer", email: "finance@greenfieldacademy.org.uk", addressLine1: "1 High Street", city: "Leeds", postcode: "LS1 1AA", country: "GB" });
+    expect((await getLink("xero", "company", co.id))?.externalId).toBe("demo-c-4");
+    expect((await importXeroContactAsCompany("demo-c-4", admin.id)).action).toBe("skipped");
+
+    // "Ridgeway Architects" in Xero vs the existing "Ridgeway Architects LLP" company: link, don't duplicate
+    const ridgeway = await importXeroContactAsCompany("demo-c-3", admin.id);
+    const [existing] = await db.select({ id: companies.id }).from(companies).where(eq(companies.name, "Ridgeway Architects LLP"));
+    if (ridgeway.action === "linked") expect(ridgeway.companyId).toBe(existing.id);
+    else expect(ridgeway.action).toBe("skipped");
+    expect((await db.select().from(companies).where(eq(companies.name, "Ridgeway Architects"))).length).toBe(0);
+
+    const all = await importAllXeroCustomers(admin.id);
+    expect(all.created + all.linked + all.skipped.length).toBe(all.results.length);
+    expect(await listUnlinkedXeroCustomers()).toHaveLength(0);
+    expect((await db.select().from(companies).where(eq(companies.name, "Old Supplier Ltd"))).length).toBe(0);
+    const [bramley] = await db.select({ id: companies.id }).from(companies).where(eq(companies.name, "Bramley Accountants Ltd"));
+    expect(bramley).toBeTruthy();
+    const people = await db.select().from(contacts).where(eq(contacts.companyId, bramley.id));
+    expect(people.length).toBeLessThanOrEqual(1); // contact only when Xero has a person name
   });
 });
