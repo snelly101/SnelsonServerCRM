@@ -38,11 +38,21 @@ One codebase, two processes (`web` and `worker`) sharing the same database. Noth
 | `activities` | The customer timeline. Notes, calls, meetings, system events and (later) proposal/invoice/device/sync events. Append-only. |
 | `saved_views` | Named URL-param snapshots per list page, per user, optionally shared. |
 
-### Planned (Phases 2–5)
+### Sales, contracts, work (Phase 2)
 
-- **Sales:** `pipelines`, `stages`, `opportunities`, `opportunity_lines` (revenue type: recurring / one_off_project / hardware; cost nullable → margin marked "estimated").
-- **Catalogue and contracts:** `products` (pricing model per_user / per_device / fixed / one_off), `contracts`, `contract_lines` (contracted quantity), `contract_reviews`.
-- **Work:** `tasks`, `checklist_templates`, `checklist_template_items`, `onboardings` (unique on `proposal_id` → created exactly once), `onboarding_items`.
+| Table | Notes |
+|---|---|
+| `pipeline_stages` | Ordered, with default probability, colour, fixed `is_won`/`is_lost` rows. |
+| `opportunities` | Status open/won/lost, stage, owner, contact, expected close, probability, lead source, next action, lost reason, `board_order`. |
+| `opportunity_lines` | `revenue_type` (recurring / one_off_project / hardware), `pricing_model` (per_user / per_device / fixed / one_off), billing frequency, quantity, unit price, nullable unit cost (null ⇒ margin is an estimate). |
+| `products` | Service catalogue. Same pricing fields plus `counts_as_managed_device` for per-device lines to be compared with NinjaOne. |
+| `contracts` | Start/end/renewal dates, notice period, auto-renew, billing frequency, review date/interval, linked opportunity, `external_proposal_id`. |
+| `contract_lines` | **Contracted** quantity (never overwritten by observed counts), optional `site_id`, `counts_as_managed_device`. |
+| `tasks` | Owner, due, priority, links to company/opportunity/contract/onboarding, unique `source_key` for system-generated tasks (renewal/review/onboarding items). |
+| `checklist_templates`, `checklist_template_items` | Reusable onboarding checklists (day offsets, default owner role). |
+| `onboardings` | Unique `source_key` (`opportunity:<id>` or `proposal:<external id>`) guarantees exactly-once creation. Items are `tasks` rows. |
+
+### Planned (Phases 3–5)
 - **Integration plumbing:** `integration_connections` (encrypted credentials, chosen Xero tenant, status, last sync), `external_links` (provider, entity type, local id ↔ external id, unique both ways, how it was matched), `sync_runs`, `sync_errors`, `inbound_events` (unique provider+event id), `outbound_requests` (unique idempotency key + state machine), `mapping_conflicts`.
 - **Mirrored external data:** `bp_proposals`, `xero_invoices`, `xero_payments`, `ninja_devices`, each with `fetched_at` and `source_updated_at` so the UI can label rows live / cached / stale / unavailable.
 - **Review queue:** `billing_discrepancies` (contracted vs observed quantity, open / accepted / dismissed / resolved).

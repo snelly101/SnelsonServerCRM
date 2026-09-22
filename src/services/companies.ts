@@ -48,7 +48,7 @@ export function buildCompanyWhere(p: CompanyListParams): SQL | undefined {
   if (p.industry) conds.push(eq(companies.industry, p.industry));
   if (p.tagId) {
     conds.push(
-      sql`exists (select 1 from ${companyTags} ct where ct.company_id = ${companies.id} and ct.tag_id = ${p.tagId})`,
+      sql`exists (select 1 from company_tags ct where ct.company_id = companies.id and ct.tag_id = ${p.tagId})`,
     );
   }
   const defined = conds.filter((c): c is SQL => Boolean(c));
@@ -76,7 +76,7 @@ export async function listCompanies(p: CompanyListParams) {
         ownerName: user.name,
         archivedAt: companies.archivedAt,
         updatedAt: companies.updatedAt,
-        contactCount: sql<number>`(select count(*) from ${contacts} c where c.company_id = ${companies.id} and c.archived_at is null)`.mapWith(Number),
+        contactCount: sql<number>`(select count(*) from contacts c where c.company_id = companies.id and c.archived_at is null)`.mapWith(Number),
       })
       .from(companies)
       .leftJoin(user, eq(user.id, companies.ownerUserId))

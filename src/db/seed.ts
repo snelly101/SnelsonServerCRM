@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { hashPassword } from "better-auth/crypto";
 import * as schema from "./schema";
 import { normalizeCompanyName, extractDomain, normalizeEmail } from "@/lib/utils";
+import { seedSales } from "./seed-sales";
 
 /**
  * Seeds a development database with staff users and realistic sample
@@ -187,6 +188,7 @@ export async function seed(url = process.env.DATABASE_URL) {
           : [{ type: "call" as const, companyId: company.id, title: "Discovery call", body: "Currently with an incumbent provider; contract ends in a few months.", actorUserId: ownerUserId, at: new Date(Date.now() - (i + 1) * 86400000) }]),
       ]);
     }
+    await seedSales(db, userIds);
     await db.insert(schema.auditLog).values({ actorType: "system", action: "seed.run", entityType: "database", details: { users: SEED_USERS.length, companies: COMPANIES.length } });
   } finally {
     await pool.end();

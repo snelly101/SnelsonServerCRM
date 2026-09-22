@@ -16,6 +16,10 @@ const optionalUrl = trimmed
   .or(z.literal(""))
   .transform((v) => (v ? v : null))
   .refine((v) => v === null || /^(https?:\/\/)?[\w.-]+\.[a-z]{2,}(\/.*)?$/i.test(v), "Enter a valid website");
+export const boolish = z
+  .union([z.boolean(), z.string(), z.null()])
+  .optional()
+  .transform((v) => v === true || v === "true" || v === "on");
 const uuid = z.uuid();
 const optionalUuid = z.union([uuid, z.literal("")]).optional().transform((v) => (v ? v : null));
 
@@ -51,7 +55,7 @@ export type CompanyInput = z.infer<typeof companySchema>;
 export const siteSchema = z.object({
   companyId: uuid,
   name: trimmed.min(1, "Site name is required").max(200),
-  isPrimary: z.coerce.boolean().default(false),
+  isPrimary: boolish,
   phone: optionalText,
   ...addressSchema,
   notes: optionalLong,
@@ -68,7 +72,7 @@ export const contactSchema = z.object({
   mobile: optionalText,
   jobTitle: optionalText,
   roles: z.array(z.enum(contactRoleValues)).default([]),
-  isPrimary: z.coerce.boolean().default(false),
+  isPrimary: boolish,
   notes: optionalLong,
   customFields: z.record(z.string(), z.unknown()).default({}),
 });
@@ -88,7 +92,7 @@ export const customFieldDefSchema = z.object({
   label: trimmed.min(1).max(100),
   type: z.enum(["text", "number", "date", "boolean", "select"]).default("text"),
   options: z.array(trimmed.min(1).max(100)).default([]),
-  required: z.coerce.boolean().default(false),
+  required: boolish,
 });
 
 export const noteSchema = z.object({
@@ -110,7 +114,7 @@ export const userUpdateSchema = z.object({
   id: z.string().min(1),
   name: trimmed.min(1).max(100),
   role: z.enum(ROLES),
-  active: z.coerce.boolean(),
+  active: boolish,
   password: z.union([z.string().min(10, "Password must be at least 10 characters").max(200), z.literal("")]).optional(),
 });
 
@@ -128,7 +132,7 @@ export const savedViewSchema = z.object({
   page: trimmed.min(1).max(50),
   name: trimmed.min(1).max(60),
   params: z.record(z.string(), z.string()),
-  isShared: z.coerce.boolean().default(false),
+  isShared: boolish,
 });
 
 /** Turns FormData into a plain object; repeated keys become arrays. Keys ending in [] are always arrays. */

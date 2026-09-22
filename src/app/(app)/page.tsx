@@ -7,6 +7,13 @@ import { getAppSettings } from "@/lib/settings";
 import { PageHeader, Stat, Card, EmptyState } from "@/components/ui/page";
 import { fmtDateTime } from "@/lib/format";
 import { Alert } from "@/components/ui/alert";
+import { pipelineTotals } from "@/services/opportunities";
+import { contractTotals, listContracts } from "@/services/contracts";
+import { listTasks, taskCounts } from "@/services/tasks";
+import { TaskList } from "@/components/task-list";
+import { can } from "@/lib/permissions";
+import { fmtMoney, fmtDate } from "@/lib/format";
+import { Badge } from "@/components/ui/badge";
 
 export const metadata = { title: "Dashboard" };
 
@@ -39,6 +46,13 @@ export default async function DashboardPage() {
       .orderBy(desc(activities.at))
       .limit(12),
   ]);
+  const [pipeline, contractsTotals, myTasks, counts, renewals] = await Promise.all([
+    pipelineTotals(),
+    contractTotals(),
+    listTasks({ ownerUserId: me.id, status: "open", pageSize: 8 }),
+    taskCounts(me.id),
+    listContracts({ status: "active", renewingWithinDays: 90, pageSize: 6 }),
+  ]);
   const [{ mine }] = await db
     .select({ mine: count() })
     .from(companies)
@@ -58,6 +72,39 @@ export default async function DashboardPage() {
         <Stat label="Customers" value={stats.customers} />
         <Stat label="New companies (30 days)" value={stats.newThisMonth} hint={`${mine} owned by you`} />
         <Stat label="Contacts" value={stats.contacts} />
+      </div>
+      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Stat label="Pipeline (first year)" value={fmtMoney(pipeline.total, settings.currency)} hint={`${pipeline.count} open · weighted ${fmtMoney(pipeline.weighted, settings.currency)}`} />
+        <Stat label="MRR (active contracts)" value={fmtMoney(contractsTotals.mrr, settings.currency)} hint={`${contractsTotals.active} active · ARR ${fmtMoney(contractsTotals.arr, settings.currency)}`} tone="good" />
+        <Stat label="My open tasks" value={counts.mine} hint={counts.mineOverdue ? `${counts.mineOverdue} overdue` : "none overdue"} tone={counts.mineOverdue ? "danger" : "default"} />
+        <Stat label="Renewals in 90 days" value={renewals.total} tone={renewals.total ? "warn" : "default"} />
+      </div>
+      <div className="mb-4 grid gap-4 lg:grid-cols-2">
+        <Card title="My tasks" padded={false} actions={<Link href="/tasks?owner=me" className="text-xs text-brand-700 hover:underline">View all</Link>}>
+          <TaskList tasks={myTasks.rows} canWrite={can(me.role, "task.write")} settings={settings} compact />
+        </Card>
+        <Card title="Upcoming renewals" padded={false} actions={<Link href="/contracts?renewing=90" className="text-xs text-brand-700 hover:underline">View all</Link>}>
+          {renewals.rows.length === 0 ? (
+            <div className="p-4 text-sm text-slate-500">No active contracts renew in the next 90 days.</div>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {renewals.rows.map((c) => (
+                <li key={c.id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
+                  <div className="min-w-0">
+                    <Link href={`/contracts/${c.id}`} className="font-medium text-brand-700 hover:underline">
+                      {c.name}
+                    </Link>
+                    <div className="text-xs text-slate-500">{c.companyName} · MRR {fmtMoney(c.summary.mrr, settings.currency)}</div>
+                  </div>
+                  <div className="text-right text-xs">
+                    <div>Renews {fmtDate(c.renewalDate, settings)}</div>
+                    {c.noticeDeadline && <Badge tone={c.noticeDeadline <= new Date().toISOString().slice(0, 10) ? "red" : "amber"}>notice by {fmtDate(c.noticeDeadline, settings)}</Badge>}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
       </div>
       <div className="grid gap-4 lg:grid-cols-3">
         <Card title="Recent activity" className="lg:col-span-2" padded={false}>
@@ -88,11 +135,9 @@ export default async function DashboardPage() {
         </Card>
         <Card title="Coming in later phases">
           <ul className="space-y-1.5 text-sm text-slate-600">
-            <li>Pipeline value and weighted forecast</li>
-            <li>Monthly recurring revenue from active contracts</li>
-            <li>Upcoming renewals and overdue tasks</li>
-            <li>Outstanding invoices (Xero)</li>
-            <li>Device totals and integration health (NinjaOne)</li>
+            <li>Proposal progress (Better Proposals, Phase 3)</li>
+            <li>Outstanding invoices (Xero, Phase 4)</li>
+            <li>Device totals and integration health (NinjaOne, Phase 5)</li>
           </ul>
         </Card>
       </div>

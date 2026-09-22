@@ -20,12 +20,34 @@ import { NoteForm } from "@/components/note-form";
 import { Timeline } from "@/components/timeline";
 import { fmtDate, fmtDateTime } from "@/lib/format";
 import { fullName } from "@/lib/utils";
+import { listCompanyOpportunities } from "@/services/opportunities";
+import { listCompanyContracts } from "@/services/contracts";
+import { listTasks } from "@/services/tasks";
+import { listOnboardings } from "@/services/onboarding";
+import { listOwners } from "@/services/companies";
+import { TaskList } from "@/components/task-list";
+import { TaskDialog } from "@/components/task-dialog";
+import { RevenueSummaryBadges } from "@/components/lines-editor";
+import { fmtMoney } from "@/lib/format";
 
 export default async function CompanyPage({ params }: { params: Promise<{ id: string }> }) {
   const me = await requirePermission("company.read");
   const { id } = await params;
-  const [company, timeline, defs, settings] = await Promise.all([getCompany(id), getCompanyTimeline(id), listCustomFieldDefs("company"), getAppSettings()]);
+  const [company, timeline, defs, settings, opportunities, companyContracts, companyTasks, onboardingList, owners] = await Promise.all([
+    getCompany(id),
+    getCompanyTimeline(id),
+    listCustomFieldDefs("company"),
+    getAppSettings(),
+    listCompanyOpportunities(id),
+    listCompanyContracts(id),
+    listTasks({ companyId: id, status: "all", pageSize: 100 }),
+    listOnboardings(id),
+    listOwners(),
+  ]);
   if (!company) notFound();
+  const activeContracts = companyContracts.filter((c) => c.status === "active");
+  const mrr = activeContracts.reduce((a, c) => a + c.summary.mrr, 0);
+  const openOpps = opportunities.filter((o) => o.status === "open");
   const canWrite = can(me.role, "company.write");
   const address = [company.addressLine1, company.addressLine2, company.city, company.region, company.postcode, company.country].filter(Boolean).join(", ");
 
@@ -106,12 +128,18 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
               <TabsTrigger value="sites" count={company.sites.length}>
                 Sites
               </TabsTrigger>
-              <TabsTrigger value="opportunities">Opportunities</TabsTrigger>
+              <TabsTrigger value="opportunities" count={openOpps.length}>
+                Opportunities
+              </TabsTrigger>
               <TabsTrigger value="proposals">Proposals</TabsTrigger>
-              <TabsTrigger value="contracts">Contracts</TabsTrigger>
+              <TabsTrigger value="contracts" count={activeContracts.length}>
+                Contracts
+              </TabsTrigger>
               <TabsTrigger value="invoices">Invoices</TabsTrigger>
               <TabsTrigger value="devices">Devices</TabsTrigger>
-              <TabsTrigger value="tasks">Tasks</TabsTrigger>
+              <TabsTrigger value="tasks" count={companyTasks.rows.filter((t) => t.status === "open").length}>
+                Tasks
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="overview">
@@ -244,7 +272,131 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
               </Card>
             </TabsContent>
 
-            {(["opportunities", "proposals", "contracts", "invoices", "devices", "tasks"] as const).map((tab) => (
+            <TabsContent value="opportunities">
+              <Card
+                title="Opportunities"
+                padded={false}
+                actions={
+                  can(me.role, "opportunity.write") && (
+                    <ButtonLink href={`/pipeline/new?companyId=${id}`} size="sm">
+                      <Plus className="h-4 w-4" /> New opportunity
+                    </ButtonLink>
+                  )
+                }
+              >
+                {opportunities.length === 0 ? (
+                  <div className="p-4">
+                    <EmptyState title="No opportunities yet" />
+                  </div>
+                ) : (
+                  <table className="tbl">
+                    <thead>
+                      <tr>
+                        <th>Opportunity</th>
+                        <th>Stage</th>
+                        <th className="text-right">First-year value</th>
+                        <th className="text-right">MRR</th>
+                        <th>Expected close</th>
+                        <th>Owner</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {opportunities.map((o) => (
+                        <tr key={o.id}>
+                          <td>
+                            <Link href={`/pipeline/${o.id}`} className="font-medium text-brand-700 hover:underline">
+                              {o.title}
+                            </Link>
+                          </td>
+                          <td>
+                            <Badge tone={o.status === "won" ? "green" : o.status === "lost" ? "red" : o.stageColor}>{o.status === "open" ? o.stageName : o.status}</Badge>
+                          </td>
+                          <td className="text-right tabular-nums">{fmtMoney(o.summary.firstYearValue, settings.currency)}</td>
+                          <td className="text-right tabular-nums">{fmtMoney(o.summary.mrr, settings.currency)}</td>
+                          <td>{fmtDate(o.expectedCloseDate, settings)}</td>
+                          <td>{o.ownerName ?? "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="contracts">
+              <Card
+                title={`Contracts · MRR ${fmtMoney(mrr, settings.currency)}`}
+                padded={false}
+                actions={
+                  can(me.role, "contract.write") && (
+                    <ButtonLink href={`/contracts/new?companyId=${id}`} size="sm">
+                      <Plus className="h-4 w-4" /> New contract
+                    </ButtonLink>
+                  )
+                }
+              >
+                {companyContracts.length === 0 ? (
+                  <div className="p-4">
+                    <EmptyState title="No contracts yet" description="Contracts are drafted automatically when an opportunity is won, or created here." />
+                  </div>
+                ) : (
+                  <table className="tbl">
+                    <thead>
+                      <tr>
+                        <th>Contract</th>
+                        <th>Status</th>
+                        <th>Value</th>
+                        <th>Renewal</th>
+                        <th>Next review</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {companyContracts.map((c) => (
+                        <tr key={c.id}>
+                          <td>
+                            <Link href={`/contracts/${c.id}`} className="font-medium text-brand-700 hover:underline">
+                              {c.name}
+                            </Link>
+                          </td>
+                          <td>
+                            <Badge tone={c.status === "active" ? "green" : c.status === "draft" ? "slate" : "amber"}>{c.status}</Badge>
+                          </td>
+                          <td>
+                            <RevenueSummaryBadges summary={c.summary} currency={settings.currency} compact />
+                          </td>
+                          <td>{fmtDate(c.renewalDate, settings)}</td>
+                          <td>{fmtDate(c.nextReviewDate, settings)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="tasks">
+              <Card title="Tasks" padded={false} actions={can(me.role, "task.write") && <TaskDialog owners={owners} defaults={{ companyId: id }} />}>
+                <TaskList tasks={companyTasks.rows} canWrite={can(me.role, "task.write")} settings={settings} compact />
+              </Card>
+              {onboardingList.length > 0 && (
+                <Card title="Onboarding" padded={false} className="mt-4">
+                  <ul className="divide-y divide-slate-100">
+                    {onboardingList.map((o) => (
+                      <li key={o.id} className="flex items-center justify-between px-4 py-2 text-sm">
+                        <Link href={`/tasks/onboarding/${o.id}`} className="font-medium text-brand-700 hover:underline">
+                          {o.name}
+                        </Link>
+                        <span className="text-xs text-slate-500">
+                          {o.done}/{o.total} · <Badge tone={o.status === "completed" ? "green" : "blue"}>{o.status.replace("_", " ")}</Badge>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </Card>
+              )}
+            </TabsContent>
+
+            {(["proposals", "invoices", "devices"] as const).map((tab) => (
               <TabsContent key={tab} value={tab}>
                 <EmptyState title={`${tab[0].toUpperCase()}${tab.slice(1)} arrive in a later phase`} description={PHASE_NOTES[tab]} />
               </TabsContent>
@@ -268,10 +420,7 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
 }
 
 const PHASE_NOTES: Record<string, string> = {
-  opportunities: "Phase 2 adds the sales pipeline.",
   proposals: "Phase 3 links Better Proposals.",
-  contracts: "Phase 2 adds contracts and the service catalogue.",
   invoices: "Phase 4 connects Xero.",
   devices: "Phase 5 imports NinjaOne devices.",
-  tasks: "Phase 2 adds tasks and onboarding.",
 };

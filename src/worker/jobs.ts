@@ -12,6 +12,7 @@ import { logger } from "@/lib/logger";
  */
 export const QUEUES = {
   heartbeat: "system.heartbeat",
+  reminders: "crm.reminders",
 } as const;
 
 export async function registerJobs(boss: PgBoss) {
@@ -23,4 +24,13 @@ export async function registerJobs(boss: PgBoss) {
   // A cheap scheduled job that proves the worker is alive; the Integrations
   // page (Phase 6) reads the last completed heartbeat as "worker last seen".
   await boss.schedule(QUEUES.heartbeat, "*/5 * * * *", {}, { retryLimit: 0 });
+
+  // Daily at 06:00: renewal/review reminder tasks and contract expiry. Idempotent via task source keys.
+  await boss.createQueue(QUEUES.reminders, { deleteAfterSeconds: 30 * 24 * 3600, retryLimit: 3, retryBackoff: true });
+  await boss.work(QUEUES.reminders, async ([job]) => {
+    const { generateReminders } = await import("@/services/contracts");
+    const res = await generateReminders(null);
+    logger.info({ jobId: job.id, created: res.created }, "reminders generated");
+  });
+  await boss.schedule(QUEUES.reminders, "0 6 * * *", {}, { retryLimit: 3 });
 }
