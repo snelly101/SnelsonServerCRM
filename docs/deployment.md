@@ -38,7 +38,7 @@ POSTGRES_PASSWORD=<openssl rand -base64 24>
 APP_ENCRYPTION_KEY=<openssl rand -base64 32>
 BETTER_AUTH_SECRET=<openssl rand -base64 32>
 BACKUP_PASSPHRASE=<openssl rand -base64 24>      # encrypts nightly dumps
-DEMO_MODE=false
+DEMO_MODE=false                                   # must be false in production: enables synthetic integration data
 # leave DATABASE_URL blank: compose sets it to the internal db container
 ```
 
@@ -87,9 +87,21 @@ To restore for real: stop `web` and `worker`, restore into `crm`, start them aga
 
 ## 6. Monitoring
 
+- **`GET https://crm.example.com/api/health`** returns `200 {"status":"ok","database":"ok","worker":"alive",...}` when the database answers and the worker heartbeat is under 15 minutes old, otherwise `503 {"status":"degraded",...}`. Point an uptime monitor (UptimeRobot, Better Stack, Healthchecks.io, all have free tiers) at it every 5 minutes; that one check covers the web app, the database and the worker.
 - `docker compose ps` — all services `running`; `migrate` is expected to show `exited (0)`.
 - `docker compose logs --since 1h worker` — job failures are logged as JSON with `level: 50`.
-- The Integrations page (Phase 6) shows worker last-seen (heartbeat every 5 min) and last successful sync per provider.
+- The Integrations page shows *worker alive / stale / never* with the last heartbeat, last successful sync per provider, paused connectors and unresolved conflicts. Reports → Integration health adds failed/partial runs in the last 24 hours.
+- Disk: `df -h` monthly; backups are pruned after 30 days locally but the database volume grows with mirrored invoices and devices (expect well under 1 GB for a small MSP).
+
+## 6a. Go-live checklist
+
+1. `.env` secrets generated and stored in the password manager: `POSTGRES_PASSWORD`, `APP_ENCRYPTION_KEY`, `BETTER_AUTH_SECRET`, `BACKUP_PASSPHRASE`; `DEMO_MODE=false`; `APP_URL`/`BETTER_AUTH_URL`/`CRM_DOMAIN` set to the real hostname.
+2. `docker compose ps` healthy, `/api/health` returns 200, HTTPS certificate issued (Caddy log).
+3. First admin created, then staff users added with the least role they need (Settings → Users).
+4. Integrations entered in the UI: Better Proposals API token (Premium plan), Xero app connected and organisation chosen, NinjaOne client id/secret (Monitoring scope). Each shows **connected**, not *Demo*.
+5. Customer mapping done for Xero and NinjaOne; counting rules reviewed; a first sync run is green on the Integrations page.
+6. Backup restore drill completed once (section 5) and off-site bucket configured.
+7. Uptime monitor pointed at `/api/health`.
 
 ## 7. Shared-hosting variant (no Docker)
 
@@ -100,5 +112,7 @@ Works on cPanel/Plesk hosts that offer Node 20+, cron every minute, and a Postgr
 3. Start the app through the host's Node app manager (entry `node_modules/.bin/next start -p $PORT`) or `npm start`.
 4. Cron: `* * * * * cd /home/<user>/crm && npm run jobs:tick >> jobs.log 2>&1`. The tick processes queued jobs for ~50 s and exits; jobs are durable in Postgres.
 5. Backups: `0 2 * * * pg_dump "$DATABASE_URL" | gzip | gpg --batch --symmetric --passphrase "$BACKUP_PASSPHRASE" -o ~/backups/crm-$(date +\%F).sql.gz.gpg`.
+
+6. Health: `/api/health` reports the worker as *alive* as long as the cron tick runs; if the host's cron is unreliable it will show *stale* and the Integrations page will warn.
 
 Limitations: builds need ~2 GB RAM (build locally or in CI and upload `.next/` if the host is smaller); webhooks require the app to answer within 5 s, so keep the app "always on" if the host offers it.

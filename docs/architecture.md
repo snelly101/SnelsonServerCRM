@@ -38,14 +38,40 @@ One codebase, two processes (`web` and `worker`) sharing the same database. Noth
 | `activities` | The customer timeline. Notes, calls, meetings, system events and (later) proposal/invoice/device/sync events. Append-only. |
 | `saved_views` | Named URL-param snapshots per list page, per user, optionally shared. |
 
-### Planned (Phases 2–5)
+### Sales, contracts, work (Phase 2)
 
-- **Sales:** `pipelines`, `stages`, `opportunities`, `opportunity_lines` (revenue type: recurring / one_off_project / hardware; cost nullable → margin marked "estimated").
-- **Catalogue and contracts:** `products` (pricing model per_user / per_device / fixed / one_off), `contracts`, `contract_lines` (contracted quantity), `contract_reviews`.
-- **Work:** `tasks`, `checklist_templates`, `checklist_template_items`, `onboardings` (unique on `proposal_id` → created exactly once), `onboarding_items`.
+| Table | Notes |
+|---|---|
+| `pipeline_stages` | Ordered, with default probability, colour, fixed `is_won`/`is_lost` rows. |
+| `opportunities` | Status open/won/lost, stage, owner, contact, expected close, probability, lead source, next action, lost reason, `board_order`. |
+| `opportunity_lines` | `revenue_type` (recurring / one_off_project / hardware), `pricing_model` (per_user / per_device / fixed / one_off), billing frequency, quantity, unit price, nullable unit cost (null ⇒ margin is an estimate). |
+| `products` | Service catalogue. Same pricing fields plus `counts_as_managed_device` for per-device lines to be compared with NinjaOne. |
+| `contracts` | Start/end/renewal dates, notice period, auto-renew, billing frequency, review date/interval, linked opportunity, `external_proposal_id`. |
+| `contract_lines` | **Contracted** quantity (never overwritten by observed counts), optional `site_id`, `counts_as_managed_device`. |
+| `tasks` | Owner, due, priority, links to company/opportunity/contract/onboarding, unique `source_key` for system-generated tasks (renewal/review/onboarding items). |
+| `checklist_templates`, `checklist_template_items` | Reusable onboarding checklists (day offsets, default owner role). |
+| `onboardings` | Unique `source_key` (`opportunity:<id>` or `proposal:<external id>`) guarantees exactly-once creation. Items are `tasks` rows. |
+
+### Integrations and mirrors (Phases 3–5)
 - **Integration plumbing:** `integration_connections` (encrypted credentials, chosen Xero tenant, status, last sync), `external_links` (provider, entity type, local id ↔ external id, unique both ways, how it was matched), `sync_runs`, `sync_errors`, `inbound_events` (unique provider+event id), `outbound_requests` (unique idempotency key + state machine), `mapping_conflicts`.
 - **Mirrored external data:** `bp_proposals`, `xero_invoices`, `xero_payments`, `ninja_devices`, each with `fetched_at` and `source_updated_at` so the UI can label rows live / cached / stale / unavailable.
 - **Review queue:** `billing_discrepancies` (contracted vs observed quantity, open / accepted / dismissed / resolved).
+- **Operational status (Phase 6):** `system_status` key/value rows for the worker heartbeat and last retention run. Never holds secrets.
+
+### Data retention and deletion policy
+
+| Data | Kept | Removed by |
+|---|---|---|
+| Companies, contacts, sites, opportunities, contracts, tasks | Indefinitely; *archive* hides, never deletes | A person, explicitly (archive) |
+| Audit log, activity timeline | Indefinitely | Never (compliance trail) |
+| Mirrored external records (proposals, Xero contacts/invoices/payments, NinjaOne orgs/devices) | Indefinitely; rows that disappear upstream are flagged `deleted`/`archived`, not removed | Never by a sync |
+| External links, mapping conflicts, billing discrepancies | Indefinitely | Unlink/resolve changes state only |
+| Sync runs + item errors | 90 days | `system.retention` nightly |
+| Inbound webhook payloads (processed) | 30 days | `system.retention` nightly |
+| pg-boss job rows | 1–30 days per queue | pg-boss |
+| Integration credentials | Until *Disconnect* | A person; the row is wiped, audit entry kept |
+
+A customer's personal data can be removed by archiving the contact and then deleting the row with a DBA action; the audit log keeps only the field names changed, not values, for credentials and secrets.
 
 ## Request flow
 
@@ -74,7 +100,7 @@ pg-boss stores jobs in the `pgboss` schema of the same database. Handlers are re
 - **`npm run worker`** — long-lived process (VPS/Docker). Default.
 - **`npm run jobs:tick`** — runs for ~50 s and exits. For shared hosts: schedule it from cron every minute. Because the queue is in Postgres, missed or overlapping ticks are harmless.
 
-Retries: per-queue `retryLimit` with exponential backoff (`retryBackoff: true`). Integration queues (Phase 3+) also honour `Retry-After` from 429 responses and open a circuit breaker per connection after repeated failures.
+Retries: per-queue `retryLimit` with exponential backoff (`retryBackoff: true`). Integration queues also honour `Retry-After` from 429 responses and open a circuit breaker per connection after three consecutive failures (scheduled runs pause for an hour; manual runs still work). Both runners write a heartbeat to `system_status` at start and every 5 minutes; `/api/health` and the Integrations page read it.
 
 ## Integration design (applies to all three)
 
@@ -86,6 +112,6 @@ Retries: per-queue `retryLimit` with exponential backoff (`retryBackoff: true`).
 - **Deleted/archived externally:** the local mirror row is marked `external_status = 'archived'`, the link is kept, and the change appears on the Integrations page. Local data is never deleted by a sync.
 - **Freshness:** mirrored rows carry `fetched_at`. UI labels: *live* (fetched this request), *cached* (< 1 h), *stale* (older than the provider's sync interval × 3), *unavailable* (connection failed or field not exposed by the API).
 
-## MRR definition (Phase 2 reporting)
+## MRR definition (Reports page)
 
 MRR = Σ over active contracts, over recurring lines: `unit_price × contracted_quantity`, normalised to monthly (annual ÷ 12, quarterly ÷ 3, monthly × 1). One-off and hardware lines are excluded and reported separately. The formula is printed on the report page.

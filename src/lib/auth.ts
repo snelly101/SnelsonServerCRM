@@ -59,6 +59,17 @@ export const auth = betterAuth({
     updateAge: 60 * 60, // refresh once an hour of activity
     cookieCache: { enabled: true, maxAge: 5 * 60 },
   },
+  // Brute-force protection on the sign-in endpoint (per IP). Applies in
+  // production builds; other endpoints share the general window.
+  rateLimit: {
+    enabled: process.env.NODE_ENV === "production",
+    window: 60,
+    max: 100,
+    customRules: {
+      // Per-IP sign-in attempts per minute. Override only for automated browser tests.
+      "/sign-in/email": { window: 60, max: Number(process.env.AUTH_SIGN_IN_MAX_PER_MINUTE) || 10 },
+    },
+  },
   advanced: {
     useSecureCookies: process.env.NODE_ENV === "production",
   },

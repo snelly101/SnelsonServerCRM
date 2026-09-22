@@ -37,6 +37,13 @@ services:
       db: { condition: service_healthy }
       migrate: { condition: service_completed_successfully }
     expose: ["3000"]
+    healthcheck:
+      # 200 only when the database answers and the worker has heartbeated in the last 15 minutes.
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
   worker:
     build: { context: ., target: worker }

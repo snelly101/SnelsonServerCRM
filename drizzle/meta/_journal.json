@@ -8,6 +8,41 @@
       "when": 1790103739113,
       "tag": "0000_phase1_core",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790105394299,
+      "tag": "0001_phase2_sales",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790107825837,
+      "tag": "0002_phase3_integrations",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790109015927,
+      "tag": "0003_phase4_xero",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790110031496,
+      "tag": "0004_phase5_ninjaone",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790111814005,
+      "tag": "0005_phase6_system",
+      "breakpoints": true
     }
   ]
 }

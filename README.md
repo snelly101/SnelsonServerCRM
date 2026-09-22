@@ -2,7 +2,7 @@
 
 A CRM built for an IT Managed Service Provider. It manages the customer lifecycle from lead to renewal and integrates with **Better Proposals** (proposals), **Xero** (accounting) and **NinjaOne** (RMM).
 
-> **Status:** Phase 1 complete — authentication, roles, companies, contacts, sites, tags, custom fields, CSV import/export, duplicate detection, global search, audit log and activity timeline. Later phases add the pipeline, contracts, tasks, and the three integrations. See [docs/phases.md](docs/phases.md).
+> **Status:** All six phases complete — authentication and roles, companies/contacts/sites, sales pipeline, service catalogue, opportunities, contracts with MRR, tasks and onboarding, the shared integration framework, the **Better Proposals** connector (polling, exactly-once acceptance) and the **Xero** connector (OAuth with explicit organisation choice, incremental sync + webhooks, customer mapping, approved draft invoices with idempotency, Finance page) and the **NinjaOne** connector (read-only device mirror, organisation/location mapping, contracted-vs-observed device discrepancies for review). Phase 6 adds the Reports page (pipeline, weighted forecast, MRR with its formula, renewals, overdue tasks, outstanding invoices, devices, integration health, CSV export), worker heartbeat with `/api/health`, nightly data retention and the go-live checklist. See [docs/phases.md](docs/phases.md).
 
 ## Stack
 
@@ -67,7 +67,7 @@ src/
   lib/            auth, permissions, session, audit, crypto, validation, formatting
   components/     UI (ui/ = primitives, others = feature components)
   worker/         pg-boss worker, cron tick, job registry
-  connectors/     (Phase 3+) live/ and demo/ adapters per integration
+  connectors/     Per-provider live client + demo adapter (betterproposals/, xero/, ninjaone/)
 drizzle/          SQL migrations (generated, reviewed, committed)
 tests/unit        Vitest; tests/e2e Playwright
 deploy/           Caddyfile, backup script, Debian server setup script
