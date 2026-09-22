@@ -13,6 +13,7 @@ import { logger } from "@/lib/logger";
 export const QUEUES = {
   heartbeat: "system.heartbeat",
   reminders: "crm.reminders",
+  bpPoll: "betterproposals.poll",
 } as const;
 
 export async function registerJobs(boss: PgBoss) {
@@ -33,4 +34,13 @@ export async function registerJobs(boss: PgBoss) {
     logger.info({ jobId: job.id, created: res.created }, "reminders generated");
   });
   await boss.schedule(QUEUES.reminders, "0 6 * * *", {}, { retryLimit: 3 });
+
+  // Better Proposals has no webhooks: poll every 15 minutes. Singleton so overlapping runs never double-process.
+  await boss.createQueue(QUEUES.bpPoll, { deleteAfterSeconds: 7 * 24 * 3600, retryLimit: 2, retryBackoff: true, expireInSeconds: 600 });
+  await boss.work(QUEUES.bpPoll, async ([job]) => {
+    const { syncProposals } = await import("@/services/proposals");
+    const res = await syncProposals("schedule");
+    logger.info({ jobId: job.id, result: res && { status: res.status, ...res.counters } }, "betterproposals poll");
+  });
+  await boss.schedule(QUEUES.bpPoll, "*/15 * * * *", {}, { retryLimit: 2, singletonKey: "bp-poll" });
 }

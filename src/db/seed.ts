@@ -189,6 +189,11 @@ export async function seed(url = process.env.DATABASE_URL) {
       ]);
     }
     await seedSales(db, userIds);
+    if (process.env.DEMO_MODE === "true") {
+      // Mirror the demo Better Proposals data so the Proposals page has content.
+      const { syncProposals } = await import("@/services/proposals");
+      await syncProposals("manual", userIds["admin@example.com"]).catch((err) => console.warn("demo proposal sync skipped:", err));
+    }
     await db.insert(schema.auditLog).values({ actorType: "system", action: "seed.run", entityType: "database", details: { users: SEED_USERS.length, companies: COMPANIES.length } });
   } finally {
     await pool.end();

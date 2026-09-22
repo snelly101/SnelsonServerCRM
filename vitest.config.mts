@@ -9,5 +9,5 @@ export default defineConfig({
     fileParallelism: false,
     testTimeout: 20000,
   },
-  resolve: { alias: { "@": path.resolve(__dirname, "src") } },
+  resolve: { alias: { "@": path.resolve(__dirname, "src"), "server-only": path.resolve(__dirname, "tests/unit/stubs/server-only.ts") } },
 });

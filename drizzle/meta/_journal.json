@@ -15,6 +15,13 @@
       "when": 1790105394299,
       "tag": "0001_phase2_sales",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790107825837,
+      "tag": "0002_phase3_integrations",
+      "breakpoints": true
     }
   ]
 }

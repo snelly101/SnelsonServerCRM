@@ -2,7 +2,7 @@
 
 A CRM built for an IT Managed Service Provider. It manages the customer lifecycle from lead to renewal and integrates with **Better Proposals** (proposals), **Xero** (accounting) and **NinjaOne** (RMM).
 
-> **Status:** Phases 1–2 complete — authentication and roles, companies/contacts/sites, sales pipeline (board + table), service catalogue, opportunities with recurring/one-off revenue and margins, contracts with renewals and MRR, tasks, onboarding checklists and reminders. Phases 3–5 add the Better Proposals, Xero and NinjaOne integrations. See [docs/phases.md](docs/phases.md).
+> **Status:** Phases 1–3 complete — authentication and roles, companies/contacts/sites, sales pipeline, service catalogue, opportunities, contracts with MRR, tasks and onboarding, the shared integration framework (encrypted credentials, idempotent inbound/outbound, sync history, review queue) and the **Better Proposals** connector with polling and exactly-once acceptance. Phases 4–5 add Xero and NinjaOne. See [docs/phases.md](docs/phases.md).
 
 ## Stack
 
@@ -67,7 +67,7 @@ src/
   lib/            auth, permissions, session, audit, crypto, validation, formatting
   components/     UI (ui/ = primitives, others = feature components)
   worker/         pg-boss worker, cron tick, job registry
-  connectors/     (Phase 3+) live/ and demo/ adapters per integration
+  connectors/     Per-provider live client + demo adapter (betterproposals/, xero/, ninjaone/)
 drizzle/          SQL migrations (generated, reviewed, committed)
 tests/unit        Vitest; tests/e2e Playwright
 deploy/           Caddyfile, backup script, Debian server setup script

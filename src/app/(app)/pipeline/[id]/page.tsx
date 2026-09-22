@@ -9,7 +9,7 @@ import { listTasks } from "@/services/tasks";
 import { listOwners } from "@/services/companies";
 import { db } from "@/db";
 import { activities, contracts, onboardings, user } from "@/db/schema";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { PageHeader, Card, DescriptionList, EmptyState } from "@/components/ui/page";
 import { ButtonLink } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +21,9 @@ import { TaskDialog } from "@/components/task-dialog";
 import { Timeline } from "@/components/timeline";
 import { fmtDate, fmtDateTime, fmtMoney } from "@/lib/format";
 import { FREQUENCY_LABELS, PRICING_LABELS, REVENUE_LABELS } from "@/lib/validation-sales";
+import { ProposalCard } from "@/components/proposal-card";
+import { bpConnectionSummary, listBpMergeTags, listBpTemplates, proposalsForOpportunity } from "@/services/proposals";
+import { contacts as contactsTable } from "@/db/schema";
 
 export default async function OpportunityPage({ params }: { params: Promise<{ id: string }> }) {
   const me = await requirePermission("opportunity.read");
@@ -37,6 +40,16 @@ export default async function OpportunityPage({ params }: { params: Promise<{ id
   ]);
   const canWrite = can(me.role, "opportunity.write");
   const c = settings.currency;
+  const [bpConn, proposals, companyContacts] = await Promise.all([bpConnectionSummary(), proposalsForOpportunity(id), db.select({ id: contactsTable.id, firstName: contactsTable.firstName, lastName: contactsTable.lastName, email: contactsTable.email, roles: contactsTable.roles }).from(contactsTable).where(and(eq(contactsTable.companyId, opp.companyId), isNull(contactsTable.archivedAt)))]);
+  let bpTemplates: { id: string; name: string }[] = [];
+  let bpMergeTags: { tag: string; name: string; fallback: string | null }[] = [];
+  if (bpConn.configured && can(me.role, "proposal.create") && opp.status === "open") {
+    try {
+      [bpTemplates, bpMergeTags] = await Promise.all([listBpTemplates().then((r) => r.templates), listBpMergeTags()]);
+    } catch {
+      /* shown as an error on the Integrations page */
+    }
+  }
 
   return (
     <>
@@ -153,8 +166,20 @@ export default async function OpportunityPage({ params }: { params: Promise<{ id
           </Card>
         </div>
         <div className="space-y-4">
-          <Card title="Proposal">
-            <EmptyState title="Better Proposals arrives in Phase 3" description="You'll create and track the proposal from here." />
+          <Card title="Proposal" actions={bpConn.demo ? <Badge tone="amber">demo</Badge> : undefined}>
+            <ProposalCard
+              opportunityId={id}
+              proposals={proposals}
+              canCreate={can(me.role, "proposal.create")}
+              configured={bpConn.configured}
+              demo={bpConn.demo}
+              templates={bpTemplates}
+              defaultTemplateId={String((bpConn.config as { defaultTemplateId?: string }).defaultTemplateId ?? "")}
+              contacts={companyContacts.map((x) => ({ id: x.id, name: `${x.firstName} ${x.lastName}`.trim(), email: x.email, roles: x.roles }))}
+              mergeTags={bpMergeTags}
+              settings={settings}
+              opportunityOpen={opp.status === "open"}
+            />
           </Card>
           <Card title="History" padded={false}>
             <Timeline items={timeline.map((t) => ({ ...t, at: fmtDateTime(t.at, settings) }))} />

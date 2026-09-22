@@ -38,7 +38,7 @@ POSTGRES_PASSWORD=<openssl rand -base64 24>
 APP_ENCRYPTION_KEY=<openssl rand -base64 32>
 BETTER_AUTH_SECRET=<openssl rand -base64 32>
 BACKUP_PASSPHRASE=<openssl rand -base64 24>      # encrypts nightly dumps
-DEMO_MODE=false
+DEMO_MODE=false                                   # must be false in production: enables synthetic integration data
 # leave DATABASE_URL blank: compose sets it to the internal db container
 ```
 

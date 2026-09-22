@@ -29,11 +29,13 @@ import { TaskList } from "@/components/task-list";
 import { TaskDialog } from "@/components/task-dialog";
 import { RevenueSummaryBadges } from "@/components/lines-editor";
 import { fmtMoney } from "@/lib/format";
+import { listProposals } from "@/services/proposals";
+import { ExternalLink } from "lucide-react";
 
 export default async function CompanyPage({ params }: { params: Promise<{ id: string }> }) {
   const me = await requirePermission("company.read");
   const { id } = await params;
-  const [company, timeline, defs, settings, opportunities, companyContracts, companyTasks, onboardingList, owners] = await Promise.all([
+  const [company, timeline, defs, settings, opportunities, companyContracts, companyTasks, onboardingList, owners, proposalList] = await Promise.all([
     getCompany(id),
     getCompanyTimeline(id),
     listCustomFieldDefs("company"),
@@ -43,6 +45,7 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
     listTasks({ companyId: id, status: "all", pageSize: 100 }),
     listOnboardings(id),
     listOwners(),
+    listProposals({ companyId: id, pageSize: 50 }),
   ]);
   if (!company) notFound();
   const activeContracts = companyContracts.filter((c) => c.status === "active");
@@ -131,7 +134,9 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
               <TabsTrigger value="opportunities" count={openOpps.length}>
                 Opportunities
               </TabsTrigger>
-              <TabsTrigger value="proposals">Proposals</TabsTrigger>
+              <TabsTrigger value="proposals" count={proposalList.total}>
+                Proposals
+              </TabsTrigger>
               <TabsTrigger value="contracts" count={activeContracts.length}>
                 Contracts
               </TabsTrigger>
@@ -396,7 +401,49 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
               )}
             </TabsContent>
 
-            {(["proposals", "invoices", "devices"] as const).map((tab) => (
+            <TabsContent value="proposals">
+              <Card title="Proposals" padded={false}>
+                {proposalList.rows.length === 0 ? (
+                  <div className="p-4">
+                    <EmptyState title="No proposals" description="Create one from an opportunity, or link an existing Better Proposals document on the Proposals page." />
+                  </div>
+                ) : (
+                  <table className="tbl">
+                    <thead>
+                      <tr>
+                        <th>Proposal</th>
+                        <th>Status</th>
+                        <th>Opportunity</th>
+                        <th>Sent</th>
+                        <th>Signed</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {proposalList.rows.map((p) => (
+                        <tr key={p.id}>
+                          <td>
+                            {p.subjectLine ?? `Proposal ${p.externalId}`}
+                            {p.viewUrl && (
+                              <a href={p.viewUrl} target="_blank" rel="noreferrer" className="ml-1 inline-flex align-middle text-slate-400 hover:text-brand-700" aria-label="Open in Better Proposals">
+                                <ExternalLink className="h-3.5 w-3.5" />
+                              </a>
+                            )}
+                          </td>
+                          <td>
+                            <Badge tone={p.status === "signed" || p.status === "paid" ? "green" : p.status === "opened" ? "indigo" : p.status === "sent" ? "blue" : "slate"}>{p.status}</Badge>
+                          </td>
+                          <td>{p.opportunityId ? <Link href={`/pipeline/${p.opportunityId}`} className="hover:underline">{p.opportunityTitle}</Link> : "—"}</td>
+                          <td>{fmtDate(p.sentAt, settings)}</td>
+                          <td>{fmtDate(p.signedAt, settings)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </Card>
+            </TabsContent>
+
+            {(["invoices", "devices"] as const).map((tab) => (
               <TabsContent key={tab} value={tab}>
                 <EmptyState title={`${tab[0].toUpperCase()}${tab.slice(1)} arrive in a later phase`} description={PHASE_NOTES[tab]} />
               </TabsContent>
@@ -420,7 +467,6 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
 }
 
 const PHASE_NOTES: Record<string, string> = {
-  proposals: "Phase 3 links Better Proposals.",
   invoices: "Phase 4 connects Xero.",
   devices: "Phase 5 imports NinjaOne devices.",
 };

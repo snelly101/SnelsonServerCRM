@@ -58,7 +58,33 @@
 
 - None for this phase. Proposal-driven acceptance (Phase 3) will call the same `markWon` + `createOnboardingOnce` path.
 
-## Phase 3 — Better Proposals (next)
+## Phase 3 — Better Proposals ✅
+
+### Verified against vendor documentation
+
+Outbound access was opened during this phase, so the connector is built on primary sources: the Better Proposals API page and its published example request/response scripts, Xero's official OpenAPI specs, and NinjaOne's OpenAPI YAML and OAuth article. The verified capability matrix is in [integrations.md](integrations.md). Two findings shaped the design: Better Proposals **documents no webhooks** (so the CRM polls), and `POST /proposal/create` **accepts no line-item pricing** (so pricing is a hand-off to Better Proposals with a deep link).
+
+### What works
+
+- **Shared integration framework** (used by Xero and NinjaOne next): encrypted per-provider connection row with status, last test/sync, last error and a circuit breaker; bidirectionally-unique external links; `sync_runs` + `sync_errors` history; `inbound_events` de-duplication; `outbound_requests` idempotency ledger (`runOutbound`: reuse / reconcile / in-flight guard); `mapping_conflicts` review queue; a shared HTTP client with timeout, jittered backoff, `Retry-After`, 4xx-no-retry and rate spacing.
+- **Integrations page:** provider cards with status (demo clearly labelled as *not connected*), account, last successful sync, pause state, last error, *Test* and *Sync now*; needs-review list with resolve/dismiss; sync history with per-run error drill-down. Per-provider page for Better Proposals: token entry (verified against `/settings` before being stored encrypted), disconnect, default template, recent runs, unresolved errors, record mapping with unlink, and the outbound ledger.
+- **Better Proposals connector** (`src/connectors/betterproposals/live.ts`): `Bptoken` auth, form-encoded create, list by status with pagination, templates, companies, merge tags, settings/brand; string flags and `0000-00-00` dates normalised. Demo adapter kept separate (`demo.ts`), only active with `DEMO_MODE=true` and no token, never reported as connected.
+- **Opportunity → proposal:** *Create proposal* dialog (template, recipients with the signer first, merge-tag values). Creates the Better Proposals company once per CRM company (reconciling by normalised name on retry) and the proposal once per opportunity version; stores the external id and `ProposalView`/`Preview` URLs; timeline entry. Progress strip draft → sent → opened → signed with dates, totals, cached/stale label and *Open in Better Proposals*.
+- **Polling:** worker job every 15 min (singleton) and manual sync. Overlays the status lists, records each transition as one inbound event and timeline entry.
+- **Acceptance exactly once:** on signed/paid, the opportunity is marked won, the company promoted, onboarding created with key `proposal:<id>`, a contract drafted and stamped with the proposal id, and `acceptance_processed_at` set. Re-polls, paid transitions and manual reruns are no-ops.
+- **Unlinked proposals** (signed but not linked, or name-only matches) raise review items instead of guesses; the Proposals page can link a proposal to an opportunity or company, and linking a signed one runs acceptance.
+- Proposals page (filters, unlinked filter, saved views) and a Proposals tab on the company overview.
+
+### What was tested
+
+- **15 new unit/integration tests (52 total):** HTTP retry on 429 with `Retry-After`, no retry on 4xx, give-up on 5xx, `Retry-After` parsing; live client against a fake API (header, form encoding of contacts/merge tags, status normalisation, 404 → null); credential encryption round trip; link uniqueness both ways; inbound de-dup; outbound perform-once / reuse / reconcile-after-failure / in-flight block; sync run bookkeeping, partial status, circuit breaker opening after three failures and skipping scheduled runs; proposal creation idempotent per version with company + opportunity links; validation of missing emails; full poll flow open → signed → won + onboarding once + contract stamped, with paid and reruns as no-ops; unlinked signed proposal → review item.
+- **3 new browser tests (8 total):** Integrations page shows demo status, *Sync now* records a `proposals.poll` run; create a proposal from an opportunity (demo) and see it on the opportunity and Proposals pages; read-only user has no Test/Sync controls.
+
+### Remaining dependencies
+
+- **Live verification** needs your Better Proposals API token (Premium plan): paste it on Integrations → Better Proposals. The token is verified before it is stored. Until then the demo adapter is in use and labelled as such.
+- The create response's field names beyond `ID`/`ProposalView` are not shown in the vendor docs; the connector re-reads the proposal after creation so nothing depends on them.
+
 
 ## Phase 4 — Xero
 
