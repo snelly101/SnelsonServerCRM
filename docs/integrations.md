@@ -48,9 +48,23 @@ All three vendors were verified against primary sources on 22 Sep 2026: the Bett
 
 **Demo mode:** with `DEMO_MODE=true` (set it to `false` in production `.env`) and no token, a demo adapter (`src/connectors/betterproposals/demo.ts`) supplies synthetic proposals and advances them on request in tests. The UI labels it *Demo (not connected)* everywhere and `testConnection` never reports success.
 
-## Xero (Phase 4)
+## Xero (Phase 4, built)
 
-See the matrix above. Setup, field ownership and invoice approval flow are documented when the connector lands.
+**Setup**
+
+1. developer.xero.com → *New app* (Web app). Redirect URI: `https://<domain>/api/integrations/xero/callback`. Copy the client id and secret into `.env` as `XERO_CLIENT_ID` / `XERO_CLIENT_SECRET` and restart. (These are the only Xero values outside the app: Xero checks the redirect URI against the registration, so they must exist before the first connect.)
+2. In the app: Webhooks → add `https://<domain>/api/webhooks/xero`, tick Contacts and Invoices, copy the key into `XERO_WEBHOOK_KEY`. Xero's "intent to receive" check succeeds once the endpoint returns 401 for a bad signature and 200 for a good one.
+3. CRM → Integrations → Xero → *Connect to Xero* → sign in and consent → **choose the organisation** (the CRM lists every authorised tenant and never assumes).
+4. Choose invoice defaults (sales account code, hardware account code, tax rate, payment terms, branding theme — all read from Xero).
+5. Map customers: accept a suggestion, search, or *Create in Xero*.
+
+**Workflow and policies**
+
+- Sync: hourly incremental (`If-Modified-Since` with a 10-minute overlap) for contacts, ACCREC invoices and payments; nightly full reconciliation; webhook events applied within a minute. Manual *Sync now* / *Full reconciliation* buttons.
+- Field ownership: Xero owns legal name, addresses, tax number, balances, invoice status, payments. CRM owns owner, tags, sites, contact roles, opportunities, contracts. Email/phone: pushed only by explicit *Push*, refused with a review item when Xero changed first.
+- Invoices: prepared from a contract period or a won opportunity → reviewed and edited → approved by `finance`/`admin` → created in Xero as **DRAFT** with `Reference = CRM-<id>`, `Idempotency-Key`, and an outbound-ledger row; retries reconcile by reference. Approving, sending and payments stay in Xero. Invoice `Url` links back to the CRM draft.
+- Deleted/archived: archived Xero contacts keep their link (`external_status = archived`) and raise a review item; nothing local is deleted.
+- Demo: with `DEMO_MODE=true` and no tokens, an in-memory organisation with customers, invoices and payments is used and labelled *Demo (not connected)*.
 
 ## NinjaOne (Phase 5)
 

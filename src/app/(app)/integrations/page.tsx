@@ -5,6 +5,8 @@ import { can } from "@/lib/permissions";
 import { getAppSettings } from "@/lib/settings";
 import { integrationHealth, listOpenConflicts, listSyncRuns, PROVIDER_LABELS, type Provider } from "@/services/integrations";
 import { bpConnectionSummary, proposalCounts } from "@/services/proposals";
+import { xeroConnectionSummary } from "@/services/xero";
+import { XeroSyncButton, XeroTestButton } from "./xero/controls";
 import { PageHeader, Card, EmptyState, Stat } from "@/components/ui/page";
 import { Badge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
@@ -19,7 +21,7 @@ const STATUS_TONE: Record<string, string> = { connected: "green", error: "red", 
 
 export default async function IntegrationsPage() {
   const me = await requirePermission("integration.read");
-  const [health, runs, conflicts, bp, counts, settings] = await Promise.all([integrationHealth(), listSyncRuns(undefined, 15), listOpenConflicts(), bpConnectionSummary(), proposalCounts(), getAppSettings()]);
+  const [health, runs, conflicts, bp, counts, settings, xero] = await Promise.all([integrationHealth(), listSyncRuns(undefined, 15), listOpenConflicts(), bpConnectionSummary(), proposalCounts(), getAppSettings(), xeroConnectionSummary()]);
   const canManage = can(me.role, "integration.manage");
   const canSync = can(me.role, "integration.sync");
   const demo = process.env.DEMO_MODE === "true";
@@ -35,9 +37,9 @@ export default async function IntegrationsPage() {
       <div className="mb-4 grid gap-3 md:grid-cols-3">
         {health.connections.map((c) => {
           const provider = c.provider as Provider;
-          const isDemo = provider === "betterproposals" ? bp.demo : demo && c.status === "not_configured";
+          const isDemo = provider === "betterproposals" ? bp.demo : provider === "xero" ? xero.demo : demo && c.status === "not_configured";
           const label = isDemo ? "Demo (not connected)" : c.status.replace("_", " ");
-          const phase = provider === "xero" ? 4 : provider === "ninjaone" ? 5 : null;
+          const phase = provider === "ninjaone" ? 5 : null;
           return (
             <Card
               key={c.provider}
@@ -79,11 +81,20 @@ export default async function IntegrationsPage() {
                   <span className="text-xs text-slate-500">Connector arrives in Phase {phase}.</span>
                 ) : (
                   <>
-                    <Link href="/integrations/betterproposals" className="inline-flex h-8 items-center rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium hover:bg-slate-50">
+                    <Link href={`/integrations/${provider}`} className="inline-flex h-8 items-center rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium hover:bg-slate-50">
                       {canManage ? "Configure" : "Details"}
                     </Link>
-                    {canManage && <TestButton provider={provider} />}
-                    {canSync && bp.configured && <SyncNowButton provider={provider} />}
+                    {provider === "xero" ? (
+                      <>
+                        {canManage && xero.configured && <XeroTestButton />}
+                        {canSync && xero.configured && <XeroSyncButton />}
+                      </>
+                    ) : (
+                      <>
+                        {canManage && <TestButton provider={provider} />}
+                        {canSync && bp.configured && <SyncNowButton provider={provider} />}
+                      </>
+                    )}
                   </>
                 )}
               </div>

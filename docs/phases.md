@@ -86,7 +86,31 @@ Outbound access was opened during this phase, so the connector is built on prima
 - The create response's field names beyond `ID`/`ProposalView` are not shown in the vendor docs; the connector re-reads the proposal after creation so nothing depends on them.
 
 
-## Phase 4 — Xero
+## Phase 4 — Xero ✅
+
+### What works
+
+- **Connect flow in the web UI.** *Connect to Xero* starts the OAuth 2.0 authorization-code flow (state stored server-side with a 10-minute expiry), the callback exchanges the code, stores the tokens encrypted and lists the authorised organisations; the admin then **explicitly picks the organisation** (tenant id recorded). Only the Xero *app's* client id/secret and webhook key live in `.env`, because Xero validates the redirect URI against the app registration.
+- **Token handling.** Access tokens refresh automatically before expiry or on a 401; refresh tokens rotate and the new set is persisted immediately; concurrent requests share one in-flight refresh so the rotating token is never burned twice. Requests carry `xero-tenant-id`, are spaced to stay under 60/min, honour `Retry-After` on 429 and never retry other 4xx.
+- **Sync.** Hourly incremental sync of contacts, sales invoices and payments using `If-Modified-Since` (with a 10-minute overlap), nightly full reconciliation, manual *Sync now* and *Full reconciliation*. Mirrors carry `fetched_at`; the Finance page labels figures cached/stale. Archived Xero contacts keep their link, are marked `archived`, and raise a review item.
+- **Webhooks.** `POST /api/webhooks/xero` verifies `x-xero-signature` (base64 HMAC-SHA256 of the raw body, constant-time compare), returns 401 on mismatch (satisfies Xero's intent-to-receive check), records events idempotently and returns 200 immediately; a worker job applies them every minute by re-fetching the changed contact/invoice. Missed deliveries are recovered by the hourly sync.
+- **Customer mapping screen.** Every CRM company with its Xero link and ranked suggestions (company number, VAT/tax number, email domain → high; exact normalised name → medium; similar name → low). Links are made only by a person; one Xero contact can never map to two companies. *Create in Xero* makes a contact from CRM data once (idempotent, reconciled by name on retry) and is refused when a likely duplicate exists.
+- **Field ownership.** Xero owns legal name, addresses, tax number, balances, invoice status and payments; the CRM never writes them. Email/phone can be pushed only by an explicit *Push* click and the push is refused (with a review item) when Xero's copy changed after the last sync and differs. Nothing is overwritten silently.
+- **Draft invoices.** *Prepare invoice* on an active contract (billing period → recurring lines, annual/quarterly lines normalised to the period) or a won opportunity (one-off and hardware lines). Configured account codes (services/hardware), tax type, payment terms and branding theme from Xero's own lists. A finance user reviews, edits lines, then *Approve and create in Xero*: created as **DRAFT** with a unique `Reference` (`CRM-XXXXXXXX`), an `Idempotency-Key`, and the CRM's outbound ledger; a retry after failure looks the invoice up by reference first. The CRM never authorises or sends.
+- **Finance page** (finance/admin only): outstanding, overdue, paid last 30 days, drafts in Xero, CRM drafts awaiting approval; invoice list with filters and unlinked-contact warnings; draft review page. **Company overview → Invoices tab:** Xero balances (outstanding/overdue from the contact record), 12-month invoiced/paid, invoice history, pending drafts — hidden from roles without `finance.read`.
+- Worker jobs: `xero.sync` hourly, `xero.reconcile` nightly, `xero.inbound` every minute.
+
+### What was tested
+
+- **14 new unit/integration tests (66 total):** single-flight rotating token refresh under concurrent requests with persistence; `If-Modified-Since` and `Idempotency-Key` headers and DRAFT-only invoice bodies; webhook HMAC verification and Xero date parsing; incremental sync (second run creates nothing); match suggestions by VAT/domain/name without auto-linking; linking attaches invoices and surfaces Xero balances; duplicate-contact refusal and create-once; prepare → approve creates one DRAFT, second approval reuses it, ledger has one row, permissions matrix for prepare/approve; approval refused when unlinked; webhook events recorded once, applied by the worker, payment reaches the right company; field-ownership conflict then successful explicit push; one timeline event per polled status change; circuit breaker skips scheduled but not manual syncs; cancelled drafts cannot be approved.
+- **3 new browser tests (11 total):** finance user sees demo invoices, prepares a draft from a contract and approves it once; sales user is blocked from Finance and sees "Finance data is restricted" on the company page; admin sees the Xero page with demo status, mapping table and field-ownership notes.
+
+### Remaining dependencies (live verification)
+
+1. Create the Xero app at developer.xero.com (Web app), redirect URI `https://<domain>/api/integrations/xero/callback`, scopes as listed in `docs/integrations.md`; put `XERO_CLIENT_ID`, `XERO_CLIENT_SECRET` in `.env`.
+2. Register the webhook `https://<domain>/api/webhooks/xero` for Contacts and Invoices and put the key in `XERO_WEBHOOK_KEY`.
+3. In the CRM: Integrations → Xero → *Connect to Xero* → choose the organisation → set invoice defaults → map customers.
+
 
 ## Phase 5 — NinjaOne
 

@@ -22,6 +22,7 @@ import { Timeline } from "@/components/timeline";
 import { fmtDate, fmtDateTime, fmtMoney } from "@/lib/format";
 import { FREQUENCY_LABELS, PRICING_LABELS, REVENUE_LABELS } from "@/lib/validation-sales";
 import { ProposalCard } from "@/components/proposal-card";
+import { PrepareInvoiceButton } from "@/components/prepare-invoice-button";
 import { bpConnectionSummary, listBpMergeTags, listBpTemplates, proposalsForOpportunity } from "@/services/proposals";
 import { contacts as contactsTable } from "@/db/schema";
 
@@ -67,14 +68,15 @@ export default async function OpportunityPage({ params }: { params: Promise<{ id
           </Link>
         }
         actions={
-          canWrite && (
+          (canWrite || can(me.role, "invoice.prepare")) && (
             <>
-              {opp.status === "open" && (
+              {opp.status === "won" && can(me.role, "invoice.prepare") && opp.lines.some((l) => l.revenueType !== "recurring") && <PrepareInvoiceButton companyId={opp.companyId} opportunityId={id} />}
+              {canWrite && opp.status === "open" && (
                 <ButtonLink href={`/pipeline/${id}/edit`} variant="secondary">
                   <Pencil className="h-4 w-4" /> Edit
                 </ButtonLink>
               )}
-              <CloseControls id={id} status={opp.status} hasLines={opp.lines.length > 0} />
+              {canWrite && <CloseControls id={id} status={opp.status} hasLines={opp.lines.length > 0} />}
             </>
           )
         }

@@ -14,6 +14,9 @@ export const QUEUES = {
   heartbeat: "system.heartbeat",
   reminders: "crm.reminders",
   bpPoll: "betterproposals.poll",
+  xeroSync: "xero.sync",
+  xeroReconcile: "xero.reconcile",
+  xeroInbound: "xero.inbound",
 } as const;
 
 export async function registerJobs(boss: PgBoss) {
@@ -43,4 +46,29 @@ export async function registerJobs(boss: PgBoss) {
     logger.info({ jobId: job.id, result: res && { status: res.status, ...res.counters } }, "betterproposals poll");
   });
   await boss.schedule(QUEUES.bpPoll, "*/15 * * * *", {}, { retryLimit: 2, singletonKey: "bp-poll" });
+
+  // Xero: incremental sync hourly (If-Modified-Since), full reconciliation nightly, webhook events every minute.
+  await boss.createQueue(QUEUES.xeroSync, { deleteAfterSeconds: 7 * 24 * 3600, retryLimit: 2, retryBackoff: true, expireInSeconds: 1800 });
+  await boss.work(QUEUES.xeroSync, async ([job]) => {
+    const { syncXero } = await import("@/services/xero");
+    const res = await syncXero("schedule");
+    logger.info({ jobId: job.id, result: res && { status: res.status, ...res.counters } }, "xero sync");
+  });
+  await boss.schedule(QUEUES.xeroSync, "5 * * * *", {}, { retryLimit: 2, singletonKey: "xero-sync" });
+
+  await boss.createQueue(QUEUES.xeroReconcile, { deleteAfterSeconds: 30 * 24 * 3600, retryLimit: 1, expireInSeconds: 3600 });
+  await boss.work(QUEUES.xeroReconcile, async ([job]) => {
+    const { syncXero } = await import("@/services/xero");
+    const res = await syncXero("schedule", null, { full: true });
+    logger.info({ jobId: job.id, result: res && { status: res.status, ...res.counters } }, "xero reconcile");
+  });
+  await boss.schedule(QUEUES.xeroReconcile, "30 2 * * *", {}, { retryLimit: 1, singletonKey: "xero-reconcile" });
+
+  await boss.createQueue(QUEUES.xeroInbound, { deleteAfterSeconds: 24 * 3600, retryLimit: 1, expireInSeconds: 300 });
+  await boss.work(QUEUES.xeroInbound, async () => {
+    const { processXeroInboundEvents } = await import("@/services/xero");
+    const res = await processXeroInboundEvents();
+    if (res.processed) logger.info(res, "xero inbound events processed");
+  });
+  await boss.schedule(QUEUES.xeroInbound, "* * * * *", {}, { retryLimit: 0, singletonKey: "xero-inbound" });
 }

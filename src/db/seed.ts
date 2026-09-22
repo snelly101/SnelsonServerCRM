@@ -193,6 +193,16 @@ export async function seed(url = process.env.DATABASE_URL) {
       // Mirror the demo Better Proposals data so the Proposals page has content.
       const { syncProposals } = await import("@/services/proposals");
       await syncProposals("manual", userIds["admin@example.com"]).catch((err) => console.warn("demo proposal sync skipped:", err));
+      // Mirror demo Xero data and link the obvious customers so Finance has content.
+      const { syncXero, linkCompanyToXeroContact } = await import("@/services/xero");
+      const { setConnectionConfig } = await import("@/services/integrations");
+      await syncXero("manual", userIds["admin@example.com"]).catch((err) => console.warn("demo xero sync skipped:", err));
+      await setConnectionConfig("xero", { defaultAccountCode: "201", hardwareAccountCode: "202", defaultTaxType: "OUTPUT2", dueDays: 30 }, userIds["admin@example.com"]);
+      const links: [string, string][] = [["Harrowgate Dental Practice", "demo-c-1"], ["Northern Freight Solutions Ltd", "demo-c-2"], ["Ridgeway Architects LLP", "demo-c-3"], ["Greenfield Primary Academy", "demo-c-4"]];
+      for (const [name, contactId] of links) {
+        const [co] = await db.select({ id: schema.companies.id }).from(schema.companies).where(eq(schema.companies.name, name)).limit(1);
+        if (co) await linkCompanyToXeroContact(co.id, contactId, userIds["admin@example.com"]).catch(() => undefined);
+      }
     }
     await db.insert(schema.auditLog).values({ actorType: "system", action: "seed.run", entityType: "database", details: { users: SEED_USERS.length, companies: COMPANIES.length } });
   } finally {

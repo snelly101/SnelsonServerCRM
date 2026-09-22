@@ -17,6 +17,7 @@ import { RevenueSummaryBadges } from "@/components/lines-editor";
 import { TaskList } from "@/components/task-list";
 import { TaskDialog } from "@/components/task-dialog";
 import { fmtDate, fmtMoney } from "@/lib/format";
+import { PrepareInvoiceButton } from "@/components/prepare-invoice-button";
 import { FREQUENCY_LABELS, PRICING_LABELS, REVENUE_LABELS } from "@/lib/validation-sales";
 
 const STATUS_TONE: Record<string, string> = { draft: "slate", active: "green", expired: "amber", cancelled: "red" };
@@ -51,14 +52,19 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
           </>
         }
         actions={
-          canWrite && (
+          (canWrite || can(me.role, "invoice.prepare")) && (
             <>
-              <ButtonLink href={`/contracts/${id}/edit`} variant="secondary">
-                <Pencil className="h-4 w-4" /> Edit
-              </ButtonLink>
-              <ConfirmButton variant="danger-outline" action={archiveContractAction.bind(null, id)} title="Archive this contract?" description="It will be hidden from lists and excluded from MRR. Nothing is deleted." confirmLabel="Archive">
-                <Archive className="h-4 w-4" /> Archive
-              </ConfirmButton>
+              {can(me.role, "invoice.prepare") && contract.status === "active" && <PrepareInvoiceButton companyId={contract.companyId} contractId={id} billingFrequency={contract.billingFrequency} />}
+              {canWrite && (
+                <>
+                  <ButtonLink href={`/contracts/${id}/edit`} variant="secondary">
+                    <Pencil className="h-4 w-4" /> Edit
+                  </ButtonLink>
+                  <ConfirmButton variant="danger-outline" action={archiveContractAction.bind(null, id)} title="Archive this contract?" description="It will be hidden from lists and excluded from MRR. Nothing is deleted." confirmLabel="Archive">
+                    <Archive className="h-4 w-4" /> Archive
+                  </ConfirmButton>
+                </>
+              )}
             </>
           )
         }
