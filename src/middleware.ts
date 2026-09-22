@@ -1,3 +1,4 @@
+import { appUrl } from "@/lib/app-url";
 import { NextResponse, type NextRequest } from "next/server";
 import { getSessionCookie } from "better-auth/cookies";
 
@@ -11,13 +12,12 @@ export function middleware(req: NextRequest) {
   const isPublic = pathname.startsWith("/login") || pathname.startsWith("/api/auth") || pathname.startsWith("/api/webhooks") || pathname === "/api/health";
   const hasSession = Boolean(getSessionCookie(req));
   if (!isPublic && !hasSession) {
-    const url = req.nextUrl.clone();
-    url.pathname = "/login";
+    const url = appUrl("/login", req.url);
     url.searchParams.set("next", pathname);
     return NextResponse.redirect(url);
   }
   if (pathname === "/login" && hasSession) {
-    return NextResponse.redirect(new URL("/", req.url));
+    return NextResponse.redirect(appUrl("/", req.url));
   }
   return NextResponse.next();
 }
