@@ -303,9 +303,12 @@ describe("Xero workflow (demo adapter)", () => {
     expect(edr).toMatchObject({ name: "Endpoint protection seat", category: "security", pricingModel: "per_device", unitPrice: "15.00", unitCost: "6.50", countsAsManagedDevice: true, billingFrequency: "quarterly" });
     expect((await db.select().from(products).where(eq(products.sku, "EDR-SEAT"))).length).toBe(1);
 
+    // A Xero "draft" template (generated invoices saved as drafts for approval) is live billing and imports; weekly is skipped
     const all = await importAllRepeatingInvoices(admin.id);
-    expect(all.created).toBe(0);
-    expect(all.skipped.map((s) => s.reference)).toEqual(expect.arrayContaining(["Weekly on-site", "Draft template"]));
-    expect(all.skipped.find((s) => s.reference === "Draft template")!.reason).toMatch(/draft/);
+    expect(all.created).toBe(1);
+    expect(all.results.find((r) => r.reference === "Draft template")!.action).toBe("created");
+    expect(all.skipped.map((s) => s.reference)).toEqual(["Weekly on-site"]);
+    const [draftContract] = await db.select().from(contracts).where(eq(contracts.name, "Draft template"));
+    expect(draftContract.notes).toMatch(/saves each generated invoice as a draft/);
   });
 });
