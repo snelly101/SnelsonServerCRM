@@ -2,14 +2,14 @@ import { describe, expect, it, beforeAll, vi } from "vitest";
 import { createHmac } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { companies, contacts, invoiceDrafts, xeroContacts, xeroInvoices, outboundRequests, inboundEvents } from "@/db/schema";
+import { companies, contacts, contractLines, contracts, invoiceDrafts, products, xeroContacts, xeroInvoices, outboundRequests, inboundEvents } from "@/db/schema";
 import { createCompany } from "@/services/companies";
 import { companySchema } from "@/lib/validation";
 import { createContract } from "@/services/contracts";
 import { contractSchema } from "@/lib/validation-sales";
 import { LiveXeroClient, verifyWebhookSignature, xeroDate, xeroDateOnly } from "@/connectors/xero/live";
 import { demoXeroAuthorise, demoXeroPay, demoXeroReset, demoXeroTouchContact } from "@/connectors/xero/demo";
-import { approveAndCreateInvoice, companyFinancialSummary, createXeroContactForCompany, financeTotals, importAllXeroCustomers, importXeroContactAsCompany, linkCompanyToXeroContact, listUnlinkedXeroCustomers, prepareInvoiceDraft, processXeroInboundEvents, pushContactDetailsToXero, recordXeroWebhookEvents, suggestXeroContacts, syncXero } from "@/services/xero";
+import { approveAndCreateInvoice, companyFinancialSummary, createXeroContactForCompany, financeTotals, importAllRepeatingInvoices, importAllXeroCustomers, importRepeatingInvoiceAsContract, importXeroContactAsCompany, linkCompanyToXeroContact, listUnlinkedXeroCustomers, listXeroRepeatingInvoices, repeatingFrequency, prepareInvoiceDraft, processXeroInboundEvents, pushContactDetailsToXero, recordXeroWebhookEvents, suggestXeroContacts, syncXero } from "@/services/xero";
 import { getLink, listOpenConflicts, setConnectionConfig, updateConnection } from "@/services/integrations";
 import { ActionError } from "@/lib/action-result";
 import { makeUser } from "./helpers";
@@ -253,5 +253,48 @@ describe("Xero workflow (demo adapter)", () => {
     expect(bramley).toBeTruthy();
     const people = await db.select().from(contacts).where(eq(contacts.companyId, bramley.id));
     expect(people.length).toBeLessThanOrEqual(1); // contact only when Xero has a person name
+  });
+
+  it("imports repeating invoices as draft contracts: frequency mapping, tax-exclusive pricing, catalogue matching, skips and idempotency", async () => {
+    expect(repeatingFrequency({ Period: 1, Unit: "MONTHLY" })).toEqual({ frequency: "monthly" });
+    expect(repeatingFrequency({ Period: 3, Unit: "MONTHLY" })).toEqual({ frequency: "quarterly" });
+    expect(repeatingFrequency({ Period: 12, Unit: "MONTHLY" })).toEqual({ frequency: "annual" });
+    expect(repeatingFrequency({ Period: 2, Unit: "WEEKLY" })).toHaveProperty("reason");
+    expect(repeatingFrequency({ Period: 6, Unit: "MONTHLY" })).toHaveProperty("reason");
+
+    await db.insert(products).values({ sku: "MIT-DEV", name: "Managed device", category: "managed_it", pricingModel: "per_device", revenueType: "recurring", billingFrequency: "monthly", unitPrice: "12.00", unitCost: "4.50", countsAsManagedDevice: true }).onConflictDoNothing();
+    const listed = await listXeroRepeatingInvoices();
+    const nf = listed.rows.find((r) => r.id === "demo-ri-1")!;
+    expect(nf).toMatchObject({ companyId, frequency: "monthly", monthlyValue: 1990, lineCount: 3, contractId: null });
+    expect(listed.rows.find((r) => r.id === "demo-ri-3")!.unsupportedReason).toMatch(/week/);
+    expect(listed.rows.some((r) => r.id === "demo-ri-5")).toBe(false); // supplier bill excluded
+
+    const created = await importRepeatingInvoiceAsContract("demo-ri-1", admin.id);
+    expect(created.action).toBe("created");
+    const [c] = await db.select().from(contracts).where(eq(contracts.id, created.contractId!));
+    expect(c).toMatchObject({ companyId, status: "draft", billingFrequency: "monthly", name: "Managed IT & Security", startDate: "2026-01-01", autoRenew: true });
+    expect(c.notes).toMatch(/Imported from Xero repeating invoice/);
+    const lines = await db.select().from(contractLines).where(eq(contractLines.contractId, c.id)).orderBy(contractLines.sortOrder);
+    expect(lines).toHaveLength(3);
+    const dev = lines.find((l) => l.description.startsWith("Managed device"))!;
+    expect(dev).toMatchObject({ pricingModel: "per_device", countsAsManagedDevice: true, quantity: "40.00", unitPrice: "12.00", unitCost: "4.50" });
+    expect(dev.productId).toBeTruthy();
+    expect(lines.find((l) => l.description === "Managed user support")).toMatchObject({ pricingModel: "per_user", productId: null, countsAsManagedDevice: false });
+    expect(lines.find((l) => l.description === "Firewall monitoring")).toMatchObject({ pricingModel: "fixed", unitPrice: "35.00" });
+    expect((await getLink("xero", "contract", c.id))?.externalId).toBe("demo-ri-1");
+    expect((await importRepeatingInvoiceAsContract("demo-ri-1", admin.id)).action).toBe("skipped");
+
+    // Quarterly, tax-inclusive, with an end date → exclusive unit price, quarterly frequency, renewal = end date
+    const q = await importRepeatingInvoiceAsContract("demo-ri-2", admin.id);
+    expect(q.action).toBe("created");
+    const [qc] = await db.select().from(contracts).where(eq(contracts.id, q.contractId!));
+    expect(qc).toMatchObject({ billingFrequency: "quarterly", endDate: "2027-03-31", renewalDate: "2027-03-31", autoRenew: false });
+    const [ql] = await db.select().from(contractLines).where(eq(contractLines.contractId, qc.id));
+    expect(ql).toMatchObject({ unitPrice: "15.00", quantity: "18.00", pricingModel: "per_device" });
+
+    const all = await importAllRepeatingInvoices(admin.id);
+    expect(all.created).toBe(0);
+    expect(all.skipped.map((s) => s.reference)).toEqual(expect.arrayContaining(["Weekly on-site", "Draft template"]));
+    expect(all.skipped.find((s) => s.reference === "Draft template")!.reason).toMatch(/draft/);
   });
 });

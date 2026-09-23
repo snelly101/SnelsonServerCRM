@@ -77,6 +77,21 @@ export type XeroPaymentRaw = {
   [k: string]: unknown;
 };
 
+export type XeroRepeatingInvoiceRaw = {
+  RepeatingInvoiceID: string;
+  Type: string; // ACCREC | ACCPAY
+  Status: "DRAFT" | "AUTHORISED" | "DELETED";
+  Contact?: { ContactID: string; Name?: string };
+  Schedule?: { Period?: number; Unit?: "WEEKLY" | "MONTHLY"; DueDate?: number; DueDateType?: string; StartDate?: string; NextScheduledDate?: string; EndDate?: string };
+  LineItems?: XeroLineItemRaw[];
+  LineAmountTypes?: "Exclusive" | "Inclusive" | "NoTax";
+  Reference?: string;
+  CurrencyCode?: string;
+  SubTotal?: number;
+  TotalTax?: number;
+  Total?: number;
+};
+
 export type XeroAccount = { AccountID: string; Code?: string; Name: string; Type: string; Status?: string; TaxType?: string; Class?: string };
 export type XeroTaxRate = { Name: string; TaxType: string; Status?: string; EffectiveRate?: number; CanApplyToRevenue?: boolean };
 export type XeroOrganisation = { OrganisationID: string; Name: string; LegalName?: string; BaseCurrency?: string; CountryCode?: string; ShortCode?: string; OrganisationStatus?: string };
@@ -108,6 +123,8 @@ export interface XeroClient {
   createDraftInvoice(input: CreateInvoiceInput, idempotencyKey: string): Promise<XeroInvoiceRaw>;
   getOnlineInvoiceUrl(invoiceId: string): Promise<string | null>;
   listPayments(opts: { page: number; ifModifiedSince?: Date }): Promise<XeroPaymentRaw[]>;
+  /** Repeating invoice templates (read-only; used to seed contracts). */
+  listRepeatingInvoices(): Promise<XeroRepeatingInvoiceRaw[]>;
   listAccounts(): Promise<XeroAccount[]>;
   listTaxRates(): Promise<XeroTaxRate[]>;
   listBrandingThemes(): Promise<XeroBrandingTheme[]>;

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requirePermission } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { getAppSettings } from "@/lib/settings";
-import { listUnlinkedXeroCustomers, mappingOverview, xeroConnectionSummary, xeroReferenceData } from "@/services/xero";
+import { listUnlinkedXeroCustomers, listXeroRepeatingInvoices, mappingOverview, xeroConnectionSummary, xeroReferenceData } from "@/services/xero";
 import { listOutbound, listSyncRuns, recentUnresolvedErrors } from "@/services/integrations";
 import { PageHeader, Card, DescriptionList } from "@/components/ui/page";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +10,7 @@ import { Alert } from "@/components/ui/alert";
 import { ConfirmButton } from "@/components/ui/confirm-button";
 import { disconnectAction } from "@/actions/integrations";
 import { fmtDateTime, fmtRelative } from "@/lib/format";
-import { TenantPicker, XeroConfigForm, XeroTestButton, XeroSyncButton, MappingTable, UnlinkedCustomersTable, ImportAllXeroButton } from "./controls";
+import { TenantPicker, XeroConfigForm, XeroTestButton, XeroSyncButton, MappingTable, UnlinkedCustomersTable, ImportAllXeroButton, RepeatingInvoicesTable, ImportAllRepeatingButton } from "./controls";
 
 export const metadata = { title: "Xero" };
 
@@ -18,7 +18,8 @@ export default async function XeroPage({ searchParams }: { searchParams: Promise
   const me = await requirePermission("integration.read");
   const sp = await searchParams;
   const canManage = can(me.role, "integration.manage");
-  const [conn, settings, runs, errors, outbound, mapping, unlinked] = await Promise.all([xeroConnectionSummary(), getAppSettings(), listSyncRuns("xero", 10), recentUnresolvedErrors("xero"), listOutbound("xero", 15), mappingOverview(), listUnlinkedXeroCustomers()]);
+  const conn = await xeroConnectionSummary();
+  const [settings, runs, errors, outbound, mapping, unlinked, repeating] = await Promise.all([ getAppSettings(), listSyncRuns("xero", 10), recentUnresolvedErrors("xero"), listOutbound("xero", 15), mappingOverview(), listUnlinkedXeroCustomers(), conn.configured ? listXeroRepeatingInvoices().catch((err) => ({ rows: [], mode: null, error: err instanceof Error ? err.message : String(err) })) : Promise.resolve({ rows: [], mode: null })]);
   let ref: Awaited<ReturnType<typeof xeroReferenceData>> = null;
   let refError: string | null = null;
   if (conn.configured) {
@@ -122,6 +123,10 @@ export default async function XeroPage({ searchParams }: { searchParams: Promise
 
       <Card title={`Xero customers not yet in the CRM (${unlinked.length})`} padded={false} className="mt-4" actions={canManage && unlinked.length > 0 ? <ImportAllXeroButton /> : undefined}>
         <UnlinkedCustomersTable rows={unlinked} canManage={canManage} currency={settings.currency} />
+      </Card>
+
+      <Card title={`Repeating invoices in Xero (${repeating.rows.length})`} padded={false} className="mt-4" actions={can(me.role, "contract.write") && repeating.rows.some((r) => !r.contractId && r.companyId && !r.unsupportedReason && r.status === "AUTHORISED") ? <ImportAllRepeatingButton /> : undefined}>
+        {"error" in repeating && repeating.error ? <p className="p-4 text-sm text-red-700">Could not load repeating invoices: {repeating.error}</p> : <RepeatingInvoicesTable rows={repeating.rows} canWrite={can(me.role, "contract.write")} currency={settings.currency} />}
       </Card>
 
       <Card title={`Customer mapping · ${mapping.linkedCount} linked, ${mapping.xeroCustomerCount} Xero customers mirrored`} padded={false} className="mt-4">

@@ -93,6 +93,12 @@ Schedule: `ninjaone.sync` hourly at :20 (worker) plus *Sync now*. Deleted organi
 - **Billable** = active **and** `nodeClass` in the configured list (default workstations, servers, VM guests) **and** (`approvalStatus = APPROVED` when "approved only" is on).
 - Each contract line with *Compare with NinjaOne* is compared with the billable count at the linked organisation, or at the linked location when the line names a site (unlinked site → skipped). Differences become review items (open → accepted / dismissed / resolved) on the Devices page, the company's Devices tab and the contract. Accepting or dismissing is audited; contracts and invoices are never changed by the CRM.
 
+### Importing existing data
+
+- **Xero customers → companies** (Xero page, *Xero customers not yet in the CRM*): creates a customer company from the contact (address, VAT/company number, email, phone, billing contact) and links it; links an obvious existing company (company number, VAT, email domain or exact name) instead of duplicating.
+- **Xero repeating invoices → draft contracts** (Xero page, *Repeating invoices in Xero*): one recurring contract line per template line, tax-exclusive, frequency from the schedule (monthly / every 3 months / every 12 months; weekly and other periods are listed but skipped), catalogue products matched by item code = SKU (sets pricing model, cost and device-count comparison), start/end dates from the schedule. The contract is created as **draft** and linked to the template id so re-running never duplicates. A person reviews and activates it.
+- **NinjaOne organisations → companies** (NinjaOne page): same duplicate rules as the Xero import; devices are attached on link.
+
 ### Not available via the API (hand-off)
 
 Remote control, scripts, reboots, device deletion, approving pending devices → done in the NinjaOne console. Device rows and company tabs deep-link to `https://<instance>/#/deviceDashboard/{id}/overview` and `customerDashboard/{orgId}`.
