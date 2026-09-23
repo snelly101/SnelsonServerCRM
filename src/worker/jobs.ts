@@ -44,6 +44,10 @@ export async function registerJobs(boss: PgBoss, mode: "worker" | "tick" = "work
   await boss.work(QUEUES.retention, async () => {
     const { runRetention } = await import("@/services/retention");
     await runRetention();
+    // Nightly integrity check of the vault audit chain (hashing only; needs no key).
+    const { verifyAuditChain } = await import("@/services/vault");
+    const chain = await verifyAuditChain(null);
+    if (!chain.ok) logger.error({ brokenAt: chain.brokenAt }, "vault audit chain integrity check FAILED");
   });
   await boss.schedule(QUEUES.retention, "15 3 * * *", {}, { retryLimit: 1, singletonKey: "retention" });
 
@@ -52,7 +56,9 @@ export async function registerJobs(boss: PgBoss, mode: "worker" | "tick" = "work
   await boss.work(QUEUES.reminders, async ([job]) => {
     const { generateReminders } = await import("@/services/contracts");
     const res = await generateReminders(null);
-    logger.info({ jobId: job.id, created: res.created }, "reminders generated");
+    const { generateVaultReminders } = await import("@/services/vault");
+    const vault = await generateVaultReminders();
+    logger.info({ jobId: job.id, created: res.created, vaultReminders: vault.created }, "reminders generated");
   });
   await boss.schedule(QUEUES.reminders, "0 6 * * *", {}, { retryLimit: 3 });
 

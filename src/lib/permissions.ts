@@ -57,6 +57,9 @@ export const ACTIONS = [
   "settings.write",
   "user.manage",
   "audit.read",
+  // Secure Vault: `vault.use` = may hold per-user grants; `vault.admin` = manage grants, categories, settings, all audit
+  "vault.use",
+  "vault.admin",
 ] as const;
 export type Action = (typeof ACTIONS)[number];
 
@@ -114,7 +117,7 @@ const PERMISSIONS: Record<Role, Set<Action>> = {
     "report.finance.read",
     "task.write",
   ),
-  technician: A(...everyoneRead, "contact.write", "task.write"),
+  technician: A(...everyoneRead, "contact.write", "task.write", "vault.use"),
   read_only: A(...everyoneRead),
 };
 

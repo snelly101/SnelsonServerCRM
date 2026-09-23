@@ -4,7 +4,7 @@ Ideas and requests not yet scheduled. Each item states what it is, why, and the 
 
 ## Customer password / credentials vault
 
-**Status:** architecture proposed in [`docs/secure-vault-plan.md`](secure-vault-plan.md); awaiting the decisions listed there.
+**Status:** built (Phase 7, see `docs/phases.md`). Remaining from the plan: external KMS for the master key, SSH private keys as a secret kind.
 
 **What:** a per-customer section holding shared credentials the MSP needs to support that customer (router admin, M365 global admin break-glass, portal logins, Wi-Fi keys), with a title, username, secret, URL, notes and a "last rotated" date.
 

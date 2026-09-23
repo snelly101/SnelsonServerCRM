@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
-import { workerHealth } from "@/lib/system-status";
+import { getSystemStatus, workerHealth } from "@/lib/system-status";
+import { vaultConfigured } from "@/lib/vault-crypto";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,13 @@ export async function GET() {
   } catch {
     checks.worker = "unknown";
     ok = false;
+  }
+  try {
+    const chain = await getSystemStatus<{ ok: boolean }>("vault.chain");
+    checks.vault = { configured: vaultConfigured(), chainOk: chain?.value.ok ?? null, chainCheckedAt: chain?.updatedAt.toISOString() ?? null };
+    if (chain && chain.value.ok === false) ok = false;
+  } catch {
+    checks.vault = { configured: vaultConfigured(), chainOk: null };
   }
   return NextResponse.json({ status: ok ? "ok" : "degraded", ...checks, time: new Date().toISOString() }, { status: ok ? 200 : 503, headers: { "Cache-Control": "no-store" } });
 }

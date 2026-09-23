@@ -85,6 +85,16 @@ To restore for real: stop `web` and `worker`, restore into `crm`, start them aga
 
 - **What a backup contains:** all CRM data, encrypted integration tokens (useless without `APP_ENCRYPTION_KEY`) and pg-boss job history. **Keep `.env` backed up separately** (password manager). Without `APP_ENCRYPTION_KEY` the integration credentials in a restored database cannot be decrypted and must be re-entered.
 
+## 5a. Secure Vault key custody
+
+The customer credentials vault (Phase 7) encrypts every secret with a per-item key wrapped by **`VAULT_MASTER_KEY`**, a second 32-byte key that is deliberately separate from `APP_ENCRYPTION_KEY`.
+
+- Generate it once: `openssl rand -base64 32`, put it in `.env` as `VAULT_MASTER_KEY=` with `VAULT_MASTER_KEY_VERSION=1`, then `docker compose up -d web`. Only the `web` container receives it; compose blanks it for the worker.
+- **Store the key in your password manager the moment you create it**, ideally in a separate entry from the other secrets, and give a second person access. A database backup without this key holds only ciphertext: if the key is lost every stored credential is unrecoverable and there is no reset.
+- **Rotation** (yearly, or immediately after any suspected exposure): generate a new key, set it as `VAULT_MASTER_KEY` with `VAULT_MASTER_KEY_VERSION=2`, move the old one to `VAULT_MASTER_KEY_PREVIOUS` / `VAULT_MASTER_KEY_PREVIOUS_VERSION=1`, restart `web`, then Settings → Secure Vault → **Re-wrap with current key**. When it reports 0 items left on the old version, remove the `_PREVIOUS` variables and restart.
+- **Restore drill** (add to the quarterly test in section 5): after restoring into `crm_restore`, open one vault item in the CRM pointed at that database, or run the unit suite's crypto test with the production key, to prove the key still decrypts.
+- The vault audit trail is append-only at the database level and hash-chained; the nightly job re-verifies it and `/api/health` reports `vault.chainOk`. A `false` there means someone with database access altered history: treat as an incident.
+
 ## 6. Monitoring
 
 - **`GET https://crm.example.com/api/health`** returns `200 {"status":"ok","database":"ok","worker":"alive",...}` when the database answers and the worker heartbeat is under 15 minutes old, otherwise `503 {"status":"degraded",...}`. Point an uptime monitor (UptimeRobot, Better Stack, Healthchecks.io, all have free tiers) at it every 5 minutes; that one check covers the web app, the database and the worker.

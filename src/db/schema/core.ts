@@ -35,6 +35,12 @@ export const appSettings = pgTable("app_settings", {
   taxLabel: text("tax_label").notNull().default("VAT"),
   // Devices not seen for longer than this are excluded from billable counts.
   deviceActiveDays: integer("device_active_days").notNull().default(30),
+  // Secure Vault behaviour (see docs/secure-vault-plan.md)
+  vaultRevealSeconds: integer("vault_reveal_seconds").notNull().default(30),
+  vaultClipboardSeconds: integer("vault_clipboard_seconds").notNull().default(20),
+  vaultStepUpMinutes: integer("vault_step_up_minutes").notNull().default(30),
+  vaultReviewReminderDays: integer("vault_review_reminder_days").notNull().default(14),
+  vaultRevealLimit: integer("vault_reveal_limit").notNull().default(60),
   ...timestamps,
 });
 

@@ -126,7 +126,14 @@ export const appSettingsSchema = z.object({
   defaultTaxRatePercent: z.coerce.number().min(0).max(100),
   taxLabel: trimmed.min(1).max(20),
   deviceActiveDays: z.coerce.number().int().min(1).max(365),
+  // Vault settings are edited on their own page; absent keys leave the stored values untouched.
+  vaultRevealSeconds: z.coerce.number().int().min(5).max(600).optional(),
+  vaultClipboardSeconds: z.coerce.number().int().min(0).max(600).optional(),
+  vaultStepUpMinutes: z.coerce.number().int().min(1).max(720).optional(),
+  vaultReviewReminderDays: z.coerce.number().int().min(1).max(180).optional(),
+  vaultRevealLimit: z.coerce.number().int().min(1).max(10000).optional(),
 });
+export const vaultSettingsSchema = appSettingsSchema.pick({ vaultRevealSeconds: true, vaultClipboardSeconds: true, vaultStepUpMinutes: true, vaultReviewReminderDays: true, vaultRevealLimit: true }).required();
 
 export const savedViewSchema = z.object({
   page: trimmed.min(1).max(50),
