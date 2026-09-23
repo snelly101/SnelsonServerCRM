@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { HttpClient, HttpError, describeError } from "@/lib/integrations/http";
-import type { CreateInvoiceInput, XeroAccount, XeroBrandingTheme, XeroClient, XeroContactRaw, XeroInvoiceRaw, XeroOrganisation, XeroPaymentRaw, XeroTaxRate, XeroTenant, XeroTokens, XeroRepeatingInvoiceRaw } from "./types";
+import type { CreateInvoiceInput, XeroAccount, XeroBrandingTheme, XeroClient, XeroContactRaw, XeroInvoiceRaw, XeroOrganisation, XeroPaymentRaw, XeroTaxRate, XeroTenant, XeroTokens, XeroRepeatingInvoiceRaw, XeroItemRaw } from "./types";
 
 export const XERO_API_BASE = "https://api.xero.com/api.xro/2.0";
 export const XERO_IDENTITY = "https://identity.xero.com";
@@ -255,6 +255,11 @@ export class LiveXeroClient implements XeroClient {
   async listRepeatingInvoices() {
     const res = await this.http.get<Envelope<"RepeatingInvoices", XeroRepeatingInvoiceRaw[]>>("/RepeatingInvoices", { unitdp: 4 });
     return res.data.RepeatingInvoices ?? [];
+  }
+
+  async listItems() {
+    const res = await this.http.get<Envelope<"Items", XeroItemRaw[]>>("/Items", { unitdp: 4 });
+    return res.data.Items ?? [];
   }
 
   async listAccounts() {

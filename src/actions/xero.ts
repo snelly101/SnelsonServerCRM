@@ -139,22 +139,22 @@ export async function importAllXeroCustomersAction(): Promise<ActionResult<{ cre
   });
 }
 
-export async function importRepeatingInvoiceAction(templateId: string): Promise<ActionResult<{ action: string; contractId?: string; reason?: string }>> {
+export async function importRepeatingInvoiceAction(templateId: string): Promise<ActionResult<{ action: string; contractId?: string; reason?: string; productsCreated?: number }>> {
   return runAction(async () => {
     const u = await requireActionPermission("contract.write");
     const r = await importRepeatingInvoiceAsContract(z.string().min(1).parse(templateId), u.id);
     revalidateXero();
     revalidatePath("/contracts", "layout");
-    return { action: r.action, contractId: r.contractId, reason: r.reason };
+    return { action: r.action, contractId: r.contractId, reason: r.reason, productsCreated: r.productsCreated };
   });
 }
 
-export async function importAllRepeatingInvoicesAction(): Promise<ActionResult<{ created: number; skipped: { reference: string | null; reason?: string }[] }>> {
+export async function importAllRepeatingInvoicesAction(): Promise<ActionResult<{ created: number; productsCreated: number; skipped: { reference: string | null; reason?: string }[] }>> {
   return runAction(async () => {
     const u = await requireActionPermission("contract.write");
     const r = await importAllRepeatingInvoices(u.id);
     revalidateXero();
     revalidatePath("/contracts", "layout");
-    return { created: r.created, skipped: r.skipped.map((s) => ({ reference: s.reference, reason: s.reason })) };
+    return { created: r.created, productsCreated: r.productsCreated, skipped: r.skipped.map((s) => ({ reference: s.reference, reason: s.reason })) };
   });
 }
