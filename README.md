@@ -86,6 +86,7 @@ docs/             Architecture, deployment, integrations, phase reports
 ## Documentation
 
 - [docs/architecture.md](docs/architecture.md) — data model, request flow, job system, integration design
+- [docs/backlog.md](docs/backlog.md) — requested features not yet scheduled, with the decisions each needs
 - [docs/integrations.md](docs/integrations.md) — capability matrix and setup for Better Proposals, Xero, NinjaOne
 - [docs/deployment.md](docs/deployment.md) — Debian 12 VPS setup, Docker Compose, backups and restore, shared-hosting variant
 - [docs/phases.md](docs/phases.md) — what each phase delivered, what was tested, what remains
