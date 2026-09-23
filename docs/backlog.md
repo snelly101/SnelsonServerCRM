@@ -20,6 +20,20 @@ Ideas and requests not yet scheduled. Each item states what it is, why, and the 
 - Backups already encrypt the database dump; document that the vault key must be backed up separately like the encryption key.
 - Out of scope for the first version: browser extension, sharing links, TOTP seeds.
 
+**Follow-up: plain-text backup export of everything in the vault**
+
+**What:** an admin-only "Export vault" action that decrypts every item (including archived) and produces a readable backup, CSV and JSON, holding title, category, company, username, secret, URL, notes, TOTP seed, tags, rotation dates and archive state. Intended for disaster recovery (loss of the master key or the database) and for migrating to another tool, not for day-to-day use.
+
+**Why:** the vault is only as recoverable as the master key. A periodic offline plain-text copy, kept in the password manager or a sealed envelope, means a lost key or a corrupted database does not lose every customer credential.
+
+**Design notes and decisions needed:**
+- Requires `vault.admin`, a fresh step-up, and a second admin's confirmation (or a typed acknowledgement) because the output is every secret in clear.
+- Every export written to the vault audit chain with row count and file hash; an urgent task is created for the other admins so an export is never silent. Counts against a separate, tighter rate limit (for example one per hour).
+- Output offered two ways: a plain CSV/JSON download for offline storage, and the same content wrapped in a password-protected archive (7z/AES or age) so the browser download is not itself clear text. Decide whether plain download is allowed at all or only the encrypted archive with the passphrase spoken separately.
+- Companion "Import vault backup" so the export format round-trips, used when re-keying after a lost master key.
+- Optional scheduled export to the backup volume, encrypted with a public key held offline, to avoid relying on someone remembering to run it.
+- Document the procedure in `docs/deployment.md` next to key custody.
+
 ## Two-factor authentication for CRM sign-in
 
 **What:** a second factor on every staff login: authenticator app (TOTP) as the baseline, with recovery codes; optionally passkeys/WebAuthn and an admin switch to make it mandatory per role.
@@ -75,6 +89,20 @@ Ideas and requests not yet scheduled. Each item states what it is, why, and the 
 - Optional pinned notes that also appear at the top of the Overview tab.
 - Visible to all roles that can read the company; editable by roles with `company.write`.
 - Later: per-site notes and per-contact notes using the same component.
+
+## Dark mode
+
+**What:** a dark theme for the whole app with a three-way setting per user (system, light, dark) in the user menu, remembered across devices.
+
+**Why:** engineers work in dark IDE/RMM consoles and late shifts; the current light-only UI is the odd one out.
+
+**Design notes:**
+- Tailwind 4 `@custom-variant dark` keyed on a `data-theme` attribute on `<html>`, set before paint by an inline script from a cookie to avoid a flash; `color-scheme` follows it so native controls match.
+- Replace the ~400 hard-coded `bg-white` / `slate-*` utilities in `src` with semantic tokens (`bg-surface`, `text-fg`, `border-line`, `bg-muted`) defined once in `globals.css` for both themes, so future components pick up both themes automatically. Brand colours stay, with lighter tints for dark surfaces.
+- Component sweep: tables, cards, dialogs, badges, forms, toasts, charts (Recharts axis and grid colours), the sidebar, and the vault reveal box, which must keep high contrast.
+- Preference stored on the user record and mirrored to a cookie; "system" honours `prefers-color-scheme`.
+- Print stylesheet forces light.
+- Playwright screenshot pass in both themes on the main pages to catch missed colours.
 
 ## Earlier ideas parked
 
