@@ -51,6 +51,9 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgres://crm:${POSTGRES_PASSWORD}@db:5432/crm
+      # The worker never decrypts vault items (reminders and chain checks use metadata only), so it does not get the key.
+      VAULT_MASTER_KEY: ""
+      VAULT_MASTER_KEY_PREVIOUS: ""
     depends_on:
       db: { condition: service_healthy }
       migrate: { condition: service_completed_successfully }

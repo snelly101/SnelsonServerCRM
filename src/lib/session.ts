@@ -59,3 +59,19 @@ export async function requireActionPermission(action: Action): Promise<CurrentUs
   assertCan(u.role, action);
   return u;
 }
+
+/** Request metadata for audit trails: client IP (as forwarded by the reverse proxy), user agent and session id. */
+export async function getRequestContext() {
+  const h = await headers();
+  const forwarded = h.get("x-forwarded-for");
+  const ipAddress = (forwarded ? forwarded.split(",")[0] : h.get("x-real-ip"))?.trim() || null;
+  const userAgent = h.get("user-agent")?.slice(0, 300) ?? null;
+  let sessionId: string | null = null;
+  try {
+    const session = await auth.api.getSession({ headers: h });
+    sessionId = session?.session?.id ?? null;
+  } catch {
+    sessionId = null;
+  }
+  return { ipAddress, userAgent, sessionId };
+}

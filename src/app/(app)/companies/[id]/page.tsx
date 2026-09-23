@@ -36,10 +36,14 @@ import { fmtRelative } from "@/lib/format";
 import { companyDeviceOverview } from "@/services/ninjaone";
 import { DeviceTable, FRESHNESS_LABEL, FRESHNESS_TONE } from "@/components/device-table";
 import { DiscrepancyTable } from "@/app/(app)/devices/discrepancies";
+import { listCategories, listVaultItems, resolveCapabilities } from "@/services/vault";
+import { vaultConfigured } from "@/lib/vault-crypto";
+import { VaultPanel } from "@/components/vault/vault-panel";
 
-export default async function CompanyPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function CompanyPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string; archived?: string }> }) {
   const me = await requirePermission("company.read");
   const { id } = await params;
+  const sp = await searchParams;
   const [company, timeline, defs, settings, opportunities, companyContracts, companyTasks, onboardingList, owners, proposalList, finance, xero, devices] = await Promise.all([
     getCompany(id),
     getCompanyTimeline(id),
@@ -56,6 +60,9 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
     can(me.role, "device.read") ? companyDeviceOverview(id) : Promise.resolve(null),
   ]);
   if (!company) notFound();
+  const vaultCaps = await resolveCapabilities(me.id, me.role, id);
+  const vault = vaultCaps.list ? await listVaultItems({ id: me.id, name: me.name, role: me.role }, id, { includeArchived: sp.archived === "1" }) : null;
+  const vaultCategories = vaultCaps.list ? await listCategories() : [];
   const activeContracts = companyContracts.filter((c) => c.status === "active");
   const mrr = activeContracts.reduce((a, c) => a + c.summary.mrr, 0);
   const openOpps = opportunities.filter((o) => o.status === "open");
@@ -130,7 +137,7 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
-          <Tabs defaultValue="overview">
+          <Tabs defaultValue={sp.tab === "vault" && vaultCaps.list ? "vault" : "overview"}>
             <TabsList>
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="contacts" count={company.contacts.length}>
@@ -157,6 +164,11 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
               <TabsTrigger value="tasks" count={companyTasks.rows.filter((t) => t.status === "open").length}>
                 Tasks
               </TabsTrigger>
+              {vaultCaps.list && (
+                <TabsTrigger value="vault" count={vault?.items.filter((i) => !i.archivedAt).length}>
+                  Secure Vault
+                </TabsTrigger>
+              )}
             </TabsList>
 
             <TabsContent value="overview">
@@ -583,6 +595,11 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
                 </div>
               )}
             </TabsContent>
+            {vaultCaps.list && vault && (
+              <TabsContent value="vault">
+                <VaultPanel companyId={id} items={vault.items.map((i) => ({ ...i, tags: i.tags ?? [] }))} caps={vaultCaps} categories={vaultCategories.map((c) => ({ id: c.id, name: c.name }))} sites={company.sites.map((s) => ({ id: s.id, name: s.name }))} stepUpMinutes={settings.vaultStepUpMinutes} configured={vaultConfigured()} showArchived={sp.archived === "1"} />
+              </TabsContent>
+            )}
           </Tabs>
         </div>
 

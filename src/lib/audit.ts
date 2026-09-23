@@ -11,7 +11,7 @@ type AuditInput = {
   ipAddress?: string | null;
 };
 
-const SECRET_KEYS = /password|secret|token|key|authorization/i;
+const SECRET_KEYS = /password|secret|token|key|authorization|totp|recovery|plaintext|ciphertext|value$/i;
 
 /** Strips anything that looks like a credential before it reaches the audit table. */
 export function scrubDetails(details?: Record<string, unknown>): Record<string, unknown> | undefined {

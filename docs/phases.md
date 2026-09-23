@@ -156,3 +156,32 @@ Outbound access was opened during this phase, so the connector is built on prima
 ### Remaining dependencies
 
 None in code. Going live needs the VPS (docs/deployment.md), then the three sets of API credentials entered in the web UI (Better Proposals token, Xero app + connect, NinjaOne client id/secret).
+
+
+## Phase 7 — Secure Vault (customer credentials) ✅
+
+Built to the architecture in [`docs/secure-vault-plan.md`](secure-vault-plan.md) with the owner's decisions: master key as an environment variable (KMS later), 30-minute step-up window using the CRM password, grants for administrators and technicians only, 60 reveals per 10 minutes with an admin alert, archived items kept indefinitely, TOTP in v1, SSH keys later, everything else in one go.
+
+### What works
+
+- **Secure Vault tab** on every customer (visible only to users with a grant or the admin role): search and filter by name, username, URL, reference, category and tag; favourites first; category, tag, review and expiry badges; per-secret **Reveal** (auto-hides after the configured seconds and whenever the tab is hidden), **Copy** (never displays the value; clipboard cleared after the configured seconds while the tab is focused), **authenticator code** for TOTP secrets without exposing the seed, **History** per item, edit, archive and restore.
+- **Item model**: name, category, username, URL, account/reference, site, tags, favourite, review and expiry dates as searchable metadata; password, secure notes, TOTP secret (base32 or otpauth URI), recovery codes, API key and custom secure fields inside one encrypted JSON document, so new secret kinds are additive. Password generator (CSPRNG, unbiased) with a strength meter.
+- **Encryption**: per-item AES-256-GCM data keys wrapped by `VAULT_MASTER_KEY` (envelope), AAD binding each ciphertext to its item and customer, fresh data key on every save, key versioning with fingerprint check, rotation by re-wrap, buffers zeroed after use. The worker never receives the key.
+- **Permissions**: role gate (`vault.use` for technicians, `vault.admin` for administrators) plus per-user grants with eight independent capabilities, scoped to all customers or one, with optional expiry. Plaintext is returned only by the reveal and TOTP actions and only to users holding the capability; usernames are masked without *view usernames*.
+- **Step-up**: reveal and copy require the CRM password to have been confirmed within the window; five failures lock step-up for 15 minutes.
+- **Rate limit**: reveals, copies and codes per user per 10 minutes; breaching it blocks further reveals, writes a `rate_limited` audit row and raises an urgent task for an administrator.
+- **Audit**: append-only table enforced by database triggers, SHA-256 hash chain verified nightly and on demand, IP, user agent and session on every row, a row per create / view / reveal / copy / code / modify (field names only) / archive / restore / grant change / step-up result / rate limit / re-wrap. Mirrored into the general audit log. Admin audit page with customer, user and action filters; per-item history.
+- **Settings → Secure Vault**: key status, chain status, re-wrap, behaviour settings (reveal timeout, clipboard clear, step-up window, reminder lead time, reveal limit), grants table, categories (twelve built-in plus custom).
+- **Reminders**: daily tasks for credentials whose review or expiry date is within the lead time (metadata only, runs in the worker).
+- **Leak prevention**: log redaction paths for every secret field, generic error messages, audit detail scrubbing, no browser storage, vault tables excluded from search and exports, `/api/health` exposes booleans only.
+
+### What was tested
+
+- **13 unit/integration tests (98 total)**: seal/open round-trip, AAD binding and tamper detection, key rotation re-wrap, generator classes and uniqueness, RFC 6238 TOTP vectors and otpauth parsing; capability resolution (admin, technician before/after grants, sales refused, copy never exceeding reveal, company scoping); ciphertext contains no secret, listing returns metadata only, username masking; reveal refused without capability and without step-up, wrong password refused and audited, correct password opens the window, reveal/copy/TOTP audited with field, IP and user agent; update keeps untouched secrets and records only field names; archived items cannot be revealed; database refuses updates and deletes on the audit table; a forged row breaks the chain at that row; the reveal limit blocks and raises the admin task; reminders create tasks once; revoked grants stop access; errors carry no secret text.
+- **2 browser tests (18 total)**: admin adds an item, is challenged for their password, a wrong password is refused, reveal shows and hides the secret, the page source never contains the secret before or after, history lists the events; technician without a grant and sales have no vault tab or settings; admin audit page lists the reveal.
+
+### Remaining dependencies
+
+- Generate `VAULT_MASTER_KEY` on the VPS and store it per docs/deployment.md §5a before creating any items.
+- Grant technicians access under Settings → Secure Vault.
+- Later (per decisions): external KMS for the master key, SSH private keys as a secret kind.

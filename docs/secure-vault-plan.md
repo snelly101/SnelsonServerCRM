@@ -1,6 +1,6 @@
 # Secure Vault — architecture and implementation plan
 
-Status: **proposed, awaiting decisions** (see the last section). No code has been written for this feature.
+Status: **decided and built** (Phase 7). Decisions taken: env-var master key now, KMS later; 30-minute step-up with the CRM password; grants for admins and technicians only; 60 reveals / 10 min with admin alert; archived items kept indefinitely; TOTP in v1, SSH keys later; everything else in one release. Deviations from the text below are noted in `docs/phases.md`.
 
 ## 1. What exists today (review of the codebase)
 
