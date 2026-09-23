@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { openSection, sectionAvailable } from "./helpers";
 
 const PASSWORD = "Admin12345!";
 
@@ -14,7 +15,7 @@ test("admin adds a vault item, must confirm their password to reveal, secret nev
   await login(page, "admin@example.com");
   await page.goto("/companies");
   await page.getByRole("link", { name: "Harrowgate Dental Practice" }).click();
-  await page.getByRole("tab", { name: /Secure Vault/ }).click();
+  await openSection(page, /Secure Vault/);
   await page.getByRole("button", { name: "Add item" }).click();
   const secret = "Vault-E2E-Secret-7731!";
   const name = `Practice firewall ${Date.now()}`;
@@ -61,7 +62,7 @@ test("technician without a grant has no vault tab; sales never does; admin audit
   await login(page, "tech@example.com");
   await page.goto("/companies");
   await page.getByRole("link", { name: "Harrowgate Dental Practice" }).click();
-  await expect(page.getByRole("tab", { name: /Secure Vault/ })).toHaveCount(0);
+  expect(await sectionAvailable(page, /Secure Vault/)).toBe(false);
   await page.context().clearCookies();
   await login(page, "sales@example.com");
   await page.goto("/settings/vault");

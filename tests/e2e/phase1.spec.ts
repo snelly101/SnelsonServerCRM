@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { openSection } from "./helpers";
 
 /**
  * Phase 1 acceptance: sign in, create a prospect, add a contact, see them
@@ -35,10 +36,13 @@ test("admin can create a prospect and a contact, and see them on the overview", 
 
   await expect(page).toHaveURL(/\/companies\/[0-9a-f-]{36}$/);
   await expect(page.getByRole("heading", { level: 1 })).toContainText(name);
+  // Overview carries no timeline; the creation event lives under Activity
+  await expect(page.getByText("Company created as prospect")).toHaveCount(0);
+  await openSection(page, "Activity");
   await expect(page.getByText("Company created as prospect")).toBeVisible();
 
   // Add a contact from the company page
-  await page.getByRole("tab", { name: /Contacts/ }).click();
+  await openSection(page, /Contacts/);
   await page.getByRole("link", { name: "Add contact" }).click();
   await page.getByLabel("First name").fill("Test");
   await page.getByLabel("Last name").fill("Person");
@@ -47,7 +51,7 @@ test("admin can create a prospect and a contact, and see them on the overview", 
   await page.getByRole("button", { name: "Create contact" }).click();
 
   await expect(page).toHaveURL(/\/companies\/[0-9a-f-]{36}$/);
-  await page.getByRole("tab", { name: /Contacts/ }).click();
+  await openSection(page, /Contacts/);
   await expect(page.getByRole("link", { name: "Test Person" })).toBeVisible();
 
   // Duplicate detection warns when creating the same domain again

@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { openSection } from "./helpers";
 
 const ADMIN = { email: "admin@example.com", password: "Admin12345!" };
 
@@ -23,7 +24,7 @@ test("create an opportunity with line items, mark it won, and get onboarding + d
   const companyUrl = page.url();
 
   // New opportunity from the company page
-  await page.getByRole("tab", { name: /Opportunities/ }).click();
+  await openSection(page, /Opportunities/);
   await page.getByRole("link", { name: "New opportunity" }).click();
   await expect(page).toHaveURL(/\/pipeline\/new\?companyId=/);
   await page.getByLabel("Title").fill(`Managed IT ${stamp}`);
@@ -51,8 +52,8 @@ test("create an opportunity with line items, mark it won, and get onboarding + d
 
   // Company is now a customer, and onboarding checklist has tasks
   await page.goto(companyUrl);
-  await expect(page.getByRole("heading", { level: 1 })).toContainText("customer");
-  await page.getByRole("tab", { name: /Tasks/ }).click();
+  await expect(page.getByRole("banner").or(page.locator("header")).first()).toContainText("customer");
+  await openSection(page, /Tasks/);
   await expect(page.getByText("Welcome call and kick-off meeting")).toBeVisible();
 
   // Complete a checklist item from the onboarding page
