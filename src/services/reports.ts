@@ -7,6 +7,7 @@ import { workerHealth } from "@/lib/system-status";
 import { CATEGORY_LABELS } from "@/lib/validation-sales";
 import { listConnections, PROVIDER_LABELS, type Provider } from "./integrations";
 import { deviceTotals, ninjaConnectionSummary } from "./ninjaone";
+import { twentyIConnectionSummary } from "./twentyi";
 import { financeTotals } from "./xero";
 import { xeroConnectionSummary } from "./xero";
 import { bpConnectionSummary } from "./proposals";
@@ -226,16 +227,17 @@ export async function devicesReport() {
 }
 
 export async function integrationHealthReport() {
-  const [conns, worker, bp, xero, ninja, failed, conflicts] = await Promise.all([
+  const [conns, worker, bp, xero, ninja, twentyi, failed, conflicts] = await Promise.all([
     listConnections(),
     workerHealth(),
     bpConnectionSummary(),
     xeroConnectionSummary(),
     ninjaConnectionSummary(),
+    twentyIConnectionSummary(),
     db.select({ provider: syncRuns.provider, failed: sql<number>`count(*) filter (where status = 'failed')`.mapWith(Number), partial: sql<number>`count(*) filter (where status = 'partial')`.mapWith(Number), runs: sql<number>`count(*)`.mapWith(Number), errors: sql<number>`coalesce(sum(errors), 0)`.mapWith(Number) }).from(syncRuns).where(gte(syncRuns.startedAt, new Date(Date.now() - 86400000))).groupBy(syncRuns.provider),
     db.select({ provider: mappingConflicts.provider, open: sql<number>`count(*)`.mapWith(Number) }).from(mappingConflicts).where(eq(mappingConflicts.status, "open")).groupBy(mappingConflicts.provider),
   ]);
-  const demo: Record<Provider, boolean> = { betterproposals: bp.demo, xero: xero.demo, ninjaone: ninja.demo };
+  const demo: Record<Provider, boolean> = { betterproposals: bp.demo, xero: xero.demo, ninjaone: ninja.demo, twentyi: twentyi.demo };
   const f = new Map(failed.map((r) => [r.provider, r]));
   const c = new Map(conflicts.map((r) => [r.provider, r.open]));
   const providers = conns.map((x) => {

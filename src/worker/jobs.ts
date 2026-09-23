@@ -9,6 +9,7 @@ import { setSystemStatus } from "@/lib/system-status";
  *  - Phase 3: betterproposals.poll, betterproposals.create
  *  - Phase 4: xero.sync, xero.webhook, xero.invoice.create, xero.reconcile
  *  - Phase 5: ninjaone.sync, discrepancy.check
+ *  - Phase 8: twentyi.sync (hosting mirror), expiry reminders inside crm.reminders
  *
  * Every handler must be idempotent: pg-boss guarantees at-least-once delivery.
  */
@@ -20,6 +21,7 @@ export const QUEUES = {
   xeroReconcile: "xero.reconcile",
   xeroInbound: "xero.inbound",
   ninjaSync: "ninjaone.sync",
+  twentyISync: "twentyi.sync",
   retention: "system.retention",
 } as const;
 
@@ -58,7 +60,9 @@ export async function registerJobs(boss: PgBoss, mode: "worker" | "tick" = "work
     const res = await generateReminders(null);
     const { generateVaultReminders } = await import("@/services/vault");
     const vault = await generateVaultReminders();
-    logger.info({ jobId: job.id, created: res.created, vaultReminders: vault.created }, "reminders generated");
+    const { generateHostingReminders } = await import("@/services/twentyi");
+    const hosting = await generateHostingReminders();
+    logger.info({ jobId: job.id, created: res.created, vaultReminders: vault.created, hostingReminders: hosting.created }, "reminders generated");
   });
   await boss.schedule(QUEUES.reminders, "0 6 * * *", {}, { retryLimit: 3 });
 
@@ -104,4 +108,13 @@ export async function registerJobs(boss: PgBoss, mode: "worker" | "tick" = "work
     logger.info({ jobId: job.id, result: res && { status: res.status, ...res.counters } }, "ninjaone sync");
   });
   await boss.schedule(QUEUES.ninjaSync, "20 * * * *", {}, { retryLimit: 2, singletonKey: "ninja-sync" });
+
+  // 20i (read-only): packages, domains and mailboxes hourly; auto-links by domain; expiry reminders run with crm.reminders.
+  await boss.createQueue(QUEUES.twentyISync, { deleteAfterSeconds: 7 * 24 * 3600, retryLimit: 2, retryBackoff: true, expireInSeconds: 1800 });
+  await boss.work(QUEUES.twentyISync, async ([job]) => {
+    const { syncTwentyI } = await import("@/services/twentyi");
+    const res = await syncTwentyI("schedule");
+    logger.info({ jobId: job.id, result: res && { status: res.status, ...res.counters } }, "twentyi sync");
+  });
+  await boss.schedule(QUEUES.twentyISync, "40 * * * *", {}, { retryLimit: 2, singletonKey: "twentyi-sync" });
 }

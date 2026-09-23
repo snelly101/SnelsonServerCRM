@@ -185,3 +185,28 @@ Built to the architecture in [`docs/secure-vault-plan.md`](secure-vault-plan.md)
 - Generate `VAULT_MASTER_KEY` on the VPS and store it per docs/deployment.md §5a before creating any items.
 - Grant technicians access under Settings → Secure Vault.
 - Later (per decisions): external KMS for the master key, SSH private keys as a secret kind.
+
+## Phase 8 — 20i Hosting ✅
+
+### Verified against vendor documentation
+
+Public 20i API guides (bearer auth with the base64-encoded general API key, `GET /package` response fields, package provisioning guide) and the community endpoint references derived from the Apiary reference behind the reseller login. The `/domain`, mailbox and usage response shapes are only partly documented publicly, so the client parses them defensively and keeps raw JSON; a live account check remains on the list below.
+
+### What works
+
+- **Connector** (`src/connectors/twentyi/`): read-only live client (`GET /reseller`, `/package`, `/package/{id}/web/usage`, `/package/{id}/email/{domain}/mailbox`, `/domain`), retries with backoff, tolerant token encoding (base64 per the docs, raw fallback), and a demo adapter with seven packages, eight domains (one expiring in 12 days, one in 24, one expired) and five mailboxes.
+- **Mirror** (`hosting_items`): packages, domains (attached to their package), mailboxes; disk usage; deleted-at-20i marking; hourly `twentyi.sync` plus *Sync now*.
+- **Company linking**: automatic on exact registrable-domain match against company website or contact email domains (ambiguous matches become suggestions); manual link/unlink from the mapping table with domain and name suggestions; mailboxes follow their package; unlinks are remembered.
+- **Billing**: on the company's **Hosting** tab each package and domain is tied to the contract line that bills it (must belong to the company); *not billed* is flagged on both pages; the tab also lists mirrored Xero invoices whose lines mention the hosting names.
+- **Reminders**: daily tasks for domains and certificates expiring inside the configurable window, urgent once expired, owned by the account owner.
+- **Integrations page** card, per-provider page with stats (packages, domains, mailboxes, expiring, unlinked / unbilled), sync history and errors; Reports integration health includes 20i.
+
+### What was tested
+
+- **8 unit/integration tests (106 total)**: registrable-domain reduction (UK two-part suffixes), date and usage parsing, reseller id shapes; live client sends `Bearer base64(key)`, only ever GETs, treats a 404 mailbox endpoint as "no mailboxes", exposes no write method; demo sync mirrors 7/8/5 items, auto-links exact matches only, mailboxes inherit, `.com` sibling stays unlinked, re-sync is idempotent; suggestions by domain and name; two companies on one domain block auto-link; manual link cascades, unlink survives a sync; billing line must belong to the company and needs a linked item; company overview nests domains and mailboxes, shows the billing line, finds the invoice that mentions the domain and ignores the one that does not; reminders created once with the right priority, owner and company.
+- **2 browser tests (20 total)**: 20i page shows demo state, auto-linked rows, the expiring filter, and an admin links an unmatched package; company Hosting tab nests the mailbox, an admin picks the billing line and it persists; read-only user sees the tab without controls and no connect form.
+
+### Remaining dependencies (live verification)
+
+- Connect the real reseller key on the VPS and run one sync; check the sync errors panel for any endpoint whose shape differs (usage and mailbox listing are the likely ones) and adjust the parser.
+- SSL certificates (`kind = ssl`) are reserved but not fetched yet: the certificate listing endpoint shape was not verifiable from public material.

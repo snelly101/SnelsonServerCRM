@@ -28,7 +28,7 @@ test("reports page shows pipeline, MRR with its formula, renewals, tasks, invoic
   await expect(page.getByText("Open count discrepancies")).toBeVisible();
   await page.getByRole("tab", { name: "Integration health" }).click();
   await expect(page.getByText("Background worker")).toBeVisible();
-  await expect(page.getByText("Demo (not connected)")).toHaveCount(3);
+  await expect(page.getByText("Demo (not connected)")).toHaveCount(4);
 
   const res = await page.request.get("/api/export/report-mrr");
   expect(res.status()).toBe(200);

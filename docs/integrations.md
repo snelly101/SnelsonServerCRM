@@ -1,6 +1,6 @@
 # Integrations
 
-All three vendors were verified against primary sources on 22 Sep 2026: the Better Proposals API documentation and its published example request/response scripts, Xero's official OpenAPI specifications (`xero_accounting.yaml`, `xero-webhooks.yaml`), and NinjaOne's OpenAPI YAML (`/apidocs-beta/NinjaRMM-API-v2.yaml`) plus its OAuth configuration article. Live endpoints were probed unauthenticated to confirm hosts and error shapes.
+All vendors were verified against primary sources on 22 Sep 2026: the Better Proposals API documentation and its published example request/response scripts, Xero's official OpenAPI specifications (`xero_accounting.yaml`, `xero-webhooks.yaml`), and NinjaOne's OpenAPI YAML (`/apidocs-beta/NinjaRMM-API-v2.yaml`) plus its OAuth configuration article. Live endpoints were probed unauthenticated to confirm hosts and error shapes.
 
 ## Capability matrix (verified)
 
@@ -102,3 +102,43 @@ Schedule: `ninjaone.sync` hourly at :20 (worker) plus *Sync now*. Deleted organi
 ### Not available via the API (hand-off)
 
 Remote control, scripts, reboots, device deletion, approving pending devices → done in the NinjaOne console. Device rows and company tabs deep-link to `https://<instance>/#/deviceDashboard/{id}/overview` and `customerDashboard/{orgId}`.
+
+## 20i Hosting (Phase 8, built)
+
+**Read-only by design.** The live client (`src/connectors/twentyi/live.ts`) has no write methods: the CRM never provisions, suspends, renews, transfers or changes DNS at 20i.
+
+Verified against the public 20i API guides (docs.20i.com/api: authentication, "retrieve a list of packages", "provision a hosting package") and the community endpoint references derived from the Apiary reference (`my.20i.com/reseller/apiDoc`, which needs a reseller login). Shapes not shown in public material are handled defensively and kept verbatim in `raw`.
+
+| | 20i Reseller API |
+|---|---|
+| **Account** | Any 20i reseller account; the **General API key** is under My20i → Reseller → API |
+| **Auth** | `Authorization: Bearer <base64(general API key)>` per the docs. The connect step tries the base64 form first and falls back to the raw key on 401/403, then remembers which worked |
+| **Base URL** | `https://api.20i.com` |
+| **Read** | `GET /reseller` (identity), `GET /package` (`id`, `name`, `names[]`, `packageTypeName`, `enabled`, `created`, `stackUsers[]`, `packageLabels[]`), `GET /package/{id}/web/usage` (disk figures, best effort), `GET /package/{id}/email/{domain}/mailbox` (`local`, `domain`, `forUser`; 404/400 = no email service), `GET /domain` (`id`, `name`, `expiryDate`, `deadDate`, `closeToAnniversary`, `hasPrivacy`, `registrantIsVerified`) |
+| **Write** | **None** |
+| **Events** | No webhooks → `twentyi.sync` hourly at :40 plus *Sync now* |
+| **Rate limits** | Not published → 150 ms spacing, back off on 429/5xx |
+| **Deep links** | Package and domain management pages in My20i |
+| **Hand-off** | Provisioning, suspending, renewing domains and certificates, DNS, mailbox passwords → My20i / StackCP |
+
+### Setup (all in the web UI)
+
+1. My20i → Reseller → API → copy the General API key.
+2. CRM → Integrations → 20i Hosting → paste the key → *Verify and connect*. The key is stored encrypted only if `GET /reseller` and `GET /package` succeed.
+3. Run *Sync now*. Packages, domains and mailboxes appear in the mapping table; exact domain matches are linked to companies automatically.
+
+### What is mirrored
+
+One table, `hosting_items`, with a `kind` of `package`, `domain`, `mailbox` (and `ssl`, reserved): 20i id, name, registrable domain used for matching, parent package, type, enabled flag, expiry date, disk usage, details (extra names, StackCP users, labels), `company_id`, how it was matched (`manual` / `auto` / `inherited`), the contract line that bills it, `external_status` (`deleted` when it disappears from 20i; rows and links are kept) and `fetched_at`. Domains are attached to the package whose names include them.
+
+### Matching and billing
+
+- **Auto-link** (configurable): a package or domain is linked when its registrable domain (`example.co.uk`, two-part UK suffixes handled) matches exactly **one** company's website domain or contact email domain. Two companies sharing a domain → suggestions only. Name similarity is never applied automatically.
+- **Mailboxes inherit** the company of their package. **Unlinking is remembered** (`match_source = manual`, no company) so the next sync does not undo it.
+- **Billed by**: on the company's **Hosting** tab each package and domain can be tied to a contract line of one of the company's draft or active contracts (`contract_line_id`; the line must belong to that company). Items linked to a company but billed by nothing show *not billed* on the mapping page and count in the *linked but not billed* figure.
+- **Invoices**: the Hosting tab lists mirrored Xero sales invoices for the company whose reference or line descriptions mention a package or domain name, with status and amount due, so a renewal can be checked against what was actually invoiced.
+- **Reminders**: daily (`crm.reminders`), one task per domain or certificate expiring within the window (default 30 days; Integrations → 20i Hosting), priority high, urgent once expired, owned by the company's account owner; unlinked items produce a task that says so. Source key `hosting-expiry:<item>:<date>` keeps it idempotent.
+
+### Not available via the API (hand-off)
+
+Renewing, provisioning, suspending, DNS and mailbox administration happen in My20i / StackCP. Pricing and 20i's own invoices to the reseller are not read.
