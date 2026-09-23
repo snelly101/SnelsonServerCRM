@@ -10,9 +10,8 @@ const optionalDate = z
   .optional()
   .transform((v) => (v ? v : null));
 const money = z.coerce.number().min(0).max(1_000_000_000);
-const optionalMoney = z
-  .union([z.coerce.number().min(0).max(1_000_000_000), z.literal(""), z.null(), z.undefined()])
-  .transform((v) => (v === "" || v === null || v === undefined ? null : v));
+/** Empty means "unknown" (null), never 0: z.coerce.number() would turn "" into 0 and silently invent a cost. */
+const optionalMoney = z.preprocess((v) => (v === "" || v === null || v === undefined ? null : v), z.union([z.null(), z.coerce.number().min(0).max(1_000_000_000)]));
 /** Accepts true/false, "true"/"false", "on"; anything else is false. `z.coerce.boolean()` would treat "false" as true. */
 export const boolish = z
   .union([z.boolean(), z.string(), z.null()])

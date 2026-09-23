@@ -8,15 +8,15 @@ import { getAppSettings } from "@/lib/settings";
 import { extractDomain, normalizeCompanyName } from "@/lib/utils";
 import { getXeroClient, type XeroConfig, type XeroCredentials } from "@/connectors/xero";
 import { buildAuthorizeUrl, exchangeCode, listTenants, xeroAppConfig, xeroDate, xeroDateOnly } from "@/connectors/xero/live";
-import type { XeroContactRaw, XeroInvoiceRaw, XeroPaymentRaw, XeroRepeatingInvoiceRaw } from "@/connectors/xero/types";
+import type { XeroContactRaw, XeroInvoiceRaw, XeroItemRaw, XeroPaymentRaw, XeroRepeatingInvoiceRaw } from "@/connectors/xero/types";
 import { createLink, getConnection, getCredentials, getLink, getLinkByExternal, listLinks, markEventProcessed, raiseConflict, recordInboundEvent, runOutbound, runSync, setConnectionConfig, setCredentials, updateConnection } from "./integrations";
 import { monthlyValue } from "@/lib/money";
 import { companySchema, contactSchema } from "@/lib/validation";
 import { createCompany, findDuplicateCompanies } from "./companies";
 import { createContact } from "./contacts";
 import { createContract } from "./contracts";
-import { listProducts } from "./catalogue";
-import { contractLineSchema, contractSchema, type ContractLineInput } from "@/lib/validation-sales";
+import { createProduct, listProducts } from "./catalogue";
+import { contractLineSchema, contractSchema, productSchema, type ContractLineInput, type ProductInput } from "@/lib/validation-sales";
 
 // ---------------------------------------------------------------------------
 // OAuth connect / tenant selection
@@ -754,6 +754,46 @@ function guessPricingModel(description: string): ContractLineInput["pricingModel
   return "fixed";
 }
 
+function guessCategory(text: string): ProductInput["category"] {
+  const d = text.toLowerCase();
+  if (/(microsoft ?365|m365|office ?365|o365|exchange|sharepoint|teams|business (basic|standard|premium))/.test(d)) return "microsoft_365";
+  if (/(backup|replication|disaster recovery|\bdr\b|archiv)/.test(d)) return "backup";
+  if (/(security|edr|mdr|antivirus|anti-virus|endpoint protection|firewall|mfa|phishing|siem|threat|vulnerab)/.test(d)) return "security";
+  if (/(network|switch|router|wifi|wi-fi|access point|broadband|leased line|vpn|sd-wan)/.test(d)) return "networking";
+  if (/(hardware|laptop|desktop|monitor|printer|equipment)/.test(d)) return "hardware";
+  if (/(consult|project|professional services|day rate|on-site|onsite)/.test(d)) return "consultancy";
+  if (/(managed|support|rmm|patch|helpdesk|help desk|monitoring)/.test(d)) return "managed_it";
+  return "other";
+}
+
+/**
+ * Creates a catalogue product for a Xero item code the CRM has never seen, using the Xero item
+ * record (name, sale price, purchase price as cost) when it exists and the invoice line otherwise.
+ * Per-device products are flagged for NinjaOne comparison so imported contracts get device checks.
+ */
+async function ensureProductForItemCode(code: string, line: { description: string; unitPrice: number; frequency: Frequency }, items: Map<string, XeroItemRaw>, actorUserId: string) {
+  const item = items.get(code.toUpperCase()) ?? null;
+  const name = (item?.Name ?? line.description).slice(0, 200);
+  const text = `${name} ${item?.Description ?? ""} ${line.description}`;
+  const pricingModel = guessPricingModel(text);
+  const input = productSchema.parse({
+    sku: code,
+    name,
+    category: guessCategory(text),
+    description: item?.Description ?? "",
+    pricingModel,
+    revenueType: "recurring",
+    billingFrequency: line.frequency,
+    unitPrice: Math.round((item?.SalesDetails?.UnitPrice ?? line.unitPrice) * 100) / 100,
+    unitCost: item?.PurchaseDetails?.UnitPrice !== undefined ? Math.round(item.PurchaseDetails.UnitPrice * 100) / 100 : "",
+    countsAsManagedDevice: pricingModel === "per_device" ? "true" : "false",
+    active: "true",
+  });
+  const id = await createProduct(input, actorUserId);
+  await audit({ actorUserId, action: "xero.item.import", entityType: "product", entityId: id, details: { code, fromXeroItem: Boolean(item) } });
+  return { id, input };
+}
+
 export async function listXeroRepeatingInvoices() {
   const resolved = await getXeroClient();
   if (!resolved) return { rows: [], mode: null as "live" | "demo" | null };
@@ -793,7 +833,7 @@ export async function listXeroRepeatingInvoices() {
   return { rows, mode: resolved.mode };
 }
 
-export type RepeatingImportResult = { id: string; reference: string | null; action: "created" | "skipped"; contractId?: string; reason?: string };
+export type RepeatingImportResult = { id: string; reference: string | null; action: "created" | "skipped"; contractId?: string; reason?: string; productsCreated?: number };
 
 /**
  * Creates a DRAFT contract from one repeating invoice template: one recurring line per Xero line item,
@@ -801,7 +841,7 @@ export type RepeatingImportResult = { id: string; reference: string | null; acti
  * and device-count comparison). The contract is linked to the template so re-running never duplicates.
  * Nothing is activated automatically; a person reviews the draft.
  */
-export async function importRepeatingInvoiceAsContract(templateId: string, actorUserId: string): Promise<RepeatingImportResult> {
+export async function importRepeatingInvoiceAsContract(templateId: string, actorUserId: string, opts?: { items?: Map<string, XeroItemRaw> | null; createProducts?: boolean }): Promise<RepeatingImportResult> {
   const resolved = await getXeroClient();
   if (!resolved) throw new ActionError("Xero is not connected.");
   const all = await resolved.client.listRepeatingInvoices();
@@ -816,7 +856,9 @@ export async function importRepeatingInvoiceAsContract(templateId: string, actor
   const freq = repeatingFrequency(r.Schedule);
   if ("reason" in freq) return { id: templateId, reference: ref, action: "skipped", reason: freq.reason };
   const products = await listProducts({ includeInactive: true });
-  const bySku = new Map(products.filter((p) => p.sku).map((p) => [p.sku!.toUpperCase(), p]));
+  const bySku = new Map<string, { id: string; name: string; pricingModel: ContractLineInput["pricingModel"]; unitCost: string | null; countsAsManagedDevice: boolean }>(products.filter((p) => p.sku).map((p) => [p.sku!.toUpperCase(), p]));
+  let items: Map<string, XeroItemRaw> | null = opts?.items ?? null;
+  const createdProducts: string[] = [];
   const notes: string[] = [`Imported from Xero repeating invoice ${ref ? `"${ref}" ` : ""}(${templateId}) on ${new Date().toISOString().slice(0, 10)}. Review the lines, then set the status to active.`];
   if (r.LineAmountTypes === "Inclusive") notes.push("Xero amounts are tax-inclusive; unit prices were converted to tax-exclusive using each line's tax amount.");
   const lines: ContractLineInput[] = [];
@@ -828,8 +870,18 @@ export async function importRepeatingInvoiceAsContract(templateId: string, actor
       unit = li.TaxAmount !== undefined ? exclusive / qty : unit;
       if (li.TaxAmount === undefined) notes.push(`Line "${li.Description ?? li.ItemCode ?? ""}": tax amount not provided, price left tax-inclusive.`);
     }
-    const product = li.ItemCode ? (bySku.get(li.ItemCode.toUpperCase()) ?? null) : null;
+    let product = li.ItemCode ? (bySku.get(li.ItemCode.toUpperCase()) ?? null) : null;
     const description = (li.Description ?? product?.name ?? li.ItemCode ?? "Recurring service").slice(0, 300);
+    if (!product && li.ItemCode && opts?.createProducts !== false) {
+      if (!items) {
+        const list = await resolved.client.listItems().catch(() => [] as XeroItemRaw[]);
+        items = new Map(list.filter((i) => i.Code).map((i) => [i.Code!.toUpperCase(), i]));
+      }
+      const made = await ensureProductForItemCode(li.ItemCode, { description, unitPrice: unit, frequency: freq.frequency }, items, actorUserId);
+      product = { id: made.id, name: made.input.name, pricingModel: made.input.pricingModel, unitCost: made.input.unitCost === null || made.input.unitCost === undefined ? null : String(made.input.unitCost), countsAsManagedDevice: made.input.countsAsManagedDevice };
+      bySku.set(li.ItemCode.toUpperCase(), product);
+      createdProducts.push(`${li.ItemCode} (${made.input.name}, ${made.input.pricingModel.replace("_", " ")}${made.input.countsAsManagedDevice ? ", compared with NinjaOne" : ""})`);
+    }
     lines.push(
       contractLineSchema.parse({
         productId: product?.id ?? "",
@@ -843,8 +895,8 @@ export async function importRepeatingInvoiceAsContract(templateId: string, actor
         countsAsManagedDevice: product?.countsAsManagedDevice ?? false,
       }),
     );
-    if (!product && li.ItemCode) notes.push(`Line "${description}": item code ${li.ItemCode} has no matching catalogue product.`);
   }
+  if (createdProducts.length) notes.push(`Catalogue products created from Xero item codes: ${createdProducts.join("; ")}. Check their category, cost and pricing model under Contracts → Service catalogue.`);
   if (!lines.length) return { id: templateId, reference: ref, action: "skipped", reason: "template has no line items" };
   const startDate = xeroDateOnly(r.Schedule?.StartDate) ?? new Date().toISOString().slice(0, 10);
   const endDate = xeroDateOnly(r.Schedule?.EndDate);
@@ -864,12 +916,16 @@ export async function importRepeatingInvoiceAsContract(templateId: string, actor
   await createLink({ provider: "xero", entityType: "contract", localId: contractId, externalId: templateId, externalName: ref ?? undefined, externalType: "repeating_invoice", source: "import" }, actorUserId);
   await logActivity({ type: "contract", companyId: link.localId, entityType: "contract", entityId: contractId, title: `Draft contract imported from Xero repeating invoice${ref ? ` "${ref}"` : ""}`, actorUserId, source: "xero" });
   await audit({ actorUserId, action: "xero.repeating_invoice.import", entityType: "contract", entityId: contractId, details: { templateId, reference: ref, lines: lines.length, frequency: freq.frequency } });
-  return { id: templateId, reference: ref, action: "created", contractId };
+  return { id: templateId, reference: ref, action: "created", contractId, productsCreated: createdProducts.length };
 }
 
 export async function importAllRepeatingInvoices(actorUserId: string) {
+  const resolved = await getXeroClient();
+  if (!resolved) throw new ActionError("Xero is not connected.");
   const { rows } = await listXeroRepeatingInvoices();
+  const list = await resolved.client.listItems().catch(() => [] as XeroItemRaw[]);
+  const items = new Map(list.filter((i) => i.Code).map((i) => [i.Code!.toUpperCase(), i]));
   const results: RepeatingImportResult[] = [];
-  for (const r of rows) if (!r.contractId) results.push(await importRepeatingInvoiceAsContract(r.id, actorUserId));
-  return { created: results.filter((r) => r.action === "created").length, skipped: results.filter((r) => r.action === "skipped"), results };
+  for (const r of rows) if (!r.contractId) results.push(await importRepeatingInvoiceAsContract(r.id, actorUserId, { items }));
+  return { created: results.filter((r) => r.action === "created").length, productsCreated: results.reduce((a, r) => a + (r.productsCreated ?? 0), 0), skipped: results.filter((r) => r.action === "skipped"), results };
 }

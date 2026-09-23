@@ -92,6 +92,17 @@ export type XeroRepeatingInvoiceRaw = {
   Total?: number;
 };
 
+export type XeroItemRaw = {
+  ItemID: string;
+  Code?: string;
+  Name?: string;
+  Description?: string;
+  IsSold?: boolean;
+  IsPurchased?: boolean;
+  SalesDetails?: { UnitPrice?: number; AccountCode?: string; TaxType?: string };
+  PurchaseDetails?: { UnitPrice?: number; AccountCode?: string; TaxType?: string };
+};
+
 export type XeroAccount = { AccountID: string; Code?: string; Name: string; Type: string; Status?: string; TaxType?: string; Class?: string };
 export type XeroTaxRate = { Name: string; TaxType: string; Status?: string; EffectiveRate?: number; CanApplyToRevenue?: boolean };
 export type XeroOrganisation = { OrganisationID: string; Name: string; LegalName?: string; BaseCurrency?: string; CountryCode?: string; ShortCode?: string; OrganisationStatus?: string };
@@ -125,6 +136,8 @@ export interface XeroClient {
   listPayments(opts: { page: number; ifModifiedSince?: Date }): Promise<XeroPaymentRaw[]>;
   /** Repeating invoice templates (read-only; used to seed contracts). */
   listRepeatingInvoices(): Promise<XeroRepeatingInvoiceRaw[]>;
+  /** Inventory/service items (read-only; used to create catalogue products by item code). */
+  listItems(): Promise<XeroItemRaw[]>;
   listAccounts(): Promise<XeroAccount[]>;
   listTaxRates(): Promise<XeroTaxRate[]>;
   listBrandingThemes(): Promise<XeroBrandingTheme[]>;

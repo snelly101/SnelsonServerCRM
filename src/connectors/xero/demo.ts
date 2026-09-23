@@ -1,4 +1,4 @@
-import type { CreateInvoiceInput, XeroClient, XeroContactRaw, XeroInvoiceRaw, XeroPaymentRaw, XeroRepeatingInvoiceRaw } from "./types";
+import type { CreateInvoiceInput, XeroClient, XeroContactRaw, XeroInvoiceRaw, XeroPaymentRaw, XeroRepeatingInvoiceRaw, XeroItemRaw } from "./types";
 
 /**
  * DEMO adapter for Xero: an in-memory organisation with a few customers,
@@ -74,6 +74,12 @@ export function demoXeroTouchContact(contactId: string, patch: Partial<XeroConta
 const modifiedSince = <T extends { UpdatedDateUTC?: string }>(rows: T[], since?: Date) => (since ? rows.filter((r) => !r.UpdatedDateUTC || new Date(r.UpdatedDateUTC) >= since) : rows);
 const paginate = <T>(rows: T[], page: number, size = 100) => rows.slice((page - 1) * size, page * size);
 
+const items: XeroItemRaw[] = [
+  { ItemID: "demo-item-1", Code: "MIT-USER", Name: "Managed user support", Description: "Unlimited remote support per user", IsSold: true, IsPurchased: false, SalesDetails: { UnitPrice: 45, AccountCode: "201", TaxType: "OUTPUT2" } },
+  { ItemID: "demo-item-2", Code: "MIT-DEV", Name: "Managed device (RMM + patching)", IsSold: true, IsPurchased: true, SalesDetails: { UnitPrice: 12, AccountCode: "201", TaxType: "OUTPUT2" }, PurchaseDetails: { UnitPrice: 4.5, AccountCode: "300" } },
+  { ItemID: "demo-item-3", Code: "EDR-SEAT", Name: "Endpoint protection seat", IsSold: true, IsPurchased: true, SalesDetails: { UnitPrice: 15, AccountCode: "201", TaxType: "OUTPUT2" }, PurchaseDetails: { UnitPrice: 6.5, AccountCode: "300" } },
+];
+
 /** Repeating invoice templates: a monthly one with catalogue item codes, a quarterly one, a weekly one (unsupported), a draft, and a supplier bill. */
 const repeating: XeroRepeatingInvoiceRaw[] = [
   { RepeatingInvoiceID: "demo-ri-1", Type: "ACCREC", Status: "AUTHORISED", Contact: { ContactID: "demo-c-2", Name: "Northern Freight Solutions Ltd" }, Schedule: { Period: 1, Unit: "MONTHLY", DueDate: 30, DueDateType: "DAYSAFTERBILLDATE", StartDate: "/Date(1767225600000+0000)/", NextScheduledDate: "/Date(1790812800000+0000)/" }, LineAmountTypes: "Exclusive", Reference: "Managed IT & Security", CurrencyCode: "GBP", LineItems: [
@@ -82,7 +88,7 @@ const repeating: XeroRepeatingInvoiceRaw[] = [
     { Description: "Firewall monitoring", Quantity: 2, UnitAmount: 35, AccountCode: "201", TaxType: "OUTPUT2", LineAmount: 70 },
   ], SubTotal: 1990, TotalTax: 398, Total: 2388 },
   { RepeatingInvoiceID: "demo-ri-2", Type: "ACCREC", Status: "AUTHORISED", Contact: { ContactID: "demo-c-1", Name: "Harrowgate Dental Practice" }, Schedule: { Period: 3, Unit: "MONTHLY", DueDate: 14, DueDateType: "DAYSAFTERBILLDATE", StartDate: "/Date(1775001600000+0000)/", NextScheduledDate: "/Date(1790812800000+0000)/", EndDate: "/Date(1806451200000+0000)/" }, LineAmountTypes: "Inclusive", Reference: "Quarterly support", CurrencyCode: "GBP", LineItems: [
-    { Description: "Endpoint protection (18 devices)", Quantity: 18, UnitAmount: 18, TaxType: "OUTPUT2", TaxAmount: 54, LineAmount: 324 },
+    { Description: "Endpoint protection (18 devices)", Quantity: 18, UnitAmount: 18, ItemCode: "EDR-SEAT", TaxType: "OUTPUT2", TaxAmount: 54, LineAmount: 324 },
   ], SubTotal: 270, TotalTax: 54, Total: 324 },
   { RepeatingInvoiceID: "demo-ri-3", Type: "ACCREC", Status: "AUTHORISED", Contact: { ContactID: "demo-c-3", Name: "Ridgeway Architects" }, Schedule: { Period: 1, Unit: "WEEKLY", StartDate: "/Date(1767225600000+0000)/" }, LineAmountTypes: "Exclusive", Reference: "Weekly on-site", CurrencyCode: "GBP", LineItems: [{ Description: "On-site day", Quantity: 1, UnitAmount: 450, LineAmount: 450 }], SubTotal: 450, TotalTax: 90, Total: 540 },
   { RepeatingInvoiceID: "demo-ri-4", Type: "ACCREC", Status: "DRAFT", Contact: { ContactID: "demo-c-4", Name: "Greenfield Primary Academy" }, Schedule: { Period: 1, Unit: "MONTHLY", StartDate: "/Date(1767225600000+0000)/" }, LineAmountTypes: "Exclusive", Reference: "Draft template", LineItems: [{ Description: "Draft", Quantity: 1, UnitAmount: 1, LineAmount: 1 }], SubTotal: 1, TotalTax: 0, Total: 1 },
@@ -149,6 +155,9 @@ export class DemoXeroClient implements XeroClient {
   }
   async listRepeatingInvoices() {
     return repeating;
+  }
+  async listItems() {
+    return items;
   }
   async listAccounts() {
     return [

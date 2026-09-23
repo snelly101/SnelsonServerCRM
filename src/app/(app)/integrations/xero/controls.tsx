@@ -317,7 +317,7 @@ export function ImportAllRepeatingButton() {
   const router = useRouter();
   return (
     <span className="inline-flex items-center gap-2">
-      <Button size="sm" loading={pending} onClick={() => start(async () => { const r = await importAllRepeatingInvoicesAction(); setMsg(r.ok ? `${r.data.created} draft contracts created${r.data.skipped.length ? `, ${r.data.skipped.length} skipped` : ""}` : r.error); router.refresh(); })}>
+      <Button size="sm" loading={pending} onClick={() => start(async () => { const r = await importAllRepeatingInvoicesAction(); setMsg(r.ok ? `${r.data.created} draft contracts created${r.data.productsCreated ? `, ${r.data.productsCreated} catalogue products added` : ""}${r.data.skipped.length ? `, ${r.data.skipped.length} skipped` : ""}` : r.error); router.refresh(); })}>
         <FileText className="h-3.5 w-3.5" /> Import all as draft contracts
       </Button>
       {msg && <span className="text-xs text-slate-600">{msg}</span>}
@@ -333,13 +333,13 @@ export function RepeatingInvoicesTable({ rows, canWrite, currency }: { rows: Rep
   const run = (id: string) =>
     start(async () => {
       const r = await importRepeatingInvoiceAction(id);
-      setMsg(r.ok ? (r.data.action === "skipped" ? `Skipped: ${r.data.reason}` : null) : r.error);
+      setMsg(r.ok ? (r.data.action === "skipped" ? `Skipped: ${r.data.reason}` : r.data.productsCreated ? `Draft contract created and ${r.data.productsCreated} catalogue product${r.data.productsCreated === 1 ? "" : "s"} added from Xero item codes.` : null) : r.error);
       router.refresh();
     });
   if (rows.length === 0) return <p className="p-4 text-sm text-slate-500">No sales repeating invoices in Xero.</p>;
   return (
     <div>
-      <p className="border-b border-slate-200 px-4 py-2 text-xs text-slate-500">Each authorised template becomes a <strong>draft</strong> contract with one recurring line per Xero line, priced tax-exclusive. Item codes that match a catalogue SKU pick up that product&apos;s pricing model, cost and device-count comparison. Review each draft, then set it active. Nothing is activated or billed automatically.</p>
+      <p className="border-b border-slate-200 px-4 py-2 text-xs text-slate-500">Each authorised template becomes a <strong>draft</strong> contract with one recurring line per Xero line, priced tax-exclusive. Item codes that match a catalogue SKU pick up that product&apos;s pricing model, cost and device-count comparison; item codes the catalogue has never seen are <strong>added as products</strong> from the Xero item (name, sale price, purchase price as cost). Review each draft, then set it active. Nothing is activated or billed automatically.</p>
       {msg && <p className="px-4 py-2 text-sm text-red-700">{msg}</p>}
       <table className={`tbl ${pending ? "opacity-70" : ""}`}>
         <thead>

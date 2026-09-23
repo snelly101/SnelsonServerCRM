@@ -279,7 +279,14 @@ describe("Xero workflow (demo adapter)", () => {
     const dev = lines.find((l) => l.description.startsWith("Managed device"))!;
     expect(dev).toMatchObject({ pricingModel: "per_device", countsAsManagedDevice: true, quantity: "40.00", unitPrice: "12.00", unitCost: "4.50" });
     expect(dev.productId).toBeTruthy();
-    expect(lines.find((l) => l.description === "Managed user support")).toMatchObject({ pricingModel: "per_user", productId: null, countsAsManagedDevice: false });
+    // MIT-USER had no catalogue product: created from the Xero item (name, price) and used for the line
+    const userLine = lines.find((l) => l.description === "Managed user support")!;
+    expect(userLine).toMatchObject({ pricingModel: "per_user", countsAsManagedDevice: false });
+    expect(userLine.productId).toBeTruthy();
+    const [userProduct] = await db.select().from(products).where(eq(products.sku, "MIT-USER"));
+    expect(userProduct).toMatchObject({ name: "Managed user support", pricingModel: "per_user", unitPrice: "45.00", unitCost: null, category: "managed_it", countsAsManagedDevice: false, active: true });
+    expect(c.notes).toMatch(/Catalogue products created from Xero item codes: MIT-USER/);
+    expect(created.productsCreated).toBe(1);
     expect(lines.find((l) => l.description === "Firewall monitoring")).toMatchObject({ pricingModel: "fixed", unitPrice: "35.00" });
     expect((await getLink("xero", "contract", c.id))?.externalId).toBe("demo-ri-1");
     expect((await importRepeatingInvoiceAsContract("demo-ri-1", admin.id)).action).toBe("skipped");
@@ -290,7 +297,11 @@ describe("Xero workflow (demo adapter)", () => {
     const [qc] = await db.select().from(contracts).where(eq(contracts.id, q.contractId!));
     expect(qc).toMatchObject({ billingFrequency: "quarterly", endDate: "2027-03-31", renewalDate: "2027-03-31", autoRenew: false });
     const [ql] = await db.select().from(contractLines).where(eq(contractLines.contractId, qc.id));
-    expect(ql).toMatchObject({ unitPrice: "15.00", quantity: "18.00", pricingModel: "per_device" });
+    expect(ql).toMatchObject({ unitPrice: "15.00", quantity: "18.00", pricingModel: "per_device", countsAsManagedDevice: true, unitCost: "6.50" });
+    // EDR-SEAT product created from the Xero item with its purchase price as cost, flagged for device comparison
+    const [edr] = await db.select().from(products).where(eq(products.sku, "EDR-SEAT"));
+    expect(edr).toMatchObject({ name: "Endpoint protection seat", category: "security", pricingModel: "per_device", unitPrice: "15.00", unitCost: "6.50", countsAsManagedDevice: true, billingFrequency: "quarterly" });
+    expect((await db.select().from(products).where(eq(products.sku, "EDR-SEAT"))).length).toBe(1);
 
     const all = await importAllRepeatingInvoices(admin.id);
     expect(all.created).toBe(0);
