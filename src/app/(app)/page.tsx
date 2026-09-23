@@ -15,7 +15,7 @@ import { can } from "@/lib/permissions";
 import { fmtMoney, fmtDate } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { deviceTotals, listDiscrepancies, ninjaConnectionSummary } from "@/services/ninjaone";
-import { integrationHealth } from "@/services/integrations";
+import { integrationHealth, PROVIDER_LABELS, type Provider } from "@/services/integrations";
 
 export const metadata = { title: "Dashboard" };
 
@@ -67,7 +67,7 @@ export default async function DashboardPage() {
       <PageHeader title={`Good ${greeting()}, ${me.name.split(" ")[0]}`} description="Here's what's happening across your customers." />
       {process.env.DEMO_MODE === "true" && (
         <Alert tone="warn" title="Demo mode" className="mb-4">
-          Integrations without credentials are using synthetic data. Nothing shown from Better Proposals, Xero or NinjaOne is live until each is connected on the Integrations page.
+          Integrations without credentials are using synthetic data. Nothing shown from Better Proposals, Xero, NinjaOne or 20i is live until each is connected on the Integrations page.
         </Alert>
       )}
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -165,7 +165,7 @@ export default async function DashboardPage() {
             {health.connections.map((c) => (
               <li key={c.provider} className="flex items-center justify-between">
                 <Link href={`/integrations/${c.provider}`} className="text-slate-700 hover:underline">
-                  {c.provider === "betterproposals" ? "Better Proposals" : c.provider === "xero" ? "Xero" : "NinjaOne"}
+                  {PROVIDER_LABELS[c.provider as Provider] ?? c.provider}
                 </Link>
                 <Badge tone={c.status === "connected" ? "green" : c.status === "not_configured" ? "amber" : "red"}>{c.status === "not_configured" ? "not connected" : c.status}</Badge>
               </li>
