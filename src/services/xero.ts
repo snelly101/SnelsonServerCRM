@@ -8,12 +8,15 @@ import { getAppSettings } from "@/lib/settings";
 import { extractDomain, normalizeCompanyName } from "@/lib/utils";
 import { getXeroClient, type XeroConfig, type XeroCredentials } from "@/connectors/xero";
 import { buildAuthorizeUrl, exchangeCode, listTenants, xeroAppConfig, xeroDate, xeroDateOnly } from "@/connectors/xero/live";
-import type { XeroContactRaw, XeroInvoiceRaw, XeroPaymentRaw } from "@/connectors/xero/types";
+import type { XeroContactRaw, XeroInvoiceRaw, XeroPaymentRaw, XeroRepeatingInvoiceRaw } from "@/connectors/xero/types";
 import { createLink, getConnection, getCredentials, getLink, getLinkByExternal, listLinks, markEventProcessed, raiseConflict, recordInboundEvent, runOutbound, runSync, setConnectionConfig, setCredentials, updateConnection } from "./integrations";
 import { monthlyValue } from "@/lib/money";
 import { companySchema, contactSchema } from "@/lib/validation";
 import { createCompany, findDuplicateCompanies } from "./companies";
 import { createContact } from "./contacts";
+import { createContract } from "./contracts";
+import { listProducts } from "./catalogue";
+import { contractLineSchema, contractSchema, type ContractLineInput } from "@/lib/validation-sales";
 
 // ---------------------------------------------------------------------------
 // OAuth connect / tenant selection
@@ -727,4 +730,146 @@ export async function importAllXeroCustomers(actorUserId: string) {
   const results: XeroImportResult[] = [];
   for (const p of pending) results.push(await importXeroContactAsCompany(p.contactId, actorUserId));
   return { created: results.filter((r) => r.action === "created").length, linked: results.filter((r) => r.action === "linked").length, skipped: results.filter((r) => r.action === "skipped"), results };
+}
+
+// ---------------------------------------------------------------------------
+// Import: Xero repeating invoices → draft contracts
+// ---------------------------------------------------------------------------
+type Frequency = "monthly" | "quarterly" | "annual";
+
+/** Maps a Xero schedule to a CRM billing frequency, or explains why it can't be. */
+export function repeatingFrequency(schedule: XeroRepeatingInvoiceRaw["Schedule"]): { frequency: Frequency } | { reason: string } {
+  const period = schedule?.Period ?? 1;
+  if (schedule?.Unit === "WEEKLY") return { reason: `billed every ${period} week${period === 1 ? "" : "s"}; the CRM supports monthly, quarterly and annual only` };
+  if (period === 1) return { frequency: "monthly" };
+  if (period === 3) return { frequency: "quarterly" };
+  if (period === 12) return { frequency: "annual" };
+  return { reason: `billed every ${period} months, which is not a supported billing frequency` };
+}
+
+function guessPricingModel(description: string): ContractLineInput["pricingModel"] {
+  const d = description.toLowerCase();
+  if (/\b(device|devices|endpoint|endpoints|workstation|workstations|server|servers|pc|pcs|laptop|laptops|machine|machines)\b/.test(d)) return "per_device";
+  if (/\b(user|users|seat|seats|mailbox|mailboxes|licence|licences|license|licenses|per person|staff)\b/.test(d)) return "per_user";
+  return "fixed";
+}
+
+export async function listXeroRepeatingInvoices() {
+  const resolved = await getXeroClient();
+  if (!resolved) return { rows: [], mode: null as "live" | "demo" | null };
+  const [raw, companyLinks, contractLinks] = await Promise.all([resolved.client.listRepeatingInvoices(), listLinks("xero", "company"), listLinks("xero", "contract")]);
+  const companyByContact = new Map(companyLinks.map((l) => [l.externalId, l.localId]));
+  const contractByTemplate = new Map(contractLinks.map((l) => [l.externalId, l.localId]));
+  const companyIds = [...new Set(companyByContact.values())];
+  const names = companyIds.length ? await db.select({ id: companies.id, name: companies.name }).from(companies).where(inArray(companies.id, companyIds)) : [];
+  const nameById = new Map(names.map((c) => [c.id, c.name]));
+  const rows = raw
+    .filter((r) => r.Type === "ACCREC" && r.Status !== "DELETED")
+    .map((r) => {
+      const companyId = r.Contact?.ContactID ? (companyByContact.get(r.Contact.ContactID) ?? null) : null;
+      const freq = repeatingFrequency(r.Schedule);
+      const monthly = "frequency" in freq ? (r.SubTotal ?? 0) / (freq.frequency === "annual" ? 12 : freq.frequency === "quarterly" ? 3 : 1) : null;
+      return {
+        id: r.RepeatingInvoiceID,
+        reference: r.Reference ?? null,
+        status: r.Status,
+        contactId: r.Contact?.ContactID ?? null,
+        contactName: r.Contact?.Name ?? null,
+        companyId,
+        companyName: companyId ? (nameById.get(companyId) ?? null) : null,
+        schedule: r.Schedule?.Unit === "WEEKLY" ? `every ${r.Schedule.Period ?? 1} week(s)` : `every ${r.Schedule?.Period ?? 1} month(s)`,
+        frequency: "frequency" in freq ? freq.frequency : null,
+        unsupportedReason: "reason" in freq ? freq.reason : null,
+        nextDate: xeroDateOnly(r.Schedule?.NextScheduledDate),
+        endDate: xeroDateOnly(r.Schedule?.EndDate),
+        lineCount: r.LineItems?.length ?? 0,
+        subTotal: r.SubTotal ?? 0,
+        monthlyValue: monthly,
+        inclusive: r.LineAmountTypes === "Inclusive",
+        contractId: contractByTemplate.get(r.RepeatingInvoiceID) ?? null,
+      };
+    })
+    .sort((a, b) => (a.companyName ?? a.contactName ?? "").localeCompare(b.companyName ?? b.contactName ?? ""));
+  return { rows, mode: resolved.mode };
+}
+
+export type RepeatingImportResult = { id: string; reference: string | null; action: "created" | "skipped"; contractId?: string; reason?: string };
+
+/**
+ * Creates a DRAFT contract from one repeating invoice template: one recurring line per Xero line item,
+ * priced tax-exclusive, matched to catalogue products by item code (which sets the pricing model, cost
+ * and device-count comparison). The contract is linked to the template so re-running never duplicates.
+ * Nothing is activated automatically; a person reviews the draft.
+ */
+export async function importRepeatingInvoiceAsContract(templateId: string, actorUserId: string): Promise<RepeatingImportResult> {
+  const resolved = await getXeroClient();
+  if (!resolved) throw new ActionError("Xero is not connected.");
+  const all = await resolved.client.listRepeatingInvoices();
+  const r = all.find((x) => x.RepeatingInvoiceID === templateId);
+  if (!r) throw new ActionError("That repeating invoice no longer exists in Xero.");
+  const ref = r.Reference ?? null;
+  if (await getLinkByExternal("xero", "contract", templateId)) return { id: templateId, reference: ref, action: "skipped", reason: "already imported" };
+  if (r.Type !== "ACCREC") return { id: templateId, reference: ref, action: "skipped", reason: "supplier bill, not a sales template" };
+  if (r.Status !== "AUTHORISED") return { id: templateId, reference: ref, action: "skipped", reason: `template is ${r.Status.toLowerCase()} in Xero` };
+  const link = r.Contact?.ContactID ? await getLinkByExternal("xero", "company", r.Contact.ContactID) : null;
+  if (!link) return { id: templateId, reference: ref, action: "skipped", reason: `Xero contact "${r.Contact?.Name ?? "unknown"}" is not linked to a CRM company; import or link it first` };
+  const freq = repeatingFrequency(r.Schedule);
+  if ("reason" in freq) return { id: templateId, reference: ref, action: "skipped", reason: freq.reason };
+  const products = await listProducts({ includeInactive: true });
+  const bySku = new Map(products.filter((p) => p.sku).map((p) => [p.sku!.toUpperCase(), p]));
+  const notes: string[] = [`Imported from Xero repeating invoice ${ref ? `"${ref}" ` : ""}(${templateId}) on ${new Date().toISOString().slice(0, 10)}. Review the lines, then set the status to active.`];
+  if (r.LineAmountTypes === "Inclusive") notes.push("Xero amounts are tax-inclusive; unit prices were converted to tax-exclusive using each line's tax amount.");
+  const lines: ContractLineInput[] = [];
+  for (const li of r.LineItems ?? []) {
+    const qty = Number(li.Quantity ?? 1) || 1;
+    let unit = Number(li.UnitAmount ?? 0);
+    if (r.LineAmountTypes === "Inclusive") {
+      const exclusive = Number(li.LineAmount ?? unit * qty) - Number(li.TaxAmount ?? 0);
+      unit = li.TaxAmount !== undefined ? exclusive / qty : unit;
+      if (li.TaxAmount === undefined) notes.push(`Line "${li.Description ?? li.ItemCode ?? ""}": tax amount not provided, price left tax-inclusive.`);
+    }
+    const product = li.ItemCode ? (bySku.get(li.ItemCode.toUpperCase()) ?? null) : null;
+    const description = (li.Description ?? product?.name ?? li.ItemCode ?? "Recurring service").slice(0, 300);
+    lines.push(
+      contractLineSchema.parse({
+        productId: product?.id ?? "",
+        description,
+        revenueType: "recurring",
+        pricingModel: product?.pricingModel ?? guessPricingModel(description),
+        billingFrequency: freq.frequency,
+        quantity: qty,
+        unitPrice: Math.round(unit * 100) / 100,
+        unitCost: product?.unitCost ?? "",
+        countsAsManagedDevice: product?.countsAsManagedDevice ?? false,
+      }),
+    );
+    if (!product && li.ItemCode) notes.push(`Line "${description}": item code ${li.ItemCode} has no matching catalogue product.`);
+  }
+  if (!lines.length) return { id: templateId, reference: ref, action: "skipped", reason: "template has no line items" };
+  const startDate = xeroDateOnly(r.Schedule?.StartDate) ?? new Date().toISOString().slice(0, 10);
+  const endDate = xeroDateOnly(r.Schedule?.EndDate);
+  const input = contractSchema.parse({
+    companyId: link.localId,
+    name: ref ? ref : `Recurring services (Xero)`,
+    reference: `XERO-RI-${templateId.slice(0, 8).toUpperCase()}`,
+    status: "draft",
+    startDate,
+    endDate: endDate ?? "",
+    renewalDate: endDate ?? "",
+    billingFrequency: freq.frequency,
+    autoRenew: endDate ? "false" : "true",
+    notes: notes.join("\n"),
+  });
+  const contractId = await createContract(input, lines, actorUserId);
+  await createLink({ provider: "xero", entityType: "contract", localId: contractId, externalId: templateId, externalName: ref ?? undefined, externalType: "repeating_invoice", source: "import" }, actorUserId);
+  await logActivity({ type: "contract", companyId: link.localId, entityType: "contract", entityId: contractId, title: `Draft contract imported from Xero repeating invoice${ref ? ` "${ref}"` : ""}`, actorUserId, source: "xero" });
+  await audit({ actorUserId, action: "xero.repeating_invoice.import", entityType: "contract", entityId: contractId, details: { templateId, reference: ref, lines: lines.length, frequency: freq.frequency } });
+  return { id: templateId, reference: ref, action: "created", contractId };
+}
+
+export async function importAllRepeatingInvoices(actorUserId: string) {
+  const { rows } = await listXeroRepeatingInvoices();
+  const results: RepeatingImportResult[] = [];
+  for (const r of rows) if (!r.contractId) results.push(await importRepeatingInvoiceAsContract(r.id, actorUserId));
+  return { created: results.filter((r) => r.action === "created").length, skipped: results.filter((r) => r.action === "skipped"), results };
 }

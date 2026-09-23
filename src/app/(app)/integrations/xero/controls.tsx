@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { useActionState, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { RefreshCw, Stethoscope, Link2, Plus, Unlink, Upload } from "lucide-react";
+import { RefreshCw, Stethoscope, Link2, Plus, Unlink, Upload, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Field, Select, Input, SubmitButton, FormMessage } from "@/components/ui/form";
-import { createXeroContactAction, importAllXeroCustomersAction, importXeroContactAction, linkXeroContactAction, pushContactToXeroAction, selectTenantAction, syncXeroAction, testXeroAction, unlinkXeroContactAction } from "@/actions/xero";
+import { createXeroContactAction, importAllRepeatingInvoicesAction, importRepeatingInvoiceAction, importAllXeroCustomersAction, importXeroContactAction, linkXeroContactAction, pushContactToXeroAction, selectTenantAction, syncXeroAction, testXeroAction, unlinkXeroContactAction } from "@/actions/xero";
 import { saveIntegrationConfigAction } from "@/actions/integrations";
 import type { XeroMatch } from "@/services/xero";
 
@@ -299,6 +299,102 @@ export function UnlinkedCustomersTable({ rows, canManage, currency }: { rows: Un
                       <Plus className="h-3.5 w-3.5" /> Create company
                     </Button>
                   </span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+type RepeatingRow = { id: string; reference: string | null; status: string; contactName: string | null; companyId: string | null; companyName: string | null; schedule: string; frequency: string | null; unsupportedReason: string | null; nextDate: string | null; lineCount: number; subTotal: number; monthlyValue: number | null; inclusive: boolean; contractId: string | null };
+
+export function ImportAllRepeatingButton() {
+  const [pending, start] = useTransition();
+  const [msg, setMsg] = useState<string | null>(null);
+  const router = useRouter();
+  return (
+    <span className="inline-flex items-center gap-2">
+      <Button size="sm" loading={pending} onClick={() => start(async () => { const r = await importAllRepeatingInvoicesAction(); setMsg(r.ok ? `${r.data.created} draft contracts created${r.data.skipped.length ? `, ${r.data.skipped.length} skipped` : ""}` : r.error); router.refresh(); })}>
+        <FileText className="h-3.5 w-3.5" /> Import all as draft contracts
+      </Button>
+      {msg && <span className="text-xs text-slate-600">{msg}</span>}
+    </span>
+  );
+}
+
+export function RepeatingInvoicesTable({ rows, canWrite, currency }: { rows: RepeatingRow[]; canWrite: boolean; currency: string }) {
+  const [msg, setMsg] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  const router = useRouter();
+  const money = (n: number) => new Intl.NumberFormat("en-GB", { style: "currency", currency }).format(n);
+  const run = (id: string) =>
+    start(async () => {
+      const r = await importRepeatingInvoiceAction(id);
+      setMsg(r.ok ? (r.data.action === "skipped" ? `Skipped: ${r.data.reason}` : null) : r.error);
+      router.refresh();
+    });
+  if (rows.length === 0) return <p className="p-4 text-sm text-slate-500">No sales repeating invoices in Xero.</p>;
+  return (
+    <div>
+      <p className="border-b border-slate-200 px-4 py-2 text-xs text-slate-500">Each authorised template becomes a <strong>draft</strong> contract with one recurring line per Xero line, priced tax-exclusive. Item codes that match a catalogue SKU pick up that product&apos;s pricing model, cost and device-count comparison. Review each draft, then set it active. Nothing is activated or billed automatically.</p>
+      {msg && <p className="px-4 py-2 text-sm text-red-700">{msg}</p>}
+      <table className={`tbl ${pending ? "opacity-70" : ""}`}>
+        <thead>
+          <tr>
+            <th>Customer</th>
+            <th>Template</th>
+            <th>Schedule</th>
+            <th className="text-right">Per invoice (ex tax)</th>
+            <th className="text-right">≈ MRR</th>
+            <th>Contract</th>
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.id}>
+              <td>
+                {r.companyId ? (
+                  <Link href={`/companies/${r.companyId}`} className="font-medium text-brand-700 hover:underline">
+                    {r.companyName}
+                  </Link>
+                ) : (
+                  <span>
+                    {r.contactName} <Badge tone="amber">not linked</Badge>
+                  </span>
+                )}
+              </td>
+              <td>
+                {r.reference ?? <span className="text-slate-400">no reference</span>}
+                <div className="text-xs text-slate-500">
+                  {r.lineCount} line{r.lineCount === 1 ? "" : "s"}
+                  {r.inclusive && " · tax-inclusive"}
+                  {r.status !== "AUTHORISED" && <Badge className="ml-1" tone="slate">{r.status.toLowerCase()}</Badge>}
+                </div>
+              </td>
+              <td className="text-xs">
+                {r.schedule}
+                {r.unsupportedReason ? <div className="text-amber-700">{r.unsupportedReason}</div> : <div className="text-slate-500">next {r.nextDate ?? "—"}</div>}
+              </td>
+              <td className="text-right tabular-nums">{money(r.subTotal)}</td>
+              <td className="text-right tabular-nums">{r.monthlyValue === null ? "—" : money(r.monthlyValue)}</td>
+              <td>
+                {r.contractId ? (
+                  <Link href={`/contracts/${r.contractId}`} className="text-brand-700 hover:underline">
+                    imported
+                  </Link>
+                ) : (
+                  <span className="text-xs text-slate-400">none</span>
+                )}
+              </td>
+              <td className="text-right">
+                {canWrite && !r.contractId && r.companyId && !r.unsupportedReason && r.status === "AUTHORISED" && (
+                  <Button size="sm" variant="ghost" onClick={() => run(r.id)}>
+                    <FileText className="h-3.5 w-3.5" /> Create draft contract
+                  </Button>
                 )}
               </td>
             </tr>

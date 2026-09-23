@@ -1,4 +1,4 @@
-import type { CreateInvoiceInput, XeroClient, XeroContactRaw, XeroInvoiceRaw, XeroPaymentRaw } from "./types";
+import type { CreateInvoiceInput, XeroClient, XeroContactRaw, XeroInvoiceRaw, XeroPaymentRaw, XeroRepeatingInvoiceRaw } from "./types";
 
 /**
  * DEMO adapter for Xero: an in-memory organisation with a few customers,
@@ -74,6 +74,21 @@ export function demoXeroTouchContact(contactId: string, patch: Partial<XeroConta
 const modifiedSince = <T extends { UpdatedDateUTC?: string }>(rows: T[], since?: Date) => (since ? rows.filter((r) => !r.UpdatedDateUTC || new Date(r.UpdatedDateUTC) >= since) : rows);
 const paginate = <T>(rows: T[], page: number, size = 100) => rows.slice((page - 1) * size, page * size);
 
+/** Repeating invoice templates: a monthly one with catalogue item codes, a quarterly one, a weekly one (unsupported), a draft, and a supplier bill. */
+const repeating: XeroRepeatingInvoiceRaw[] = [
+  { RepeatingInvoiceID: "demo-ri-1", Type: "ACCREC", Status: "AUTHORISED", Contact: { ContactID: "demo-c-2", Name: "Northern Freight Solutions Ltd" }, Schedule: { Period: 1, Unit: "MONTHLY", DueDate: 30, DueDateType: "DAYSAFTERBILLDATE", StartDate: "/Date(1767225600000+0000)/", NextScheduledDate: "/Date(1790812800000+0000)/" }, LineAmountTypes: "Exclusive", Reference: "Managed IT & Security", CurrencyCode: "GBP", LineItems: [
+    { Description: "Managed user support", Quantity: 32, UnitAmount: 45, ItemCode: "MIT-USER", AccountCode: "201", TaxType: "OUTPUT2", LineAmount: 1440 },
+    { Description: "Managed device (RMM + patching)", Quantity: 40, UnitAmount: 12, ItemCode: "MIT-DEV", AccountCode: "201", TaxType: "OUTPUT2", LineAmount: 480 },
+    { Description: "Firewall monitoring", Quantity: 2, UnitAmount: 35, AccountCode: "201", TaxType: "OUTPUT2", LineAmount: 70 },
+  ], SubTotal: 1990, TotalTax: 398, Total: 2388 },
+  { RepeatingInvoiceID: "demo-ri-2", Type: "ACCREC", Status: "AUTHORISED", Contact: { ContactID: "demo-c-1", Name: "Harrowgate Dental Practice" }, Schedule: { Period: 3, Unit: "MONTHLY", DueDate: 14, DueDateType: "DAYSAFTERBILLDATE", StartDate: "/Date(1775001600000+0000)/", NextScheduledDate: "/Date(1790812800000+0000)/", EndDate: "/Date(1806451200000+0000)/" }, LineAmountTypes: "Inclusive", Reference: "Quarterly support", CurrencyCode: "GBP", LineItems: [
+    { Description: "Endpoint protection (18 devices)", Quantity: 18, UnitAmount: 18, TaxType: "OUTPUT2", TaxAmount: 54, LineAmount: 324 },
+  ], SubTotal: 270, TotalTax: 54, Total: 324 },
+  { RepeatingInvoiceID: "demo-ri-3", Type: "ACCREC", Status: "AUTHORISED", Contact: { ContactID: "demo-c-3", Name: "Ridgeway Architects" }, Schedule: { Period: 1, Unit: "WEEKLY", StartDate: "/Date(1767225600000+0000)/" }, LineAmountTypes: "Exclusive", Reference: "Weekly on-site", CurrencyCode: "GBP", LineItems: [{ Description: "On-site day", Quantity: 1, UnitAmount: 450, LineAmount: 450 }], SubTotal: 450, TotalTax: 90, Total: 540 },
+  { RepeatingInvoiceID: "demo-ri-4", Type: "ACCREC", Status: "DRAFT", Contact: { ContactID: "demo-c-4", Name: "Greenfield Primary Academy" }, Schedule: { Period: 1, Unit: "MONTHLY", StartDate: "/Date(1767225600000+0000)/" }, LineAmountTypes: "Exclusive", Reference: "Draft template", LineItems: [{ Description: "Draft", Quantity: 1, UnitAmount: 1, LineAmount: 1 }], SubTotal: 1, TotalTax: 0, Total: 1 },
+  { RepeatingInvoiceID: "demo-ri-5", Type: "ACCPAY", Status: "AUTHORISED", Contact: { ContactID: "demo-c-6", Name: "Old Supplier Ltd" }, Schedule: { Period: 1, Unit: "MONTHLY" }, LineItems: [{ Description: "Hosting", Quantity: 1, UnitAmount: 99, LineAmount: 99 }], SubTotal: 99, TotalTax: 0, Total: 99 },
+];
+
 export class DemoXeroClient implements XeroClient {
   readonly mode = "demo" as const;
   constructor() {
@@ -131,6 +146,9 @@ export class DemoXeroClient implements XeroClient {
   }
   async listPayments(opts: { page: number; ifModifiedSince?: Date }) {
     return paginate(modifiedSince([...payments.values()], opts.ifModifiedSince), opts.page);
+  }
+  async listRepeatingInvoices() {
+    return repeating;
   }
   async listAccounts() {
     return [

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireActionPermission } from "@/lib/session";
 import { runAction, type ActionResult } from "@/lib/action-result";
-import { approveAndCreateInvoice, cancelInvoiceDraft, createXeroContactForCompany, importAllXeroCustomers, importXeroContactAsCompany, linkCompanyToXeroContact, prepareInvoiceDraft, pushContactDetailsToXero, selectXeroTenant, syncXero, testXero, updateInvoiceDraft } from "@/services/xero";
+import { approveAndCreateInvoice, cancelInvoiceDraft, createXeroContactForCompany, importAllRepeatingInvoices, importRepeatingInvoiceAsContract, importAllXeroCustomers, importXeroContactAsCompany, linkCompanyToXeroContact, prepareInvoiceDraft, pushContactDetailsToXero, selectXeroTenant, syncXero, testXero, updateInvoiceDraft } from "@/services/xero";
 import { removeLink, getLink } from "@/services/integrations";
 import type { InvoiceDraftLine } from "@/db/schema";
 
@@ -136,5 +136,25 @@ export async function importAllXeroCustomersAction(): Promise<ActionResult<{ cre
     const r = await importAllXeroCustomers(u.id);
     revalidateXero();
     return { created: r.created, linked: r.linked, skipped: r.skipped.map((s) => ({ name: s.name, reason: s.reason })) };
+  });
+}
+
+export async function importRepeatingInvoiceAction(templateId: string): Promise<ActionResult<{ action: string; contractId?: string; reason?: string }>> {
+  return runAction(async () => {
+    const u = await requireActionPermission("contract.write");
+    const r = await importRepeatingInvoiceAsContract(z.string().min(1).parse(templateId), u.id);
+    revalidateXero();
+    revalidatePath("/contracts", "layout");
+    return { action: r.action, contractId: r.contractId, reason: r.reason };
+  });
+}
+
+export async function importAllRepeatingInvoicesAction(): Promise<ActionResult<{ created: number; skipped: { reference: string | null; reason?: string }[] }>> {
+  return runAction(async () => {
+    const u = await requireActionPermission("contract.write");
+    const r = await importAllRepeatingInvoices(u.id);
+    revalidateXero();
+    revalidatePath("/contracts", "layout");
+    return { created: r.created, skipped: r.skipped.map((s) => ({ reference: s.reference, reason: s.reason })) };
   });
 }
