@@ -210,3 +210,25 @@ Public 20i API guides (bearer auth with the base64-encoded general API key, `GET
 
 - Connect the real reseller key on the VPS and run one sync; check the sync errors panel for any endpoint whose shape differs (usage and mailbox listing are the likely ones) and adjust the parser.
 - SSL certificates (`kind = ssl`) are reserved but not fetched yet: the certificate listing endpoint shape was not verifiable from public material.
+
+## Company record page redesign ✅
+
+Built to the brief in the owner's redesign document: a compact company summary with horizontal section navigation, Activity as its own section, no timeline or logging form on Overview.
+
+### What changed
+
+- **Header**: 38px initials tile, company name (22px), email with the status badge and tags beside it, a small **Edit** button and an overflow menu (`⋯`, labelled "More actions") holding **Archive company** / **Restore company** behind the existing confirmation flow and `company.delete` permission. A slim metadata line shows owner, created date, website and phone.
+- **Section navigation** (`src/components/company/section-nav.tsx`): real links (`?tab=…`, so deep links and the back button work) in the order Overview, Contacts, Sites, Opportunities, Proposals, Contracts, Invoices, Devices, Hosting, Tasks, Secure Vault (when the user may see it), Activity. Quiet count badges for non-zero counts only. When the row is too narrow, trailing sections move into a **More** menu (measured with a ResizeObserver) instead of wrapping; when the active section is inside the menu the trigger shows its name. Only the active section is rendered on the server.
+- **Overview**: one bordered summary surface in three columns with subtle separators (stacked with horizontal dividers on mobile): company information (industry, company number, VAT number, custom fields) as label/value rows with muted dashes for blanks; the billing address as text; linked services (20i hosting names, NinjaOne device count, Xero invoice count, Secure Vault item count) linking to their sections, shown only when the data confirms the relationship. Internal notes below when present. A quiet footer with contact, site and task counts (open tasks in brackets) and **View activity →**.
+- **Activity** (`src/components/company/activity-panel.tsx`): heading, **Log activity** button that reveals the existing NoteForm (same fields, validation, action and refresh), and compact rows (icon, title, details, timestamp and author right-aligned on desktop, stacked on small screens).
+- All other sections keep their previous content and permissions.
+
+### What was tested
+
+- Browser suite (20 tests) updated to open sections through the navigation or the More menu (`tests/e2e/helpers.ts`), and Phase 1 now checks the creation event under Activity rather than on Overview.
+- Screenshots at 1280, 900 and 390px: three columns side by side on desktop, More menu at tablet width with the active section identifiable, stacked summary and wrapped long company name on mobile, no horizontal overflow.
+
+### Limitations
+
+- The app has no dark mode yet (see backlog), so only the light palette was applied using the existing tokens.
+- Count badges use the same definitions as before: open opportunities, active contracts, active devices, open tasks, unarchived vault items.

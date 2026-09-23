@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { openSection } from "./helpers";
 
 const PASSWORD = "Admin12345!";
 
@@ -39,7 +40,7 @@ test("company page has a Devices tab with counts, and the contract shows observe
   await login(page, "admin@example.com");
   await page.goto("/companies");
   await page.getByRole("link", { name: "Northern Freight Solutions Ltd" }).click();
-  await page.getByRole("tab", { name: /Devices/ }).click();
+  await openSection(page, /Devices/);
   await expect(page.getByText(/Devices · Northern Freight Solutions/)).toBeVisible();
   await expect(page.getByText("Billable class")).toBeVisible();
   await expect(page.getByRole("cell", { name: /NFS-BR-1/ }).first()).toBeVisible();

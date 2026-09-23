@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { openSection } from "./helpers";
 
 const PASSWORD = "Admin12345!";
 
@@ -39,14 +40,14 @@ test("company Hosting tab nests mailboxes under the package and a finance user c
   await login(page, "admin@example.com");
   await page.goto("/companies");
   await page.getByRole("link", { name: "Northern Freight Solutions Ltd" }).click();
-  await page.getByRole("tab", { name: /Hosting/ }).click();
+  await openSection(page, /Hosting/);
   await expect(page.getByText(/Hosting at 20i · 1 package/)).toBeVisible();
   await expect(page.getByRole("cell", { name: /info@northernfreight\.co\.uk/ })).toBeVisible();
   const row = page.getByRole("row", { name: /northernfreight\.co\.uk/ }).filter({ has: page.getByText("package") }).first();
   await row.getByLabel("Billed by contract line").selectOption({ index: 1 });
   await expect(row.getByLabel("Billed by contract line")).not.toHaveValue("");
   await page.reload();
-  await page.getByRole("tab", { name: /Hosting/ }).click();
+  await openSection(page, /Hosting/);
   await expect(page.getByRole("row", { name: /northernfreight\.co\.uk/ }).filter({ has: page.getByText("package") }).first().getByLabel("Billed by contract line")).not.toHaveValue("");
   await expect(page.getByText("Invoices mentioning this hosting")).toBeVisible();
 
@@ -55,7 +56,7 @@ test("company Hosting tab nests mailboxes under the package and a finance user c
   await login(page, "readonly@example.com");
   await page.goto("/companies");
   await page.getByRole("link", { name: "Northern Freight Solutions Ltd" }).click();
-  await page.getByRole("tab", { name: /Hosting/ }).click();
+  await openSection(page, /Hosting/);
   await expect(page.getByLabel("Billed by contract line")).toHaveCount(0);
   await page.goto("/integrations/twentyi");
   await expect(page.getByRole("button", { name: "Verify and connect" })).toHaveCount(0);

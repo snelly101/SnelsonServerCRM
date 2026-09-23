@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { openSection } from "./helpers";
 
 const PASSWORD = "Admin12345!";
 
@@ -35,7 +36,7 @@ test("sales user cannot see Finance or approve, and the company page hides finan
   await expect(page).toHaveURL(/\/forbidden/);
   await page.goto("/companies");
   await page.getByRole("link", { name: "Northern Freight Solutions Ltd" }).click();
-  await page.getByRole("tab", { name: /Invoices/ }).click();
+  await openSection(page, /Invoices/);
   await expect(page.getByText("Finance data is restricted")).toBeVisible();
 });
 
