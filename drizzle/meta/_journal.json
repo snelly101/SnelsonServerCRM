@@ -50,6 +50,13 @@
       "when": 1790184918550,
       "tag": "0006_secure_vault",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790193362182,
+      "tag": "0007_hosting_20i",
+      "breakpoints": true
     }
   ]
 }

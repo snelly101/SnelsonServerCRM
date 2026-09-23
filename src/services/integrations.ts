@@ -6,9 +6,9 @@ import { audit } from "@/lib/audit";
 import { ActionError } from "@/lib/action-result";
 import { logger } from "@/lib/logger";
 
-export type Provider = "betterproposals" | "xero" | "ninjaone";
-export const PROVIDERS: Provider[] = ["betterproposals", "xero", "ninjaone"];
-export const PROVIDER_LABELS: Record<Provider, string> = { betterproposals: "Better Proposals", xero: "Xero", ninjaone: "NinjaOne" };
+export type Provider = "betterproposals" | "xero" | "ninjaone" | "twentyi";
+export const PROVIDERS: Provider[] = ["betterproposals", "xero", "ninjaone", "twentyi"];
+export const PROVIDER_LABELS: Record<Provider, string> = { betterproposals: "Better Proposals", xero: "Xero", ninjaone: "NinjaOne", twentyi: "20i Hosting" };
 
 /** Demo adapters are only ever selected when DEMO_MODE=true. Deployment docs set it to false; the UI labels demo data everywhere. */
 export const demoModeEnabled = () => process.env.DEMO_MODE === "true";

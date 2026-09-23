@@ -90,6 +90,29 @@ Ideas and requests not yet scheduled. Each item states what it is, why, and the 
 - Visible to all roles that can read the company; editable by roles with `company.write`.
 - Later: per-site notes and per-contact notes using the same component.
 
+## 20i hosting: follow-ups
+
+**Status:** Phase 8 built the read-only mirror, company linking, billing-line link, related invoices and expiry reminders.
+
+- SSL certificate inventory once the listing endpoint shape is confirmed on the live account (`hosting_items.kind = ssl` is reserved).
+- Reconcile 20i's charges to the reseller (domain and package renewals) against what the customer's contract line bills, to surface hosting margin leaks.
+- Write actions behind confirmation and audit: renew a domain, create a mailbox or reset its password, suspend a package for non-payment, edit DNS from the company page.
+- Helpdesk sidebar showing the sender's hosting and mailbox state once the email helpdesk exists.
+
+## Pax8 integration (Microsoft 365 and other cloud subscriptions)
+
+**What:** connect the Pax8 Partner API so each customer's subscriptions (Microsoft 365 licences, Acronis, security add-ons) are mirrored against the CRM company, with quantities, unit cost, billing term and renewal dates.
+
+**Why:** licence counts drift between Pax8, the customer's contract and the Xero invoice. Seeing all three side by side catches under-billing the same way the NinjaOne device comparison does.
+
+**Design notes and decisions needed:**
+- Pax8 Partner API: OAuth client-credentials (client id/secret from the Pax8 portal), `GET /companies`, `GET /subscriptions`, `GET /products`, `GET /invoices` and invoice items. Entered in the Integrations UI, stored encrypted like the other connectors.
+- Read-only first: mirror companies and subscriptions, link Pax8 companies to CRM companies (same mapping table pattern as NinjaOne/20i, with domain and name suggestions), show a **Subscriptions** tab on the company page.
+- Compare subscription quantity with the matching per-user contract line (product matched by SKU) and raise review items for differences, reusing the discrepancy engine; billing is never changed automatically.
+- Cost side: Pax8 partner cost per licence feeds contract line unit cost so margin on the Contracts page is real, not the catalogue estimate.
+- Later, write actions from the CRM (increase or decrease a licence quantity) behind confirmation and audit; they are customer-billable changes so they need the same care as vault reveals.
+- Decisions: which subscriptions are in scope (all vs Microsoft only), whether Pax8 invoices should be reconciled against Xero bills, and who may adjust quantities.
+
 ## Dark mode
 
 **What:** a dark theme for the whole app with a three-way setting per user (system, light, dark) in the user menu, remembered across devices.

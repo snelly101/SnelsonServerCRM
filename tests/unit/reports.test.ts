@@ -105,7 +105,7 @@ describe("reports", () => {
     expect(dev.demo).toBe(true);
     expect(dev.isEstimate).toBe(true);
     const h = await integrationHealthReport();
-    expect(h.providers).toHaveLength(3);
+    expect(h.providers).toHaveLength(4);
     for (const p of h.providers) {
       expect(p.demo).toBe(true);
       expect(p.status).not.toBe("connected");

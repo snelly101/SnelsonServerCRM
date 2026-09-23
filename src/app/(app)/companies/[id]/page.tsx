@@ -34,6 +34,8 @@ import { ExternalLink } from "lucide-react";
 import { companyFinancialSummary, xeroConnectionSummary } from "@/services/xero";
 import { fmtRelative } from "@/lib/format";
 import { companyDeviceOverview } from "@/services/ninjaone";
+import { companyHostingOverview } from "@/services/twentyi";
+import { HostingPanel } from "@/components/hosting-panel";
 import { DeviceTable, FRESHNESS_LABEL, FRESHNESS_TONE } from "@/components/device-table";
 import { DiscrepancyTable } from "@/app/(app)/devices/discrepancies";
 import { listCategories, listVaultItems, resolveCapabilities } from "@/services/vault";
@@ -44,7 +46,7 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
   const me = await requirePermission("company.read");
   const { id } = await params;
   const sp = await searchParams;
-  const [company, timeline, defs, settings, opportunities, companyContracts, companyTasks, onboardingList, owners, proposalList, finance, xero, devices] = await Promise.all([
+  const [company, timeline, defs, settings, opportunities, companyContracts, companyTasks, onboardingList, owners, proposalList, finance, xero, devices, hosting] = await Promise.all([
     getCompany(id),
     getCompanyTimeline(id),
     listCustomFieldDefs("company"),
@@ -58,6 +60,7 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
     can(me.role, "finance.read") ? companyFinancialSummary(id) : Promise.resolve(null),
     xeroConnectionSummary(),
     can(me.role, "device.read") ? companyDeviceOverview(id) : Promise.resolve(null),
+    companyHostingOverview(id),
   ]);
   if (!company) notFound();
   const vaultCaps = await resolveCapabilities(me.id, me.role, id);
@@ -137,7 +140,7 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
-          <Tabs defaultValue={sp.tab === "vault" && vaultCaps.list ? "vault" : "overview"}>
+          <Tabs defaultValue={sp.tab === "vault" && vaultCaps.list ? "vault" : sp.tab === "hosting" ? "hosting" : "overview"}>
             <TabsList>
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="contacts" count={company.contacts.length}>
@@ -160,6 +163,9 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
               </TabsTrigger>
               <TabsTrigger value="devices" count={devices?.totals.active}>
                 Devices
+              </TabsTrigger>
+              <TabsTrigger value="hosting" count={hosting ? hosting.totals.packages + hosting.totals.domains : undefined}>
+                Hosting
               </TabsTrigger>
               <TabsTrigger value="tasks" count={companyTasks.rows.filter((t) => t.status === "open").length}>
                 Tasks
@@ -594,6 +600,9 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
                   </Card>
                 </div>
               )}
+            </TabsContent>
+            <TabsContent value="hosting">
+              <HostingPanel overview={hosting} canEdit={can(me.role, "contract.write")} canManageIntegrations={can(me.role, "integration.manage")} settings={settings} companyId={id} />
             </TabsContent>
             {vaultCaps.list && vault && (
               <TabsContent value="vault">
