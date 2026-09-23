@@ -239,10 +239,10 @@ export function BillingLineSelect({ itemId, value, lines, canEdit }: { itemId: s
   const current = lines.find((l) => l.id === value);
   if (!canEdit) return <span className="text-xs">{current ? `${current.description} (${current.contractName})` : <span className="text-amber-700">not billed</span>}</span>;
   return (
-    <span className="inline-flex flex-col gap-0.5">
+    <span className="flex w-full min-w-0 flex-col gap-0.5">
       <Select
         aria-label="Billed by contract line"
-        className={`h-7 w-auto max-w-[260px] text-xs ${pending ? "opacity-60" : ""}`}
+        className={`py-1 text-xs ${pending ? "opacity-60" : ""}`}
         value={value ?? ""}
         onChange={(e) =>
           start(async () => {
@@ -254,8 +254,8 @@ export function BillingLineSelect({ itemId, value, lines, canEdit }: { itemId: s
       >
         <option value="">— not billed —</option>
         {lines.map((l) => (
-          <option key={l.id} value={l.id}>
-            {l.description} · {l.contractName}{l.contractStatus === "draft" ? " (draft)" : ""}
+          <option key={l.id} value={l.id} title={l.contractName}>
+            {l.description}{l.contractStatus === "draft" ? " (draft)" : ""} · {l.contractName}
           </option>
         ))}
       </Select>
