@@ -20,6 +20,49 @@ Ideas and requests not yet scheduled. Each item states what it is, why, and the 
 - Backups already encrypt the database dump; document that the vault key must be backed up separately like the encryption key.
 - Out of scope for the first version: browser extension, sharing links, TOTP seeds.
 
+## Two-factor authentication for CRM sign-in
+
+**What:** a second factor on every staff login: authenticator app (TOTP) as the baseline, with recovery codes; optionally passkeys/WebAuthn and an admin switch to make it mandatory per role.
+
+**Why:** the CRM now holds customer credentials (Secure Vault) and financial data; a phished or reused staff password should not be enough on its own.
+
+**Design notes:**
+- Better Auth's `twoFactor` plugin provides TOTP enrolment, verification and backup codes on the existing session model; the CRM already has an RFC 6238 implementation (`src/lib/totp.ts`) if a custom path is preferred.
+- Enrolment under the user's profile: QR code + manual key, verify one code, download recovery codes (shown once). Admins can reset a user's second factor from Settings → Users; the reset is audited.
+- Enforcement: setting "require 2FA for roles: admin, technician, finance" with a grace period; users without it are sent to enrolment after sign-in. Microsoft SSO users inherit Entra's MFA and can be exempted per policy.
+- The vault step-up could accept a TOTP code as an alternative to the password once 2FA exists.
+- Remember-device option (30 days, cookie bound to the browser) to keep it tolerable day to day.
+
+## Photos and file attachments on a company
+
+**What:** attach photos and documents to a company (and later a site or vault item): comms cabinet photos, floor plans, contracts, network diagrams. Thumbnail grid on the company page, full-size viewer, download, delete, who uploaded and when.
+
+**Design notes:**
+- Storage outside the database: S3-compatible object storage (Backblaze B2 / Cloudflare R2, both already suggested for backups) with the bucket private and files served through short-lived signed URLs. Local disk on the VPS as a fallback for small installs, mounted as a Docker volume and included in the backup script.
+- `attachments` table: entity type/id, filename, MIME type, size, storage key, checksum, uploaded by, uploaded at, optional caption and tags; EXIF stripped and images resized for thumbnails on upload; virus-scan hook optional.
+- Upload from the browser straight to storage via a pre-signed PUT so large photos don't pass through the app server; limits per file (e.g. 25 MB) and per company.
+- Permissions follow the company (`company.read` to view, `company.write` to add/delete); deletion audited; retention follows the company archive.
+- Phone-friendly: camera capture on mobile browsers so engineers can photograph a cabinet on site and attach it in two taps.
+
+## Helpdesk with email-in / email-out via the engineers' Microsoft 365 mailboxes
+
+**What:** a full ticketing system inside the CRM: tickets raised by customers by email (and by staff in the UI), threaded conversations, assignment, status, priority, SLA timers, internal notes, linkage to company, contact, site, device and contract, and a queue view. Engineers reply and update tickets from the CRM **or by replying from their own Office 365 mailbox**, and customers receive replies from the engineer's address.
+
+**Why:** closes the loop between sales/contracts and day-to-day support, and keeps support history on the customer record beside contracts, devices and the vault.
+
+**Architecture notes (Microsoft Graph, no IMAP/SMTP):**
+- Register one Entra app with delegated Graph permissions `Mail.ReadWrite`, `Mail.Send`, `offline_access`; each engineer connects their mailbox once via OAuth (the CRM already has the Microsoft SSO app registration pattern). Tokens stored encrypted like the other integrations, refreshed by the worker. A shared support mailbox (e.g. support@) is connected the same way, or via application permissions restricted with an Exchange application access policy.
+- **Inbound:** Graph change notifications (webhooks) on each connected mailbox's Inbox with a 3-day subscription renewed by the worker, plus a periodic delta sync as the safety net (same pattern as Xero webhooks + hourly sync). New mail to the support address, or to an engineer where the subject carries a ticket key, becomes a ticket or a ticket message.
+- **Threading:** every outbound mail carries a ticket key in the subject (`[SS-1234]`) and a custom Internet header; replies are matched on `In-Reply-To`/`References` first, subject key second, sender + recent ticket third. Quoted history and signatures are trimmed with a reply parser.
+- **Outbound:** a reply written in the CRM is sent through the assigned engineer's mailbox with Graph `sendMail`, so the customer sees the engineer's address and the sent item lands in the engineer's Sent folder. An engineer replying from Outlook is captured by the inbound sync (the Sent folder is also watched) and attached to the ticket as their reply.
+- **Commands by email:** an engineer can change status/assignee from Outlook with a first-line command (`#close`, `#assign alex`, `#priority high`), validated against the sender being a connected, verified mailbox.
+- Attachments stored with the attachments feature above; inline images rewritten to signed URLs.
+- Data model: `tickets`, `ticket_messages` (direction, channel email/portal/internal, raw headers, body html/text, message-id), `ticket_participants`, `ticket_events` (status/assignment changes), `mailboxes` (per-user Graph connection, subscription id, delta token), `sla_policies`. Ticket numbers are a sequence.
+- UI: Helpdesk queue (mine / unassigned / all, filters by status, priority, SLA breach), ticket page with conversation, internal notes, side panel showing the customer's contract, devices and vault link, and a "Tickets" tab on the company and contact pages. Dashboard and Reports gain open tickets, SLA breaches and response times.
+- Customer-facing: auto-acknowledgement with the ticket key; optional read-only portal later.
+- Decisions needed before building: which addresses receive tickets (shared support mailbox only, or engineers' addresses too); SLA definitions per contract; whether customers may see internal notes (no by default); retention of raw email; whether NinjaOne alerts should also create tickets.
+- Effort: the largest item on the backlog, roughly the size of Phases 3 to 5 combined; sensible to split into (1) tickets + queue + UI-only replies, (2) Graph mailbox connection and inbound email, (3) engineer replies from Outlook and email commands, (4) SLAs and reporting.
+
 ## Customer notes section
 
 **What:** a free-form, rich-text notes area on the company page for standing information about the customer (site access instructions, escalation contacts, preferences, quirks), distinct from the dated activity timeline.
