@@ -850,7 +850,8 @@ export async function importRepeatingInvoiceAsContract(templateId: string, actor
   const ref = r.Reference ?? null;
   if (await getLinkByExternal("xero", "contract", templateId)) return { id: templateId, reference: ref, action: "skipped", reason: "already imported" };
   if (r.Type !== "ACCREC") return { id: templateId, reference: ref, action: "skipped", reason: "supplier bill, not a sales template" };
-  if (r.Status !== "AUTHORISED") return { id: templateId, reference: ref, action: "skipped", reason: `template is ${r.Status.toLowerCase()} in Xero` };
+  // Xero's DRAFT status on a template means "generated invoices are saved as drafts for approval", not "unused"; only DELETED is excluded.
+  if (r.Status === "DELETED") return { id: templateId, reference: ref, action: "skipped", reason: "template is deleted in Xero" };
   const link = r.Contact?.ContactID ? await getLinkByExternal("xero", "company", r.Contact.ContactID) : null;
   if (!link) return { id: templateId, reference: ref, action: "skipped", reason: `Xero contact "${r.Contact?.Name ?? "unknown"}" is not linked to a CRM company; import or link it first` };
   const freq = repeatingFrequency(r.Schedule);
@@ -860,6 +861,7 @@ export async function importRepeatingInvoiceAsContract(templateId: string, actor
   let items: Map<string, XeroItemRaw> | null = opts?.items ?? null;
   const createdProducts: string[] = [];
   const notes: string[] = [`Imported from Xero repeating invoice ${ref ? `"${ref}" ` : ""}(${templateId}) on ${new Date().toISOString().slice(0, 10)}. Review the lines, then set the status to active.`];
+  if (r.Status === "DRAFT") notes.push("The Xero template saves each generated invoice as a draft for approval.");
   if (r.LineAmountTypes === "Inclusive") notes.push("Xero amounts are tax-inclusive; unit prices were converted to tax-exclusive using each line's tax amount.");
   const lines: ContractLineInput[] = [];
   for (const li of r.LineItems ?? []) {

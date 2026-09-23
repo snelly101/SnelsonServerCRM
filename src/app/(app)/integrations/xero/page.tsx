@@ -125,7 +125,7 @@ export default async function XeroPage({ searchParams }: { searchParams: Promise
         <UnlinkedCustomersTable rows={unlinked} canManage={canManage} currency={settings.currency} />
       </Card>
 
-      <Card title={`Repeating invoices in Xero (${repeating.rows.length})`} padded={false} className="mt-4" actions={can(me.role, "contract.write") && repeating.rows.some((r) => !r.contractId && r.companyId && !r.unsupportedReason && r.status === "AUTHORISED") ? <ImportAllRepeatingButton /> : undefined}>
+      <Card title={`Repeating invoices in Xero (${repeating.rows.length})`} padded={false} className="mt-4" actions={can(me.role, "contract.write") && repeating.rows.some((r) => !r.contractId && r.companyId && !r.unsupportedReason) ? <ImportAllRepeatingButton /> : undefined}>
         {"error" in repeating && repeating.error ? <p className="p-4 text-sm text-red-700">Could not load repeating invoices: {repeating.error}</p> : <RepeatingInvoicesTable rows={repeating.rows} canWrite={can(me.role, "contract.write")} currency={settings.currency} />}
       </Card>
 

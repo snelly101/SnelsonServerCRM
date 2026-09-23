@@ -339,7 +339,7 @@ export function RepeatingInvoicesTable({ rows, canWrite, currency }: { rows: Rep
   if (rows.length === 0) return <p className="p-4 text-sm text-slate-500">No sales repeating invoices in Xero.</p>;
   return (
     <div>
-      <p className="border-b border-slate-200 px-4 py-2 text-xs text-slate-500">Each authorised template becomes a <strong>draft</strong> contract with one recurring line per Xero line, priced tax-exclusive. Item codes that match a catalogue SKU pick up that product&apos;s pricing model, cost and device-count comparison; item codes the catalogue has never seen are <strong>added as products</strong> from the Xero item (name, sale price, purchase price as cost). Review each draft, then set it active. Nothing is activated or billed automatically.</p>
+      <p className="border-b border-slate-200 px-4 py-2 text-xs text-slate-500">Each template becomes a <strong>draft</strong> contract with one recurring line per Xero line, priced tax-exclusive. Item codes that match a catalogue SKU pick up that product&apos;s pricing model, cost and device-count comparison; item codes the catalogue has never seen are <strong>added as products</strong> from the Xero item (name, sale price, purchase price as cost). Review each draft, then set it active. Nothing is activated or billed automatically.</p>
       {msg && <p className="px-4 py-2 text-sm text-red-700">{msg}</p>}
       <table className={`tbl ${pending ? "opacity-70" : ""}`}>
         <thead>
@@ -372,7 +372,7 @@ export function RepeatingInvoicesTable({ rows, canWrite, currency }: { rows: Rep
                 <div className="text-xs text-slate-500">
                   {r.lineCount} line{r.lineCount === 1 ? "" : "s"}
                   {r.inclusive && " · tax-inclusive"}
-                  {r.status !== "AUTHORISED" && <Badge className="ml-1" tone="slate">{r.status.toLowerCase()}</Badge>}
+                  {r.status === "DRAFT" && <span title="Xero saves each generated invoice as a draft for approval"><Badge className="ml-1" tone="slate">generates drafts</Badge></span>}
                 </div>
               </td>
               <td className="text-xs">
@@ -391,7 +391,7 @@ export function RepeatingInvoicesTable({ rows, canWrite, currency }: { rows: Rep
                 )}
               </td>
               <td className="text-right">
-                {canWrite && !r.contractId && r.companyId && !r.unsupportedReason && r.status === "AUTHORISED" && (
+                {canWrite && !r.contractId && r.companyId && !r.unsupportedReason && (
                   <Button size="sm" variant="ghost" onClick={() => run(r.id)}>
                     <FileText className="h-3.5 w-3.5" /> Create draft contract
                   </Button>
