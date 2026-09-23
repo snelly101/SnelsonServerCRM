@@ -4,6 +4,8 @@ Ideas and requests not yet scheduled. Each item states what it is, why, and the 
 
 ## Customer password / credentials vault
 
+**Status:** architecture proposed in [`docs/secure-vault-plan.md`](secure-vault-plan.md); awaiting the decisions listed there.
+
 **What:** a per-customer section holding shared credentials the MSP needs to support that customer (router admin, M365 global admin break-glass, portal logins, Wi-Fi keys), with a title, username, secret, URL, notes and a "last rotated" date.
 
 **Why:** technicians keep these in spreadsheets or a separate password manager today; having them beside the customer record saves lookups and keeps an audit trail of who viewed what.
