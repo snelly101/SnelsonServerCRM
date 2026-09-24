@@ -12,6 +12,7 @@ import {
 import { listOwners } from "@/services/companies";
 import { companyOptions, contactOptions } from "@/services/lookups";
 import { listCustomFieldDefs } from "@/services/settings";
+import { getDefaultMailbox, mailboxIsLive } from "@/services/mailbox";
 import { Card } from "@/components/ui/page";
 import { Alert } from "@/components/ui/alert";
 import { StatusBadge, PriorityBadge } from "@/components/helpdesk/badges";
@@ -48,6 +49,10 @@ export default async function TicketPage({
   if (!t) notFound();
   const canEdit = can(me.role, "helpdesk.agent");
   const canManage = can(me.role, "helpdesk.manage");
+  const mailbox = await getDefaultMailbox();
+  const emailEnabled = Boolean(
+    mailbox && (mailboxIsLive(mailbox) || process.env.DEMO_MODE === "true"),
+  );
   const [
     settings,
     agents,
@@ -175,9 +180,13 @@ export default async function TicketPage({
                       }
                     : null
                 }
-                emailEnabled={false}
+                emailEnabled={emailEnabled}
                 requesterEmail={t.requesterEmail}
+                ccDefaults={t.participants
+                  .filter((p) => p.role === "cc" && p.email)
+                  .map((p) => p.email!)}
                 allowedStatuses={TRANSITIONS[t.status as TicketStatus]}
+                signature={mailbox?.signature ?? null}
               />
             </Card>
           )}

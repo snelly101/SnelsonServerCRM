@@ -89,5 +89,6 @@ docs/             Architecture, deployment, integrations, phase reports
 - [docs/secure-vault-plan.md](docs/secure-vault-plan.md) — proposed architecture for the customer Secure Vault (encryption, key management, permissions, audit)
 - [docs/backlog.md](docs/backlog.md) — requested features not yet scheduled, with the decisions each needs
 - [docs/integrations.md](docs/integrations.md) — capability matrix and setup for Better Proposals, Xero, NinjaOne, 20i, Pax8
+- [docs/helpdesk-m365.md](docs/helpdesk-m365.md) — helpdesk mailbox: Microsoft 365 permissions, mailbox scoping, mail flow, monitoring, recovery
 - [docs/deployment.md](docs/deployment.md) — Debian 12 VPS setup, Docker Compose, backups and restore, shared-hosting variant
 - [docs/phases.md](docs/phases.md) — what each phase delivered, what was tested, what remains

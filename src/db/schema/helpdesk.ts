@@ -210,6 +210,10 @@ export const tickets = pgTable(
       .default({}),
     /** Optimistic concurrency: every write compares and bumps this. */
     version: integer("version").notNull().default(1),
+    /** When the automatic acknowledgement went out (sent once per ticket). */
+    ackSentAt: timestamp("ack_sent_at", { withTimezone: true }),
+    /** Mailbox that owns this ticket's e-mail thread. */
+    mailboxId: uuid("mailbox_id"),
     /** Denormalised total of time entries in minutes. */
     timeSpentMinutes: integer("time_spent_minutes").notNull().default(0),
     createdByUserId: text("created_by_user_id").references(() => user.id, {

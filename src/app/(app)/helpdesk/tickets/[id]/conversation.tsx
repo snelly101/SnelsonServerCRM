@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { MarkdownLite } from "@/lib/markdown-lite";
 import { fmtDateTime, fmtRelative, type DisplaySettings } from "@/lib/format";
 import type { TicketDetail } from "@/services/helpdesk";
+import { EmailHtml } from "@/components/helpdesk/email-html";
 
 type Message = TicketDetail["messages"][number];
 type Event = TicketDetail["events"][number];
@@ -157,6 +158,11 @@ function MessageCard({
       <div className="px-3 py-2 text-sm">
         {m.bodyMarkdown ? (
           <MarkdownLite text={m.bodyMarkdown} />
+        ) : m.bodyHtml ? (
+          <EmailHtml
+            html={m.bodyHtml}
+            cidBase={`/api/helpdesk/attachments/cid/${m.id}?cid=`}
+          />
         ) : (
           <pre className="whitespace-pre-wrap font-sans text-[13px] leading-relaxed text-slate-800">
             {m.bodyText}

@@ -21,6 +21,7 @@ RUN groupadd -r app && useradd -r -g app app
 COPY --from=build --chown=app:app /app/.next/standalone ./
 COPY --from=build --chown=app:app /app/.next/static ./.next/static
 COPY --from=build --chown=app:app /app/public ./public
+RUN mkdir -p /app/data && chown app:app /app/data
 USER app
 EXPOSE 3000
 CMD ["node", "server.js"]
@@ -34,5 +35,6 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --chown=app:app package.json tsconfig.json drizzle.config.ts ./
 COPY --chown=app:app src ./src
 COPY --chown=app:app drizzle ./drizzle
+RUN mkdir -p /app/data && chown app:app /app/data
 USER app
 CMD ["npm", "run", "worker"]

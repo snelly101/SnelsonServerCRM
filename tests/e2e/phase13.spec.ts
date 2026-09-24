@@ -109,14 +109,15 @@ test("technician sees the helpdesk dashboard and queues, creates a ticket, adds 
   await page.getByRole("button", { name: "Add note" }).click();
   await expect(page.getByText("Spare keyboard in the van.")).toBeVisible();
   await expect(page.getByText("internal note").first()).toBeVisible();
-  await page.getByRole("button", { name: "Log customer message" }).click();
+  // In demo mode the mailbox is enabled, so the public reply goes out by e-mail (to the demo mailbox)
+  await page.getByRole("button", { name: "Reply to customer" }).click();
   await page
     .getByLabel("Message")
     .fill("Called Chloe, bringing a keyboard tomorrow.");
   await page
     .getByLabel("Status after sending")
     .selectOption("awaiting_customer");
-  await page.getByRole("button", { name: "Save message" }).click();
+  await page.getByRole("button", { name: "Send e-mail" }).click();
   await expect(
     page.getByText("Called Chloe, bringing a keyboard tomorrow."),
   ).toBeVisible();

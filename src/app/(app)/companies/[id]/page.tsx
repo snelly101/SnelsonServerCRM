@@ -1311,13 +1311,22 @@ export default async function CompanyPage({
             padded={false}
             actions={
               can(me.role, "helpdesk.agent") ? (
-                <ButtonLink
-                  href={`/helpdesk/tickets/new?companyId=${id}`}
-                  size="sm"
-                  variant="secondary"
-                >
-                  New ticket
-                </ButtonLink>
+                <span className="flex gap-2">
+                  <ButtonLink
+                    href={`/helpdesk/compose?companyId=${id}`}
+                    size="sm"
+                    variant="secondary"
+                  >
+                    E-mail
+                  </ButtonLink>
+                  <ButtonLink
+                    href={`/helpdesk/tickets/new?companyId=${id}`}
+                    size="sm"
+                    variant="secondary"
+                  >
+                    New ticket
+                  </ButtonLink>
+                </span>
               ) : undefined
             }
           >

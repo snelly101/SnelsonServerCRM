@@ -92,6 +92,13 @@
       "when": 1790276321919,
       "tag": "0012_helpdesk_core",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790278884863,
+      "tag": "0013_helpdesk_mailbox",
+      "breakpoints": true
     }
   ]
 }
