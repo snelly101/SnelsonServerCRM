@@ -119,6 +119,8 @@ Ideas and requests not yet scheduled. Each item states what it is, why, and the 
 
 ## Dark mode
 
+**Status:** built (Phase 11, see `docs/phases.md`): system / light / dark per user, palette remapped under `[data-theme="dark"]`, sidebar unchanged, print forces light.
+
 **What:** a dark theme for the whole app with a three-way setting per user (system, light, dark) in the user menu, remembered across devices.
 
 **Why:** engineers work in dark IDE/RMM consoles and late shifts; the current light-only UI is the odd one out.

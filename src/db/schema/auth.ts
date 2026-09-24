@@ -25,6 +25,8 @@ export const user = pgTable("user", {
   active: boolean("active").notNull().default(true),
   /** Maintained by Better Auth's two-factor plugin; true once a TOTP secret has been verified. */
   twoFactorEnabled: boolean("two_factor_enabled").notNull().default(false),
+  /** UI theme preference: system | light | dark. Mirrored in the crm-theme cookie for first paint. */
+  theme: text("theme").notNull().default("system"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

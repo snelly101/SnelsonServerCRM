@@ -48,7 +48,7 @@ export function LoginForm({ next, microsoft, initialError }: { next: string; mic
       {microsoft && (
         <>
           <div className="relative text-center text-xs text-slate-400">
-            <span className="bg-white px-2">or</span>
+            <span className="bg-surface px-2">or</span>
             <div className="absolute inset-x-0 top-1/2 -z-10 border-t border-slate-200" />
           </div>
           <Button type="button" variant="secondary" className="w-full" onClick={() => signIn.social({ provider: "microsoft", callbackURL: next })}>

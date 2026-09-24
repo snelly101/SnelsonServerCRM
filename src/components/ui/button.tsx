@@ -5,10 +5,10 @@ import { cn } from "@/lib/utils";
 
 const variants = {
   primary: "bg-brand-600 text-white hover:bg-brand-700 border-transparent",
-  secondary: "bg-white text-slate-800 hover:bg-slate-50 border-slate-300",
+  secondary: "bg-surface text-slate-800 hover:bg-slate-50 border-slate-300",
   ghost: "bg-transparent text-slate-700 hover:bg-slate-100 border-transparent",
   danger: "bg-red-600 text-white hover:bg-red-700 border-transparent",
-  "danger-outline": "bg-white text-red-700 hover:bg-red-50 border-red-300",
+  "danger-outline": "bg-surface text-red-700 hover:bg-red-50 border-red-300",
 } as const;
 
 const sizes = {

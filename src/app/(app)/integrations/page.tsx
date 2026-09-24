@@ -86,7 +86,7 @@ export default async function IntegrationsPage() {
                 </p>
               )}
               <div className="mt-3 flex flex-wrap gap-2">
-                <Link href={`/integrations/${provider}`} className="inline-flex h-8 items-center rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium hover:bg-slate-50">
+                <Link href={`/integrations/${provider}`} className="inline-flex h-8 items-center rounded-md border border-slate-300 bg-surface px-2.5 text-xs font-medium hover:bg-slate-50">
                   {canManage ? "Configure" : "Details"}
                 </Link>
                 {provider === "xero" ? (

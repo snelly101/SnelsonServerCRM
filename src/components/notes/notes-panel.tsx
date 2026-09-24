@@ -76,7 +76,7 @@ export function NotesPanel({
         {(showArchived ? notes : live).map((n) => (
           <li
             key={n.id}
-            className={`rounded-md border bg-white ${n.archivedAt ? "border-dashed border-slate-300" : "border-slate-200"}`}
+            className={`rounded-md border bg-surface ${n.archivedAt ? "border-dashed border-slate-300" : "border-slate-200"}`}
           >
             <div className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-100 px-4 py-2">
               <div className="min-w-0">

@@ -26,11 +26,11 @@ export function ActivityPanel({ companyId, items, contacts, canWrite }: { compan
         )}
       </div>
       {canWrite && open && (
-        <div id="activity-form" className="mb-3 rounded-md border border-slate-200 bg-white p-4">
+        <div id="activity-form" className="mb-3 rounded-md border border-slate-200 bg-surface p-4">
           <NoteForm companyId={companyId} contacts={contacts} />
         </div>
       )}
-      <div className="rounded-md border border-slate-200 bg-white">
+      <div className="rounded-md border border-slate-200 bg-surface">
         <ActivityRows items={items} />
       </div>
     </section>

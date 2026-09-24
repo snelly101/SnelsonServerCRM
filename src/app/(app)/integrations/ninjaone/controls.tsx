@@ -119,7 +119,7 @@ export function OrgMappingTable({ rows, companies, canManage }: { rows: OrgRow[]
     <div>
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-4 py-2 text-sm">
         {(["all", "unlinked", "linked"] as const).map((f) => (
-          <button key={f} type="button" onClick={() => setFilter(f)} className={`rounded px-2 py-0.5 ${filter === f ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`}>
+          <button key={f} type="button" onClick={() => setFilter(f)} className={`rounded px-2 py-0.5 ${filter === f ? "bg-fg text-surface" : "text-slate-600 hover:bg-slate-100"}`}>
             {f}
           </button>
         ))}

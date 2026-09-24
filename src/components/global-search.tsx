@@ -90,7 +90,7 @@ export function GlobalSearch() {
       />
       <kbd className="pointer-events-none absolute right-2.5 top-2 hidden rounded border border-slate-200 bg-slate-50 px-1.5 text-[10px] text-slate-500 sm:block">Ctrl K</kbd>
       {open && (
-        <ul id="global-search-results" role="listbox" className="absolute z-30 mt-1 w-full overflow-hidden rounded-md border border-slate-200 bg-white shadow-lg">
+        <ul id="global-search-results" role="listbox" className="absolute z-30 mt-1 w-full overflow-hidden rounded-md border border-slate-200 bg-surface shadow-lg">
           {loading && hits.length === 0 && <li className="px-3 py-2 text-sm text-slate-500">Searching…</li>}
           {!loading && hits.length === 0 && <li className="px-3 py-2 text-sm text-slate-500">No results for “{q}”</li>}
           {hits.map((h, i) => (

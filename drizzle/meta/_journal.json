@@ -71,6 +71,13 @@
       "when": 1790241847777,
       "tag": "0009_company_notes",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790247199205,
+      "tag": "0010_user_theme",
+      "breakpoints": true
     }
   ]
 }

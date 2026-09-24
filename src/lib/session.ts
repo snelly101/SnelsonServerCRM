@@ -16,6 +16,7 @@ export type CurrentUser = {
   role: Role;
   active: boolean;
   twoFactorEnabled: boolean;
+  theme: "system" | "light" | "dark";
   /** Has a CRM password (credential account). SSO-only users get MFA from Entra and are exempt from the policy. */
   hasPassword: boolean;
 };
@@ -54,6 +55,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
       role: userTable.role,
       active: userTable.active,
       twoFactorEnabled: userTable.twoFactorEnabled,
+      theme: userTable.theme,
       // Literal SQL: Drizzle renders column references unqualified inside a select-field subquery.
       hasPassword: sql<boolean>`exists (select 1 from account a where a.user_id = "user".id and a.provider_id = 'credential' and a.password is not null)`,
     })
@@ -61,7 +63,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
     .where(eq(userTable.id, session.user.id))
     .limit(1);
   if (!row || !row.active) return null;
-  return { ...row, hasPassword: Boolean(row.hasPassword) };
+  return { ...row, theme: row.theme === "light" || row.theme === "dark" ? row.theme : "system", hasPassword: Boolean(row.hasPassword) };
 });
 
 /** The signed-in user's two-factor status against the current policy. */

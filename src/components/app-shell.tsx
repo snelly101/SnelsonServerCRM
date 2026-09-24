@@ -25,6 +25,8 @@ import { cn, initials } from "@/lib/utils";
 import { GlobalSearch } from "./global-search";
 import { signOut } from "@/lib/auth-client";
 import { ROLE_LABELS, type Role } from "@/lib/permissions";
+import { ThemeToggle, ThemeSync } from "./theme-toggle";
+import type { ThemePref } from "@/lib/theme";
 
 const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -48,7 +50,7 @@ export function AppShell({
   twoFactorDueBy = null,
   children,
 }: {
-  user: { name: string; email: string; role: Role };
+  user: { name: string; email: string; role: Role; theme: ThemePref };
   companyName: string;
   demoMode: boolean;
   /** Set when the security policy requires 2FA the user has not enrolled in yet and the grace period is still running. */
@@ -85,7 +87,7 @@ export function AppShell({
   return (
     <div className="flex min-h-screen">
       {/* Sidebar (desktop) */}
-      <aside className="hidden w-60 shrink-0 flex-col bg-slate-900 text-white lg:flex">
+      <aside data-theme="light" className="hidden w-60 shrink-0 flex-col bg-sidebar text-white lg:flex">
         <div className="flex h-14 items-center gap-2 px-4 text-sm font-semibold">
           <span className="grid h-7 w-7 place-items-center rounded bg-brand-500 text-xs">{initials(companyName)}</span>
           <span className="truncate">{companyName}</span>
@@ -100,8 +102,8 @@ export function AppShell({
       {/* Sidebar (mobile) */}
       {open && (
         <div className="fixed inset-0 z-40 lg:hidden">
-          <div className="absolute inset-0 bg-slate-900/50" onClick={() => setOpen(false)} />
-          <aside className="absolute inset-y-0 left-0 flex w-64 flex-col bg-slate-900 text-white">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setOpen(false)} />
+          <aside data-theme="light" className="absolute inset-y-0 left-0 flex w-64 flex-col bg-sidebar text-white">
             <div className="flex h-14 items-center justify-between px-4 text-sm font-semibold">
               <span className="truncate">{companyName}</span>
               <button aria-label="Close menu" onClick={() => setOpen(false)} className="rounded p-1 hover:bg-slate-800">
@@ -114,7 +116,7 @@ export function AppShell({
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-slate-200 bg-white px-4">
+        <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-slate-200 bg-surface px-4">
           <button className="rounded p-1.5 text-slate-600 hover:bg-slate-100 lg:hidden" aria-label="Open menu" onClick={() => setOpen(true)}>
             <Menu className="h-5 w-5" />
           </button>
@@ -129,6 +131,7 @@ export function AppShell({
               <div className="font-medium text-slate-800">{user.name}</div>
               <div className="text-slate-500">{ROLE_LABELS[user.role]}</div>
             </div>
+            <ThemeToggle initial={user.theme} />
             <Link href="/account/security" className="rounded p-1.5 text-slate-600 hover:bg-slate-100" aria-label="Security" title="Security">
               <ShieldCheck className="h-4 w-4" />
             </Link>
@@ -154,6 +157,7 @@ export function AppShell({
             </Link>
           </div>
         )}
+        <ThemeSync pref={user.theme} />
         <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
       </div>
     </div>

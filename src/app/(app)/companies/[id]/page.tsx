@@ -361,7 +361,7 @@ export default async function CompanyPage({
             >
               Overview
             </h2>
-            <div className="grid divide-y divide-slate-200 rounded-md border border-slate-200 bg-white md:grid-cols-3 md:divide-x md:divide-y-0">
+            <div className="grid divide-y divide-slate-200 rounded-md border border-slate-200 bg-surface md:grid-cols-3 md:divide-x md:divide-y-0">
               <div className="px-4 py-3">
                 <h3 className="mb-1 text-xs font-medium text-slate-500">
                   Company information
@@ -471,7 +471,7 @@ export default async function CompanyPage({
                 {pinnedNotes.map((n) => (
                   <div
                     key={n.id}
-                    className="rounded-md border border-slate-200 bg-white px-4 py-3"
+                    className="rounded-md border border-slate-200 bg-surface px-4 py-3"
                   >
                     <div className="mb-1 flex items-center justify-between gap-2">
                       <h3 className="text-xs font-medium text-slate-500">

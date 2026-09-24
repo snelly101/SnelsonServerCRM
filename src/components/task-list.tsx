@@ -53,7 +53,7 @@ export function TaskList({ tasks, canWrite, settings, compact, showLinks = true 
             aria-label={t.status === "done" ? "Reopen task" : "Complete task"}
             disabled={!canWrite}
             onClick={() => toggle(t)}
-            className={cn("mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded border", t.status === "done" ? "border-green-600 bg-green-600 text-white" : "border-slate-300 bg-white hover:border-brand-500", !canWrite && "cursor-default")}
+            className={cn("mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded border", t.status === "done" ? "border-green-600 bg-green-600 text-white" : "border-slate-300 bg-surface hover:border-brand-500", !canWrite && "cursor-default")}
           >
             {t.status === "done" ? <Check className="h-3.5 w-3.5" /> : null}
           </button>

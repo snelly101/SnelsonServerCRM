@@ -170,7 +170,7 @@ export function VaultPanel({ companyId, items, caps, categories, sites, stepUpMi
       {visible.length === 0 ? (
         <p className="rounded-md border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">{items.length === 0 ? "No credentials stored for this customer yet." : "Nothing matches the filter."}</p>
       ) : (
-        <ul className={`divide-y divide-slate-100 rounded-md border border-slate-200 bg-white ${pending ? "opacity-80" : ""}`}>
+        <ul className={`divide-y divide-slate-100 rounded-md border border-slate-200 bg-surface ${pending ? "opacity-80" : ""}`}>
           {visible.map((item) => (
             <li key={item.id} className={`p-3 ${item.archivedAt ? "bg-slate-50 opacity-70" : ""}`}>
               <div className="flex flex-wrap items-start gap-3">

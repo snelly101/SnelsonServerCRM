@@ -93,7 +93,7 @@ export default async function DevicesPage({ searchParams }: { searchParams: Prom
         actions={
           <span className="flex gap-1 text-xs">
             {["open", "accepted", "resolved", "dismissed", "all"].map((s) => (
-              <Link key={s} href={`/devices?disc=${s}`} className={`rounded px-2 py-0.5 ${discStatus === s ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`}>
+              <Link key={s} href={`/devices?disc=${s}`} className={`rounded px-2 py-0.5 ${discStatus === s ? "bg-fg text-surface" : "text-slate-600 hover:bg-slate-100"}`}>
                 {s}
               </Link>
             ))}
