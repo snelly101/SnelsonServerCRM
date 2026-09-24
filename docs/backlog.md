@@ -81,6 +81,8 @@ Ideas and requests not yet scheduled. Each item states what it is, why, and the 
 
 ## Customer notes section
 
+**Status:** built (Phase 10, see `docs/phases.md`): multiple notes per company with Markdown formatting, pinned notes on Overview, audited edits, soft archive. Later: per-site and per-contact notes.
+
 **What:** a free-form, rich-text notes area on the company page for standing information about the customer (site access instructions, escalation contacts, preferences, quirks), distinct from the dated activity timeline.
 
 **Why:** the timeline is for events; there is no place for "things to know" that stay current.

@@ -7,3 +7,4 @@ export * from "./ninjaone";
 export * from "./system";
 export * from "./vault";
 export * from "./hosting";
+export * from "./notes";
