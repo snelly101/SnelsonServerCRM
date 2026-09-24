@@ -110,13 +110,13 @@ export function HostingMappingTable({ rows, companies, canManage }: { rows: Item
     <div>
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-4 py-2 text-sm">
         {(["all", "unlinked", "linked", "expiring"] as const).map((f) => (
-          <button key={f} type="button" onClick={() => setFilter(f)} className={`rounded px-2 py-0.5 ${filter === f ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`}>
+          <button key={f} type="button" onClick={() => setFilter(f)} className={`rounded px-2 py-0.5 ${filter === f ? "bg-fg text-surface" : "text-slate-600 hover:bg-slate-100"}`}>
             {f}
           </button>
         ))}
         <span className="mx-1 text-slate-300">|</span>
         {(["all", "package", "domain"] as const).map((k) => (
-          <button key={k} type="button" onClick={() => setKind(k)} className={`rounded px-2 py-0.5 ${kind === k ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`}>
+          <button key={k} type="button" onClick={() => setKind(k)} className={`rounded px-2 py-0.5 ${kind === k ? "bg-fg text-surface" : "text-slate-600 hover:bg-slate-100"}`}>
             {k === "all" ? "packages + domains" : `${k}s`}
           </button>
         ))}

@@ -37,11 +37,11 @@ export default async function PipelinePage({ searchParams }: { searchParams: Pro
         description="Open opportunities by stage. Drag cards between stages; values are first-year totals."
         actions={
           <>
-            <div className="inline-flex rounded-md border border-slate-300 bg-white p-0.5">
-              <Link href={toggle("board")} className={`inline-flex items-center gap-1 rounded px-2.5 py-1 text-sm ${view === "board" ? "bg-slate-900 text-white" : "text-slate-600"}`} aria-current={view === "board" ? "page" : undefined}>
+            <div className="inline-flex rounded-md border border-slate-300 bg-surface p-0.5">
+              <Link href={toggle("board")} className={`inline-flex items-center gap-1 rounded px-2.5 py-1 text-sm ${view === "board" ? "bg-fg text-surface" : "text-slate-600"}`} aria-current={view === "board" ? "page" : undefined}>
                 <LayoutGrid className="h-4 w-4" /> Board
               </Link>
-              <Link href={toggle("table")} className={`inline-flex items-center gap-1 rounded px-2.5 py-1 text-sm ${view === "table" ? "bg-slate-900 text-white" : "text-slate-600"}`} aria-current={view === "table" ? "page" : undefined}>
+              <Link href={toggle("table")} className={`inline-flex items-center gap-1 rounded px-2.5 py-1 text-sm ${view === "table" ? "bg-fg text-surface" : "text-slate-600"}`} aria-current={view === "table" ? "page" : undefined}>
                 <List className="h-4 w-4" /> Table
               </Link>
             </div>

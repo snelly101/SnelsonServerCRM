@@ -87,7 +87,7 @@ export function Board({ columns, canWrite, currency }: { columns: Column[]; canW
             <header className="px-3 pb-1 pt-2">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-slate-800">{col.stage.name}</h2>
-                <span className="rounded-full bg-white px-2 text-xs text-slate-600">{col.items.length}</span>
+                <span className="rounded-full bg-surface px-2 text-xs text-slate-600">{col.items.length}</span>
               </div>
               <div className="text-xs text-slate-500">
                 {fmtMoney(col.total, currency)} · weighted {fmtMoney(col.weighted, currency)}
@@ -120,7 +120,7 @@ export function Board({ columns, canWrite, currency }: { columns: Column[]; canW
                     e.stopPropagation();
                     onDrop(col.stage.id, over?.index ?? idx);
                   }}
-                  className={cn("rounded-md border border-slate-200 bg-white p-2.5 shadow-sm", canWrite && "cursor-grab active:cursor-grabbing", dragging === o.id && "opacity-40", over?.stageId === col.stage.id && over.index === idx && "border-t-2 border-t-brand-500")}
+                  className={cn("rounded-md border border-slate-200 bg-surface p-2.5 shadow-sm", canWrite && "cursor-grab active:cursor-grabbing", dragging === o.id && "opacity-40", over?.stageId === col.stage.id && over.index === idx && "border-t-2 border-t-brand-500")}
                 >
                   <Link href={`/pipeline/${o.id}`} className="block text-sm font-medium text-slate-900 hover:text-brand-700" draggable={false}>
                     {o.title}

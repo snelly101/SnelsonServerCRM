@@ -44,7 +44,7 @@ export function PageHeader({
 
 export function Card({ title, actions, children, className, padded = true }: { title?: React.ReactNode; actions?: React.ReactNode; children: React.ReactNode; className?: string; padded?: boolean }) {
   return (
-    <section className={cn("rounded-lg border border-slate-200 bg-white shadow-sm", className)}>
+    <section className={cn("rounded-lg border border-slate-200 bg-surface shadow-sm", className)}>
       {(title || actions) && (
         <header className="flex items-center justify-between gap-2 border-b border-slate-200 px-4 py-3">
           {title && <h2 className="text-sm font-semibold text-slate-800">{title}</h2>}
@@ -58,7 +58,7 @@ export function Card({ title, actions, children, className, padded = true }: { t
 
 export function EmptyState({ title, description, action, icon }: { title: string; description?: string; action?: React.ReactNode; icon?: React.ReactNode }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white px-6 py-12 text-center">
+    <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-surface px-6 py-12 text-center">
       <div className="mb-3 rounded-full bg-slate-100 p-3 text-slate-500">{icon ?? <Inbox className="h-6 w-6" aria-hidden />}</div>
       <h3 className="text-sm font-semibold text-slate-800">{title}</h3>
       {description && <p className="mt-1 max-w-sm text-sm text-slate-500">{description}</p>}
@@ -70,7 +70,7 @@ export function EmptyState({ title, description, action, icon }: { title: string
 export function Stat({ label, value, hint, tone }: { label: string; value: React.ReactNode; hint?: React.ReactNode; tone?: "default" | "warn" | "danger" | "good" }) {
   const toneClass = tone === "warn" ? "text-amber-700" : tone === "danger" ? "text-red-700" : tone === "good" ? "text-green-700" : "text-slate-900";
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-lg border border-slate-200 bg-surface p-4 shadow-sm">
       <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</div>
       <div className={cn("mt-1 text-2xl font-semibold", toneClass)}>{value}</div>
       {hint && <div className="mt-1 text-xs text-slate-500">{hint}</div>}

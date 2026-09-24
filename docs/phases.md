@@ -273,3 +273,21 @@ Built to the brief in the owner's redesign document: a compact company summary w
 ### Remaining dependencies
 
 - None to deploy. Later: per-site and per-contact notes with the same component; notes in global search.
+
+## Phase 11 — Dark mode ✅
+
+### What works
+
+- **Three-way preference** (System / Light / Dark) from the sun-moon button in the header, saved on the user record and in a `crm-theme` cookie. A new device without the cookie picks up the account preference on first load. "System" follows the operating system and reacts live when it changes.
+- **No flash**: the root layout renders `data-theme` from the cookie for explicit choices and an inline script resolves "system" before first paint.
+- **How the styling works**: instead of editing every colour class, `[data-theme="dark"]` in `globals.css` redefines the palette variables that Tailwind utilities point at (the slate scale, the brand scale, the status hues used by badges and alerts) plus four semantic tokens (`page`, `surface`, `fg`, `sidebar`). `bg-white` surfaces became `bg-surface`, dark filter pills became `bg-fg text-surface`, overlays use `bg-black/50`. The sidebar carries `data-theme="light"` so its own dark design is untouched in both modes. Native controls follow via `color-scheme`.
+- **Print** forces the light palette.
+
+### What was tested
+
+- **1 browser test (24 total)**: default follows the OS (light → dark on media change), explicit Light overrides the OS and survives reload, explicit Dark survives reload and a fresh browser context via the account, cards are lighter than the page and body text is light, the sidebar keeps white text, print media renders a white page.
+- Screenshot pass in dark: login, dashboard, company page, invoices, 20i integration page, a dialog.
+
+### Remaining dependencies
+
+- None. Any future component that hard-codes a hex colour should use the palette or the four semantic tokens so both themes keep working.

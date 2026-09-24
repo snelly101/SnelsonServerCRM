@@ -92,7 +92,7 @@ export function SectionNav({ items, active, ariaLabel = "Sections" }: { items: S
               {activeInOverflow ? activeInOverflow.label : "More"} <ChevronDown className="h-3.5 w-3.5" aria-hidden />
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
-              <DropdownMenu.Content align="end" sideOffset={4} className="z-40 min-w-[180px] rounded-md border border-slate-200 bg-white p-1 shadow-lg">
+              <DropdownMenu.Content align="end" sideOffset={4} className="z-40 min-w-[180px] rounded-md border border-slate-200 bg-surface p-1 shadow-lg">
                 {overflow.map((i) => (
                   <DropdownMenu.Item key={i.key} asChild>
                     {link(i, true)}

@@ -108,7 +108,7 @@ export function FilterBar({ page, filters, savedViews, currentUserId, placeholde
         <div className="flex flex-wrap items-center gap-1 text-xs">
           <span className="text-slate-500">Saved views:</span>
           {savedViews.map((v) => (
-            <span key={v.id} className="inline-flex items-center rounded-full border border-slate-200 bg-white">
+            <span key={v.id} className="inline-flex items-center rounded-full border border-slate-200 bg-surface">
               <button type="button" className="px-2 py-0.5 hover:text-brand-700" onClick={() => start(() => router.push(`${pathname}?${new URLSearchParams(v.params).toString()}`))}>
                 {v.name}
               </button>

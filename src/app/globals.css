@@ -12,10 +12,209 @@
   --color-brand-700: #1d36d6;
   --color-brand-800: #1e2fad;
   --color-brand-900: #1e2c89;
+  /* Semantic tokens: page background, raised surfaces, foreground text, the sidebar. */
+  --color-page: #f8fafc;
+  --color-surface: #ffffff;
+  --color-fg: #0f172a;
+  --color-sidebar: #0f172a;
 }
+
+/* Explicit dark-only utilities (rarely needed: the palette remap below covers most cases). */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 :root {
   color-scheme: light;
+}
+
+/*
+ * Dark theme. Set by an inline script before first paint from the theme
+ * cookie (light / dark / system). Instead of touching every colour class,
+ * the theme redefines the palette variables the utilities point at, so
+ * bg-slate-50, text-slate-900, border-slate-200 and the status tints all
+ * flip together. Elements that are dark by design (the sidebar) opt out
+ * with data-theme="light" on their subtree.
+ */
+[data-theme="dark"] {
+  color-scheme: dark;
+  --color-page: #0b1220;
+  --color-surface: #111a2e;
+  --color-fg: #eef2f7;
+  --color-sidebar: #060b16;
+  /* Slate scale re-mapped for dark surfaces: 50 is now the darkest tint, 900 the lightest text. */
+  --color-slate-50: #0b1220;
+  --color-slate-100: #1a2540;
+  --color-slate-200: #243350;
+  --color-slate-300: #31425f;
+  --color-slate-400: #6b7a90;
+  --color-slate-500: #97a5b8;
+  --color-slate-600: #adb9c9;
+  --color-slate-700: #c5cfdb;
+  --color-slate-800: #dbe2ec;
+  --color-slate-900: #eef2f7;
+  --color-slate-950: #f8fafc;
+  /* Brand: tints darken, mid tones stay saturated for buttons, text shades lighten for links. */
+  --color-brand-50: #142040;
+  --color-brand-100: #1a2b58;
+  --color-brand-200: #233b7c;
+  --color-brand-300: #2f4fa8;
+  --color-brand-400: #4a6ee8;
+  --color-brand-500: #5b7cf2;
+  --color-brand-600: #3b66f5;
+  --color-brand-700: #7d97f7;
+  --color-brand-800: #a3b6fa;
+  --color-brand-900: #c7d3fc;
+  /* Status hues: tints become translucent washes, text shades lighten. */
+  --color-green-50: color-mix(in srgb, #22c55e 16%, #111a2e);
+  --color-green-100: color-mix(in srgb, #22c55e 26%, #111a2e);
+  --color-green-200: color-mix(in srgb, #22c55e 42%, #111a2e);
+  --color-green-300: #4ade80;
+  --color-green-400: #4ade80;
+  --color-green-500: #22c55e;
+  --color-green-600: #22c55e;
+  --color-green-700: #86efac;
+  --color-green-800: color-mix(in srgb, #86efac 80%, white);
+  --color-green-900: color-mix(in srgb, #86efac 60%, white);
+  --color-emerald-50: color-mix(in srgb, #10b981 16%, #111a2e);
+  --color-emerald-100: color-mix(in srgb, #10b981 26%, #111a2e);
+  --color-emerald-200: color-mix(in srgb, #10b981 42%, #111a2e);
+  --color-emerald-300: #34d399;
+  --color-emerald-400: #34d399;
+  --color-emerald-500: #10b981;
+  --color-emerald-600: #10b981;
+  --color-emerald-700: #6ee7b7;
+  --color-emerald-800: color-mix(in srgb, #6ee7b7 80%, white);
+  --color-emerald-900: color-mix(in srgb, #6ee7b7 60%, white);
+  --color-amber-50: color-mix(in srgb, #f59e0b 16%, #111a2e);
+  --color-amber-100: color-mix(in srgb, #f59e0b 26%, #111a2e);
+  --color-amber-200: color-mix(in srgb, #f59e0b 42%, #111a2e);
+  --color-amber-300: #fbbf24;
+  --color-amber-400: #fbbf24;
+  --color-amber-500: #f59e0b;
+  --color-amber-600: #f59e0b;
+  --color-amber-700: #fcd34d;
+  --color-amber-800: color-mix(in srgb, #fcd34d 80%, white);
+  --color-amber-900: color-mix(in srgb, #fcd34d 60%, white);
+  --color-yellow-50: color-mix(in srgb, #eab308 16%, #111a2e);
+  --color-yellow-100: color-mix(in srgb, #eab308 26%, #111a2e);
+  --color-yellow-200: color-mix(in srgb, #eab308 42%, #111a2e);
+  --color-yellow-300: #facc15;
+  --color-yellow-400: #facc15;
+  --color-yellow-500: #eab308;
+  --color-yellow-600: #eab308;
+  --color-yellow-700: #fde047;
+  --color-yellow-800: color-mix(in srgb, #fde047 80%, white);
+  --color-yellow-900: color-mix(in srgb, #fde047 60%, white);
+  --color-red-50: color-mix(in srgb, #ef4444 16%, #111a2e);
+  --color-red-100: color-mix(in srgb, #ef4444 26%, #111a2e);
+  --color-red-200: color-mix(in srgb, #ef4444 42%, #111a2e);
+  --color-red-300: #f87171;
+  --color-red-400: #f87171;
+  --color-red-500: #ef4444;
+  --color-red-600: #ef4444;
+  --color-red-700: #fca5a5;
+  --color-red-800: color-mix(in srgb, #fca5a5 80%, white);
+  --color-red-900: color-mix(in srgb, #fca5a5 60%, white);
+  --color-blue-50: color-mix(in srgb, #3b82f6 16%, #111a2e);
+  --color-blue-100: color-mix(in srgb, #3b82f6 26%, #111a2e);
+  --color-blue-200: color-mix(in srgb, #3b82f6 42%, #111a2e);
+  --color-blue-300: #60a5fa;
+  --color-blue-400: #60a5fa;
+  --color-blue-500: #3b82f6;
+  --color-blue-600: #3b82f6;
+  --color-blue-700: #93c5fd;
+  --color-blue-800: color-mix(in srgb, #93c5fd 80%, white);
+  --color-blue-900: color-mix(in srgb, #93c5fd 60%, white);
+  --color-indigo-50: color-mix(in srgb, #6366f1 16%, #111a2e);
+  --color-indigo-100: color-mix(in srgb, #6366f1 26%, #111a2e);
+  --color-indigo-200: color-mix(in srgb, #6366f1 42%, #111a2e);
+  --color-indigo-300: #818cf8;
+  --color-indigo-400: #818cf8;
+  --color-indigo-500: #6366f1;
+  --color-indigo-600: #6366f1;
+  --color-indigo-700: #a5b4fc;
+  --color-indigo-800: color-mix(in srgb, #a5b4fc 80%, white);
+  --color-indigo-900: color-mix(in srgb, #a5b4fc 60%, white);
+  --color-purple-50: color-mix(in srgb, #a855f7 16%, #111a2e);
+  --color-purple-100: color-mix(in srgb, #a855f7 26%, #111a2e);
+  --color-purple-200: color-mix(in srgb, #a855f7 42%, #111a2e);
+  --color-purple-300: #c084fc;
+  --color-purple-400: #c084fc;
+  --color-purple-500: #a855f7;
+  --color-purple-600: #a855f7;
+  --color-purple-700: #d8b4fe;
+  --color-purple-800: color-mix(in srgb, #d8b4fe 80%, white);
+  --color-purple-900: color-mix(in srgb, #d8b4fe 60%, white);
+  --color-pink-50: color-mix(in srgb, #ec4899 16%, #111a2e);
+  --color-pink-100: color-mix(in srgb, #ec4899 26%, #111a2e);
+  --color-pink-200: color-mix(in srgb, #ec4899 42%, #111a2e);
+  --color-pink-300: #f472b6;
+  --color-pink-400: #f472b6;
+  --color-pink-500: #ec4899;
+  --color-pink-600: #ec4899;
+  --color-pink-700: #f9a8d4;
+  --color-pink-800: color-mix(in srgb, #f9a8d4 80%, white);
+  --color-pink-900: color-mix(in srgb, #f9a8d4 60%, white);
+  --color-teal-50: color-mix(in srgb, #14b8a6 16%, #111a2e);
+  --color-teal-100: color-mix(in srgb, #14b8a6 26%, #111a2e);
+  --color-teal-200: color-mix(in srgb, #14b8a6 42%, #111a2e);
+  --color-teal-300: #2dd4bf;
+  --color-teal-400: #2dd4bf;
+  --color-teal-500: #14b8a6;
+  --color-teal-600: #14b8a6;
+  --color-teal-700: #5eead4;
+  --color-teal-800: color-mix(in srgb, #5eead4 80%, white);
+  --color-teal-900: color-mix(in srgb, #5eead4 60%, white);
+  --color-orange-50: color-mix(in srgb, #f97316 16%, #111a2e);
+  --color-orange-100: color-mix(in srgb, #f97316 26%, #111a2e);
+  --color-orange-200: color-mix(in srgb, #f97316 42%, #111a2e);
+  --color-orange-300: #fb923c;
+  --color-orange-400: #fb923c;
+  --color-orange-500: #f97316;
+  --color-orange-600: #f97316;
+  --color-orange-700: #fdba74;
+  --color-orange-800: color-mix(in srgb, #fdba74 80%, white);
+  --color-orange-900: color-mix(in srgb, #fdba74 60%, white);
+}
+[data-theme="dark"] [data-theme="light"] {
+  color-scheme: light;
+  --color-page: #f8fafc;
+  --color-surface: #ffffff;
+  --color-fg: #0f172a;
+  --color-slate-50: #f8fafc;
+  --color-slate-100: #f1f5f9;
+  --color-slate-200: #e2e8f0;
+  --color-slate-300: #cbd5e1;
+  --color-slate-400: #94a3b8;
+  --color-slate-500: #64748b;
+  --color-slate-600: #475569;
+  --color-slate-700: #334155;
+  --color-slate-800: #1e293b;
+  --color-slate-900: #0f172a;
+  --color-slate-950: #020617;
+  --color-brand-50: #eef4ff;
+  --color-brand-100: #dbe6fe;
+  --color-brand-600: #2547e9;
+  --color-brand-700: #1d36d6;
+}
+
+/* Paper is always light. */
+@media print {
+  [data-theme="dark"] {
+    color-scheme: light;
+    --color-page: #ffffff;
+    --color-surface: #ffffff;
+    --color-fg: #0f172a;
+    --color-slate-50: #f8fafc;
+    --color-slate-100: #f1f5f9;
+    --color-slate-200: #e2e8f0;
+    --color-slate-300: #cbd5e1;
+    --color-slate-400: #94a3b8;
+    --color-slate-500: #64748b;
+    --color-slate-600: #475569;
+    --color-slate-700: #334155;
+    --color-slate-800: #1e293b;
+    --color-slate-900: #0f172a;
+  }
 }
 
 html,
@@ -24,11 +223,11 @@ body {
 }
 
 body {
-  @apply bg-slate-50 text-slate-900 antialiased;
+  @apply bg-page text-fg antialiased;
 }
 
 *:focus-visible {
-  @apply outline-none ring-2 ring-brand-500 ring-offset-2 ring-offset-white;
+  @apply outline-none ring-2 ring-brand-500 ring-offset-2 ring-offset-surface;
 }
 
 @layer components {
@@ -56,6 +255,6 @@ body {
   @apply mt-1 text-xs text-red-600;
 }
 .input {
-  @apply block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-slate-400 disabled:bg-slate-100 disabled:text-slate-500 aria-[invalid=true]:border-red-500;
+  @apply block w-full rounded-md border border-slate-300 bg-surface px-3 py-2 text-sm shadow-sm placeholder:text-slate-400 disabled:bg-slate-100 disabled:text-slate-500 aria-[invalid=true]:border-red-500;
 }
 }
