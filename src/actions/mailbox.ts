@@ -101,16 +101,18 @@ export async function connectMailboxAction(
         },
       )
       .parse({
-        address: fd.get("address"),
-        displayName: fd.get("displayName"),
-        tenantId: fd.get("tenantId"),
-        clientId: fd.get("clientId"),
-        authMode: fd.get("authMode") ?? "secret",
-        clientSecret: fd.get("clientSecret"),
-        privateKeyPem: fd.get("privateKeyPem"),
-        certificatePem: fd.get("certificatePem"),
-        credentialExpiresAt: fd.get("credentialExpiresAt"),
-        importFrom: fd.get("importFrom"),
+        // Absent inputs (the credential fields of the other mode) arrive as
+        // null, which must read as "blank", not as an invalid value.
+        address: String(fd.get("address") ?? ""),
+        displayName: String(fd.get("displayName") ?? ""),
+        tenantId: String(fd.get("tenantId") ?? ""),
+        clientId: String(fd.get("clientId") ?? ""),
+        authMode: String(fd.get("authMode") || "secret"),
+        clientSecret: String(fd.get("clientSecret") ?? ""),
+        privateKeyPem: String(fd.get("privateKeyPem") ?? ""),
+        certificatePem: String(fd.get("certificatePem") ?? ""),
+        credentialExpiresAt: String(fd.get("credentialExpiresAt") ?? ""),
+        importFrom: String(fd.get("importFrom") ?? ""),
       });
     const r = await connectMailbox(input, u.id);
     revalidate();
@@ -188,16 +190,16 @@ export async function saveMailboxSettingsAction(
           .transform((v) => v || null),
       })
       .parse({
-        displayName: fd.get("displayName"),
-        importFrom: fd.get("importFrom"),
+        displayName: String(fd.get("displayName") ?? ""),
+        importFrom: String(fd.get("importFrom") ?? ""),
         ackEnabled: fd.get("ackEnabled") === "true",
-        ackSubject: fd.get("ackSubject"),
-        ackBody: fd.get("ackBody"),
-        unknownSenderPolicy: fd.get("unknownSenderPolicy"),
-        closedReplyPolicy: fd.get("closedReplyPolicy"),
-        closedReopenDays: fd.get("closedReopenDays"),
-        signature: fd.get("signature"),
-        credentialExpiresAt: fd.get("credentialExpiresAt"),
+        ackSubject: String(fd.get("ackSubject") ?? ""),
+        ackBody: String(fd.get("ackBody") ?? ""),
+        unknownSenderPolicy: String(fd.get("unknownSenderPolicy") ?? ""),
+        closedReplyPolicy: String(fd.get("closedReplyPolicy") ?? ""),
+        closedReopenDays: String(fd.get("closedReopenDays") ?? ""),
+        signature: String(fd.get("signature") ?? ""),
+        credentialExpiresAt: String(fd.get("credentialExpiresAt") ?? ""),
       });
     await saveMailboxSettings(
       z.uuid().parse(id),

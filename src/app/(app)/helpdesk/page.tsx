@@ -7,6 +7,7 @@ import {
   ticketBreakdown,
   ticketCounts,
 } from "@/services/helpdesk";
+import { helpdeskSummary, parseRange } from "@/services/helpdesk-reports";
 import { PageHeader, Card, Stat, EmptyState } from "@/components/ui/page";
 import { ButtonLink } from "@/components/ui/button";
 import {
@@ -28,7 +29,11 @@ export const metadata = { title: "Helpdesk" };
 export default async function HelpdeskDashboard() {
   const me = await requirePermission("helpdesk.read");
   const teamIds = await myTeamIds(me.id);
-  const [counts, breakdown, mine, unassigned, recent] = await Promise.all([
+  const week = parseRange(
+    new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10),
+    null,
+  );
+  const [counts, breakdown, mine, unassigned, recent, sla] = await Promise.all([
     ticketCounts(me.id),
     ticketBreakdown(),
     listTickets({
@@ -44,7 +49,9 @@ export default async function HelpdeskDashboard() {
       dir: "asc",
     }),
     listTickets({ view: "recent", pageSize: 8 }),
+    helpdeskSummary(week),
   ]);
+  const pct = (n: number | null) => (n === null ? "—" : `${Math.round(n * 100)}%`);
   const bar = (
     rows: { key: string; n: number }[],
     labels?: Record<string, string>,
@@ -131,7 +138,7 @@ export default async function HelpdeskDashboard() {
           ) : undefined
         }
       />
-      <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
         <Stat
           label="Open"
           value={counts.open}
@@ -162,6 +169,23 @@ export default async function HelpdeskDashboard() {
           label="Today"
           value={`${counts.createdToday} / ${counts.resolvedToday}`}
           hint="created / resolved"
+        />
+        <Stat
+          label="First response SLA"
+          value={pct(sla.firstResponseAttainment)}
+          hint="last 7 days"
+          tone={
+            sla.firstResponseAttainment !== null &&
+            sla.firstResponseAttainment < 0.9
+              ? "warn"
+              : "default"
+          }
+        />
+        <Stat
+          label="Resolution SLA"
+          value={pct(sla.resolutionAttainment)}
+          hint={`last 7 days · ${sla.backlog.breached} breaching now`}
+          tone={sla.backlog.breached ? "danger" : "default"}
         />
       </div>
       {counts.review > 0 && (

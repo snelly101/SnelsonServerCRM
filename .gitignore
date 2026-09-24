@@ -11,3 +11,6 @@ test-results/
 tsconfig.tsbuildinfo
 next-env.d.ts
 backups/
+
+# Local attachment storage (a Docker volume in production)
+/data/

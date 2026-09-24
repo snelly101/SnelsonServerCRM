@@ -11,3 +11,4 @@ export * from "./notes";
 export * from "./pax8";
 export * from "./helpdesk";
 export * from "./mailbox";
+export * from "./helpdesk-sla";

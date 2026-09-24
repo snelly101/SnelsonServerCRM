@@ -12,6 +12,7 @@ import { setSystemStatus } from "@/lib/system-status";
  *  - Phase 8: twentyi.sync (hosting mirror), expiry reminders inside crm.reminders
  *  - Phase 12: pax8.sync (subscription mirror), licence check runs inside
  *  - Phase 13: m365.tick (inbound queue + outbox every minute), m365.delta (recovery every 5 min), m365.subscriptions (renewal every 30 min)
+ *  - Phase 13 stage 3: helpdesk.sla (deadline check every 5 min), helpdesk.rules (scheduled automation every 15 min)
  *
  * Every handler must be idempotent: pg-boss guarantees at-least-once delivery.
  */
@@ -28,6 +29,8 @@ export const QUEUES = {
   m365Tick: "m365.tick",
   m365Delta: "m365.delta",
   m365Subscriptions: "m365.subscriptions",
+  helpdeskSla: "helpdesk.sla",
+  helpdeskRules: "helpdesk.rules",
   retention: "system.retention",
 } as const;
 
@@ -305,5 +308,54 @@ export async function registerJobs(
     "*/30 * * * *",
     {},
     { retryLimit: 1, singletonKey: "m365-subscriptions" },
+  );
+
+  // SLA deadlines: flag breaches, warn assignees an hour ahead, then let rules react.
+  await boss.createQueue(QUEUES.helpdeskSla, {
+    deleteAfterSeconds: 7 * 24 * 3600,
+    retryLimit: 0,
+    expireInSeconds: 240,
+  });
+  await boss.work(QUEUES.helpdeskSla, async () => {
+    const { checkSlaDeadlines } = await import("@/services/helpdesk-sla");
+    const { runAutomation } = await import("@/services/helpdesk-automation");
+    const res = await checkSlaDeadlines();
+    for (const b of res.breaches)
+      await runAutomation("sla_breached", b.ticketId).catch((err) =>
+        logger.warn({ err, ticketId: b.ticketId }, "sla_breached rules failed"),
+      );
+    for (const d of res.dueSoon)
+      await runAutomation("sla_due_soon", d.ticketId).catch((err) =>
+        logger.warn({ err, ticketId: d.ticketId }, "sla_due_soon rules failed"),
+      );
+    if (res.breaches.length || res.dueSoon.length)
+      logger.info(
+        { breaches: res.breaches.length, dueSoon: res.dueSoon.length },
+        "helpdesk sla check",
+      );
+  });
+  await boss.schedule(
+    QUEUES.helpdeskSla,
+    "*/5 * * * *",
+    {},
+    { retryLimit: 0, singletonKey: "helpdesk-sla" },
+  );
+
+  // Time-based automation rules (auto-close resolved tickets, escalate untouched ones).
+  await boss.createQueue(QUEUES.helpdeskRules, {
+    deleteAfterSeconds: 7 * 24 * 3600,
+    retryLimit: 0,
+    expireInSeconds: 600,
+  });
+  await boss.work(QUEUES.helpdeskRules, async () => {
+    const { runScheduledRules } = await import("@/services/helpdesk-automation");
+    const res = await runScheduledRules();
+    if (res.applied) logger.info(res, "helpdesk scheduled rules");
+  });
+  await boss.schedule(
+    QUEUES.helpdeskRules,
+    "*/15 * * * *",
+    {},
+    { retryLimit: 0, singletonKey: "helpdesk-rules" },
   );
 }

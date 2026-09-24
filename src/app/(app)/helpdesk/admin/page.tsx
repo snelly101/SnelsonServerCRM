@@ -22,11 +22,22 @@ export default async function HelpdeskAdminPage() {
     <>
       <PageHeader
         title="Helpdesk administration"
-        description="Teams, categories, the support mailbox and (in later stages) SLA policies and automation rules."
+        description="Teams, categories, the support mailbox, SLA policies with business hours, automation rules and response templates."
         actions={
-          <ButtonLink href="/helpdesk/admin/mailbox" variant="secondary">
-            Support mailbox
-          </ButtonLink>
+          <div className="flex flex-wrap gap-2">
+            <ButtonLink href="/helpdesk/admin/mailbox" variant="secondary">
+              Support mailbox
+            </ButtonLink>
+            <ButtonLink href="/helpdesk/admin/sla" variant="secondary">
+              SLA policies
+            </ButtonLink>
+            <ButtonLink href="/helpdesk/admin/automation" variant="secondary">
+              Automation rules
+            </ButtonLink>
+            <ButtonLink href="/helpdesk/admin/templates" variant="secondary">
+              Templates
+            </ButtonLink>
+          </div>
         }
       />
       <div className="grid gap-4 lg:grid-cols-2">

@@ -16,6 +16,7 @@ import {
   X,
   Eye,
   Pencil,
+  FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +32,7 @@ import { MarkdownEditor } from "@/components/helpdesk/markdown-editor";
 import { MarkdownLite } from "@/lib/markdown-lite";
 import { addMessageAction, saveDraftAction } from "@/actions/helpdesk";
 import { sendReplyAction, uploadAttachmentAction } from "@/actions/mailbox";
+import { renderTemplateAction } from "@/actions/helpdesk-collab";
 import {
   TICKET_STATUSES,
   TICKET_STATUS_LABELS,
@@ -58,6 +60,8 @@ export function Composer({
   ccDefaults,
   allowedStatuses,
   signature,
+  templates = [],
+  openChecklist = 0,
 }: {
   ticketId: string;
   version: number;
@@ -72,6 +76,9 @@ export function Composer({
   ccDefaults: string[];
   allowedStatuses: string[];
   signature: string | null;
+  templates?: { id: string; name: string; scope: string; body: string; category: string | null }[];
+  /** Open checklist items: shown as a warning next to "then mark resolved". */
+  openChecklist?: number;
 }) {
   const [kind, setKind] = useState<"public" | "internal">(
     draft?.kind ?? "internal",
@@ -97,6 +104,20 @@ export function Composer({
     null,
   );
   const [uploading, startUpload] = useTransition();
+  const [inserting, startInsert] = useTransition();
+  const [statusAfter, setStatusAfter] = useState("");
+  const usable = templates.filter(
+    (t) => t.scope === "both" || t.scope === (kind === "internal" ? "internal" : "public"),
+  );
+  const insertTemplate = (id: string) => {
+    const t = templates.find((x) => x.id === id);
+    if (!t) return;
+    startInsert(async () => {
+      const r = await renderTemplateAction(ticketId, t.body);
+      const text = r.ok ? r.data.body : t.body;
+      onChange(body.trim() ? `${body.replace(/\s+$/, "")}\n\n${text}` : text);
+    });
+  };
   const router = useRouter();
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -182,6 +203,28 @@ export function Composer({
           <MessageSquare className="h-3.5 w-3.5" />{" "}
           {emailEnabled ? "Reply to customer" : "Log customer message"}
         </button>
+        {usable.length > 0 && !preview && (
+          <label className="ml-1 inline-flex items-center gap-1 text-xs text-slate-600">
+            <FileText className="h-3.5 w-3.5" aria-hidden />
+            <Select
+              aria-label="Insert template"
+              className="h-7 w-auto text-xs"
+              value=""
+              disabled={inserting}
+              onChange={(e) => {
+                insertTemplate(e.target.value);
+              }}
+            >
+              <option value="">{inserting ? "Inserting…" : "Insert template…"}</option>
+              {usable.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.category ? `${t.category}: ` : ""}
+                  {t.name}
+                </option>
+              ))}
+            </Select>
+          </label>
+        )}
         <span className="ml-auto text-xs text-slate-500">
           {savedAt ? `Draft saved ${savedAt.toLocaleTimeString()}` : ""}
         </span>
@@ -341,7 +384,8 @@ export function Composer({
           name="status"
           aria-label="Status after sending"
           className="h-9 w-auto text-sm"
-          defaultValue=""
+          value={statusAfter}
+          onChange={(e) => setStatusAfter(e.target.value)}
         >
           <option value="">Keep status</option>
           {TICKET_STATUSES.filter((s) => allowedStatuses.includes(s)).map(
@@ -370,6 +414,11 @@ export function Composer({
               </>
             )}
           </Button>
+        )}
+        {openChecklist > 0 && (statusAfter === "resolved" || statusAfter === "closed") && (
+          <span className="text-xs text-amber-700">
+            {openChecklist} checklist item{openChecklist === 1 ? "" : "s"} still open
+          </span>
         )}
         <SubmitButton size="sm" disabled={uploading}>
           <Send className="h-3.5 w-3.5" />{" "}

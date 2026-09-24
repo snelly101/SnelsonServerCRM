@@ -20,6 +20,7 @@ import {
   Menu,
   LogOut,
   ShieldCheck,
+  Bell,
   X,
 } from "lucide-react";
 import { cn, initials } from "@/lib/utils";
@@ -50,6 +51,7 @@ export function AppShell({
   companyName,
   demoMode,
   twoFactorDueBy = null,
+  unreadNotifications = 0,
   children,
 }: {
   user: { name: string; email: string; role: Role; theme: ThemePref };
@@ -57,6 +59,8 @@ export function AppShell({
   demoMode: boolean;
   /** Set when the security policy requires 2FA the user has not enrolled in yet and the grace period is still running. */
   twoFactorDueBy?: string | null;
+  /** Unread helpdesk notifications for the bell in the header. */
+  unreadNotifications?: number;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -162,6 +166,26 @@ export function AppShell({
               <div className="text-slate-500">{ROLE_LABELS[user.role]}</div>
             </div>
             <ThemeToggle initial={user.theme} />
+            <Link
+              href="/helpdesk/notifications"
+              className="relative rounded p-1.5 text-slate-600 hover:bg-slate-100"
+              aria-label={
+                unreadNotifications
+                  ? `Notifications (${unreadNotifications} unread)`
+                  : "Notifications"
+              }
+              title="Notifications"
+            >
+              <Bell className="h-4 w-4" />
+              {unreadNotifications > 0 && (
+                <span
+                  className="absolute -right-0.5 -top-0.5 min-w-[1.1rem] rounded-full bg-red-600 px-1 text-center text-[10px] font-semibold leading-4 text-white"
+                  data-testid="notification-count"
+                >
+                  {unreadNotifications > 99 ? "99+" : unreadNotifications}
+                </span>
+              )}
+            </Link>
             <Link
               href="/account/security"
               className="rounded p-1.5 text-slate-600 hover:bg-slate-100"
