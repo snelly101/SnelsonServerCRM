@@ -142,3 +142,43 @@ One table, `hosting_items`, with a `kind` of `package`, `domain`, `mailbox` (and
 ### Not available via the API (hand-off)
 
 Renewing, provisioning, suspending, DNS and mailbox administration happen in My20i / StackCP. Pricing and 20i's own invoices to the reseller are not read.
+
+## Pax8 (Phase 12, built)
+
+**Read-only by design.** The live client (`src/connectors/pax8/live.ts`) has no write methods: the CRM never orders, changes a quantity or cancels a subscription at Pax8.
+
+Verified against the public Pax8 Partner API reference (devx.pax8.com). Shapes not shown in public material are handled defensively and kept verbatim in `raw`.
+
+| | Pax8 Partner API |
+|---|---|
+| **Account** | Any Pax8 partner; an API client (id + secret) is created under Settings → Integrations → Pax8 API in the partner portal |
+| **Auth** | OAuth 2.0 `client_credentials` at `https://login.pax8.com/oauth/token`, JSON body with `client_id`, `client_secret`, `audience: api://p8p.client`. Bearer token on requests; cached encrypted with the credentials, refreshed on 401 |
+| **Base URL** | `https://api.pax8.com/v1` |
+| **Read** | `GET /companies` (`id`, `name`, `website`, `phone`, `address`, `externalId`, `status`), `GET /products` (`id`, `name`, `vendorName`, `sku`, `vendorSku`), `GET /subscriptions` (`id`, `companyId`, `productId`, `quantity`, `status`, `price`, `billingTerm`, `commitmentTerm`, `startDate`, `endDate`, `billingStart`), `GET /invoices` and `GET /invoices/{id}/items` (`companyId`, `productId`, `sku`, `description`, `quantity`, `unitPrice`, `total`, `startPeriod`, `endPeriod`, `chargeType`). All paged with `page` / `size` (200) |
+| **Write** | **None** |
+| **Events** | No webhooks used → `pax8.sync` hourly at :50 plus *Sync now* |
+| **Rate limits** | Not published → 200 ms spacing, back off on 429/5xx |
+| **Deep links** | Company and subscription pages in the Pax8 portal |
+| **Hand-off** | Ordering, quantity changes, cancellations, invoice payment → Pax8 portal |
+
+### Setup (all in the web UI)
+
+1. Pax8 partner portal → Settings → Integrations → Pax8 API → create an API client, copy its id and secret.
+2. CRM → Integrations → Pax8 → paste both → *Verify and connect*. They are stored encrypted only if `GET /companies` succeeds.
+3. Run *Sync now*. Companies appear in the mapping table; exact domain or exact name matches are linked automatically, the licence check runs at the end of the sync.
+
+### What is mirrored
+
+`pax8_companies` (name, website and its registrable domain, phone, city, status, `company_id`, `manual` / `auto` match source, `external_status`), `pax8_products` (name, vendor, SKU, vendor SKU), `pax8_subscriptions` (product, quantity, status, partner price per term, billing term, commitment term and end, dates, the contract line a person chose, `company_id` derived from the company link) and `pax8_invoice_items` (the charge lines of the last N partner invoices, per customer). Rows disappearing from Pax8 are marked `deleted`, never removed.
+
+### Matching, licence check and costs
+
+- **Auto-link** (configurable): a Pax8 company is linked when its website domain matches exactly **one** company's website or contact email domain, or its normalised name equals exactly one company's, and that company is not already linked to another Pax8 company. Similar names are suggestions only. **Unlinking is remembered.**
+- **Which line bills a subscription**: the line chosen on the company's **Subscriptions** tab wins; otherwise the catalogue product's SKU must equal the Pax8 SKU or vendor SKU; otherwise the product name (or the line description) must equal the Pax8 product name. Subscriptions with no line are flagged *not billed*.
+- **Licence check**: for every matched line of an active contract, contracted quantity vs the sum of licences on `Active`, `Activated` and `PendingCancel` subscriptions. Differences become `billing_discrepancies` rows with `source = pax8`, reviewed like device discrepancies (accept re-opens if the gap grows; resolved automatically once counts match). Billing is never changed automatically.
+- **Costs**: the Pax8 price is the partner cost per unit per term. The tab shows it per month, the margin per unit against the line's price, and flags a line whose recorded `unit_cost` differs by more than a penny a month. *Use as cost* (contract.write) copies it onto the line converted to the line's billing period and writes an audit entry; the sell price is never touched. *What Pax8 charged for this customer* totals the mirrored invoice lines per invoice.
+
+### Not available via the API (hand-off)
+
+Ordering, quantity changes, cancellations and paying Pax8 invoices happen in the Pax8 portal. Reconciling Pax8 invoices against Xero bills is not built.
+

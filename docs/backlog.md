@@ -105,6 +105,8 @@ Ideas and requests not yet scheduled. Each item states what it is, why, and the 
 
 ## Pax8 integration (Microsoft 365 and other cloud subscriptions)
 
+**Status:** built (Phase 12, see `docs/phases.md`): read-only mirror of companies, subscriptions, products and recent invoices; company linking; line matching by choice / SKU / name; licence discrepancies; Pax8 price as line cost. Remaining from the plan: write actions (quantity changes behind confirmation and audit), Pax8 invoice vs Xero bill reconciliation.
+
 **What:** connect the Pax8 Partner API so each customer's subscriptions (Microsoft 365 licences, Acronis, security add-ons) are mirrored against the CRM company, with quantities, unit cost, billing term and renewal dates.
 
 **Why:** licence counts drift between Pax8, the customer's contract and the Xero invoice. Seeing all three side by side catches under-billing the same way the NinjaOne device comparison does.

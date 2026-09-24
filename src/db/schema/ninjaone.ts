@@ -100,6 +100,8 @@ export const billingDiscrepancies = pgTable(
       .notNull()
       .references(() => contractLines.id, { onDelete: "cascade" }),
     siteId: uuid("site_id").references(() => sites.id, { onDelete: "set null" }),
+    /** Which mirror produced the observed count: ninjaone (devices) or pax8 (licences). */
+    source: text("source").notNull().default("ninjaone"),
     lineDescription: text("line_description").notNull(),
     contractedQty: numeric("contracted_qty", { precision: 12, scale: 2 }).notNull(),
     observedQty: integer("observed_qty").notNull(),

@@ -8,6 +8,7 @@ import { CATEGORY_LABELS } from "@/lib/validation-sales";
 import { listConnections, PROVIDER_LABELS, type Provider } from "./integrations";
 import { deviceTotals, ninjaConnectionSummary } from "./ninjaone";
 import { twentyIConnectionSummary } from "./twentyi";
+import { pax8ConnectionSummary } from "./pax8";
 import { financeTotals } from "./xero";
 import { xeroConnectionSummary } from "./xero";
 import { bpConnectionSummary } from "./proposals";
@@ -222,22 +223,23 @@ export async function outstandingInvoicesReport() {
 export async function devicesReport() {
   const conn = await ninjaConnectionSummary();
   const totals = await deviceTotals();
-  const [disc] = await db.select({ open: sql<number>`count(*) filter (where status = 'open')`.mapWith(Number), accepted: sql<number>`count(*) filter (where status = 'accepted')`.mapWith(Number), unbilledPerPeriod: sql<number>`coalesce(sum(case when status = 'open' and difference > 0 then difference * coalesce(unit_price, 0) else 0 end), 0)`.mapWith(Number), overbilledPerPeriod: sql<number>`coalesce(sum(case when status = 'open' and difference < 0 then -difference * coalesce(unit_price, 0) else 0 end), 0)`.mapWith(Number) }).from(billingDiscrepancies);
+  const [disc] = await db.select({ open: sql<number>`count(*) filter (where status = 'open')`.mapWith(Number), accepted: sql<number>`count(*) filter (where status = 'accepted')`.mapWith(Number), unbilledPerPeriod: sql<number>`coalesce(sum(case when status = 'open' and difference > 0 then difference * coalesce(unit_price, 0) else 0 end), 0)`.mapWith(Number), overbilledPerPeriod: sql<number>`coalesce(sum(case when status = 'open' and difference < 0 then -difference * coalesce(unit_price, 0) else 0 end), 0)`.mapWith(Number) }).from(billingDiscrepancies).where(eq(billingDiscrepancies.source, "ninjaone"));
   return { configured: conn.configured, demo: conn.demo, totals, discrepancies: disc, isEstimate: true };
 }
 
 export async function integrationHealthReport() {
-  const [conns, worker, bp, xero, ninja, twentyi, failed, conflicts] = await Promise.all([
+  const [conns, worker, bp, xero, ninja, twentyi, pax8, failed, conflicts] = await Promise.all([
     listConnections(),
     workerHealth(),
     bpConnectionSummary(),
     xeroConnectionSummary(),
     ninjaConnectionSummary(),
     twentyIConnectionSummary(),
+    pax8ConnectionSummary(),
     db.select({ provider: syncRuns.provider, failed: sql<number>`count(*) filter (where status = 'failed')`.mapWith(Number), partial: sql<number>`count(*) filter (where status = 'partial')`.mapWith(Number), runs: sql<number>`count(*)`.mapWith(Number), errors: sql<number>`coalesce(sum(errors), 0)`.mapWith(Number) }).from(syncRuns).where(gte(syncRuns.startedAt, new Date(Date.now() - 86400000))).groupBy(syncRuns.provider),
     db.select({ provider: mappingConflicts.provider, open: sql<number>`count(*)`.mapWith(Number) }).from(mappingConflicts).where(eq(mappingConflicts.status, "open")).groupBy(mappingConflicts.provider),
   ]);
-  const demo: Record<Provider, boolean> = { betterproposals: bp.demo, xero: xero.demo, ninjaone: ninja.demo, twentyi: twentyi.demo };
+  const demo: Record<Provider, boolean> = { betterproposals: bp.demo, xero: xero.demo, ninjaone: ninja.demo, twentyi: twentyi.demo, pax8: pax8.demo };
   const f = new Map(failed.map((r) => [r.provider, r]));
   const c = new Map(conflicts.map((r) => [r.provider, r.open]));
   const providers = conns.map((x) => {

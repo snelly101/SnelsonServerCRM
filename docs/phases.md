@@ -291,3 +291,31 @@ Built to the brief in the owner's redesign document: a compact company summary w
 ### Remaining dependencies
 
 - None. Any future component that hard-codes a hex colour should use the palette or the four semantic tokens so both themes keep working.
+
+## Phase 12 — Pax8 subscriptions ✅
+
+### Verified against vendor documentation
+
+Public Pax8 Partner API reference (devx.pax8.com): OAuth 2.0 client-credentials at `login.pax8.com/oauth/token` with audience `api://p8p.client`, base URL `api.pax8.com/v1`, paged `GET /companies`, `/products`, `/subscriptions`, `/invoices` and `/invoices/{id}/items` with `{ content, page }` envelopes. Field names not shown publicly are parsed defensively and kept verbatim in `raw`; a live account check remains on the list below.
+
+### What works
+
+- **Connector** (`src/connectors/pax8/`): read-only live client (token exchange cached and refreshed on 401, page walking up to 200 per page, retries with backoff), and a demo adapter with seven customer companies, seven products, ten subscriptions and the last three partner invoices, aligned with the seed contracts.
+- **Mirror** (`pax8_companies`, `pax8_products`, `pax8_subscriptions`, `pax8_invoice_items`): companies, the catalogue entries their subscriptions reference, every subscription with quantity, status, partner price, billing term and commitment end, and the charge lines of the last N partner invoices per customer; deleted-at-Pax8 marking; hourly `pax8.sync` plus *Sync now*.
+- **Company linking**: automatic on an exact registrable-domain match (website or contact email domain) or an exact normalised name, one Pax8 company per CRM company; similar names are suggestions only; manual link/unlink from the mapping table; unlinks are remembered.
+- **Line matching**: each subscription is matched to the contract line that bills it, in order: the line a person chose on the company's **Subscriptions** tab, the catalogue product SKU equal to the Pax8 SKU or vendor SKU, the product name (or line description) equal to the Pax8 product name.
+- **Licence check**: contracted quantity vs licences held at Pax8 for every matched line, written to `billing_discrepancies` with `source = pax8` and reviewed with the same accept/dismiss flow as device discrepancies (device pages and the dashboard now filter on `source = ninjaone`). Runs inside every sync, after a manual link, and on *Re-check licences*.
+- **Costs**: the Pax8 price is the partner cost; the Subscriptions tab shows the monthly unit cost, the margin per unit against the line's price, flags lines whose recorded cost differs, and *Use as cost* copies the Pax8 price onto the line (converted to the line's billing period, audited; the sell price is never touched). *What Pax8 charged for this customer* lists the mirrored invoice totals per customer.
+- **Integrations page** card, per-provider page with stats (companies, linked, active subscriptions and licences, partner cost per month, open discrepancies), mapping table, open discrepancies, sync history and errors; Reports integration health includes Pax8; Overview shows *Licences · Pax8*.
+
+### What was tested
+
+- **8 unit/integration tests (122 total)**: term-to-months, date and commitment parsing, monthly unit cost; line matching precedence (manual > SKU > name, none); live client exchanges credentials with the Pax8 audience, sends the bearer token, walks two pages, treats a 404 items endpoint as empty, only ever GETs, exposes no write method; demo sync mirrors 7 companies / 9 billed subscriptions with the right licence total, links three companies by domain or name and leaves the similar-name one unlinked, raises +2 and −2 discrepancies for the seed contracts and nothing for NinjaOne, re-sync is idempotent; company overview matches by name, computes margin, flags the unbilled subscription and lists three invoices; suggestions by similar name, manual link cascades to subscriptions, a second Pax8 company on one CRM company is refused, unlink survives a sync and an auto-link pass; billing line must belong to the company, manual choice wins, cost mismatch flagged and applied (1.60 → 1.55) with audit; reviewing a licence discrepancy logs a licence event with source pax8 and the check resolves once counts match.
+- **2 browser tests (26 total)**: Pax8 page shows demo state, auto-linked rows, a similar-name suggestion an admin links, and the +2 / −2 discrepancies; company Subscriptions tab shows the name-matched line, an admin links the unbilled subscription and it persists, *differs* appears and *Use as cost* applies 1.55, the Northern Freight tab shows its +2, and a read-only user sees the tab without controls and no connect form.
+
+### Remaining dependencies (live verification)
+
+- Connect a real Pax8 API client on the VPS and run one sync; check the sync errors panel for any endpoint whose shape differs (subscription `price` / `commitmentTerm` and invoice items are the likely ones) and adjust the parser.
+- Decide whether Pax8 invoices should also be reconciled against Xero bills (not built; the per-customer charge view is read-only).
+- Write actions (change a licence quantity from the CRM) stay on the backlog behind confirmation and audit.
+

@@ -48,7 +48,7 @@ export default async function DashboardPage() {
       .orderBy(desc(activities.at))
       .limit(12),
   ]);
-  const [ninja, devices, openDiscrepancies, health] = await Promise.all([ninjaConnectionSummary(), deviceTotals(), listDiscrepancies({ status: "open" }), integrationHealth()]);
+  const [ninja, devices, openDiscrepancies, health] = await Promise.all([ninjaConnectionSummary(), deviceTotals(), listDiscrepancies({ status: "open", source: "ninjaone" }), integrationHealth()]);
   const [pipeline, contractsTotals, myTasks, counts, renewals] = await Promise.all([
     pipelineTotals(),
     contractTotals(),

@@ -43,6 +43,8 @@ import { fmtRelative } from "@/lib/format";
 import { companyDeviceOverview } from "@/services/ninjaone";
 import { companyHostingOverview } from "@/services/twentyi";
 import { HostingPanel } from "@/components/hosting-panel";
+import { companySubscriptionOverview } from "@/services/pax8";
+import { SubscriptionsPanel } from "@/components/subscriptions-panel";
 import { listCompanyNotes } from "@/services/notes";
 import { NotesPanel } from "@/components/notes/notes-panel";
 import { MarkdownLite } from "@/lib/markdown-lite";
@@ -85,6 +87,7 @@ export default async function CompanyPage({
     xero,
     devices,
     hosting,
+    subscriptions,
     notes,
   ] = await Promise.all([
     getCompany(id),
@@ -105,6 +108,7 @@ export default async function CompanyPage({
       ? companyDeviceOverview(id)
       : Promise.resolve(null),
     companyHostingOverview(id),
+    companySubscriptionOverview(id),
     listCompanyNotes(id, {
       includeArchived: sp.archived === "1" && sp.tab === "notes",
     }),
@@ -192,6 +196,12 @@ export default async function CompanyPage({
       label: "Hosting",
       href: `${base}?tab=hosting`,
       count: hostingCount,
+    },
+    {
+      key: "subscriptions",
+      label: "Subscriptions",
+      href: `${base}?tab=subscriptions`,
+      count: subscriptions?.totals.subscriptions,
     },
     {
       key: "tasks",
@@ -427,6 +437,20 @@ export default async function CompanyPage({
                           </Link>
                         )}
                       </span>
+                    ) : null}
+                  </Row>
+                  <Row label="Licences · Pax8">
+                    {subscriptions ? (
+                      <Link
+                        href={`${base}?tab=subscriptions`}
+                        className="text-brand-700 hover:underline"
+                      >
+                        {plural(subscriptions.totals.licences, "licence")} on{" "}
+                        {plural(
+                          subscriptions.totals.subscriptions,
+                          "subscription",
+                        )}
+                      </Link>
                     ) : null}
                   </Row>
                   <Row label="Devices">
@@ -1249,6 +1273,16 @@ export default async function CompanyPage({
               companyId={id}
             />
           </>
+        )}
+        {tab === "subscriptions" && (
+          <SubscriptionsPanel
+            overview={subscriptions}
+            canEdit={can(me.role, "contract.write")}
+            canReview={can(me.role, "discrepancy.review")}
+            canManageIntegrations={can(me.role, "integration.manage")}
+            settings={settings}
+            companyId={id}
+          />
         )}
         {tab === "vault" && vaultCaps.list && vault && (
           <VaultPanel

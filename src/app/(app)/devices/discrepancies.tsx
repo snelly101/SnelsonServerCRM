@@ -44,7 +44,7 @@ export function RecheckButton() {
   );
 }
 
-export function DiscrepancyTable({ rows, canReview, currency, compact = false }: { rows: DiscrepancyRow[]; canReview: boolean; currency: string; compact?: boolean }) {
+export function DiscrepancyTable({ rows, canReview, currency, compact = false, kind = "device" }: { rows: DiscrepancyRow[]; canReview: boolean; currency: string; compact?: boolean; kind?: "device" | "licence" }) {
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -56,7 +56,7 @@ export function DiscrepancyTable({ rows, canReview, currency, compact = false }:
       setError(r.ok ? null : r.error);
       router.refresh();
     });
-  if (rows.length === 0) return <p className="p-4 text-sm text-slate-500">No discrepancies. Contracted and observed counts match for every compared line.</p>;
+  if (rows.length === 0) return <p className="p-4 text-sm text-slate-500">No discrepancies. Contracted and observed {kind === "licence" ? "licence" : "device"} counts match for every compared line.</p>;
   return (
     <div>
       {error && <p className="px-4 py-2 text-sm text-red-700">{error}</p>}
@@ -66,7 +66,7 @@ export function DiscrepancyTable({ rows, canReview, currency, compact = false }:
             {!compact && <th>Company</th>}
             <th>Contract line</th>
             <th className="text-right">Contracted</th>
-            <th className="text-right">Observed</th>
+            <th className="text-right">{kind === "licence" ? "At Pax8" : "Observed"}</th>
             <th className="text-right">Difference</th>
             <th>Status</th>
             {canReview && <th>Review</th>}

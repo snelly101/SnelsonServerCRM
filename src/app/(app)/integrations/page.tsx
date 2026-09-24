@@ -11,6 +11,8 @@ import { NinjaSyncButton, NinjaTestButton } from "./ninjaone/controls";
 import { ninjaConnectionSummary } from "@/services/ninjaone";
 import { TwentyISyncButton, TwentyITestButton } from "./twentyi/controls";
 import { twentyIConnectionSummary } from "@/services/twentyi";
+import { Pax8SyncButton, Pax8TestButton } from "./pax8/controls";
+import { pax8ConnectionSummary } from "@/services/pax8";
 import { workerHealth } from "@/lib/system-status";
 import { PageHeader, Card, EmptyState, Stat } from "@/components/ui/page";
 import { Badge } from "@/components/ui/badge";
@@ -26,7 +28,7 @@ const STATUS_TONE: Record<string, string> = { connected: "green", error: "red", 
 
 export default async function IntegrationsPage() {
   const me = await requirePermission("integration.read");
-  const [health, runs, conflicts, bp, counts, settings, xero, ninja, twentyi, worker] = await Promise.all([integrationHealth(), listSyncRuns(undefined, 15), listOpenConflicts(), bpConnectionSummary(), proposalCounts(), getAppSettings(), xeroConnectionSummary(), ninjaConnectionSummary(), twentyIConnectionSummary(), workerHealth()]);
+  const [health, runs, conflicts, bp, counts, settings, xero, ninja, twentyi, pax8, worker] = await Promise.all([integrationHealth(), listSyncRuns(undefined, 15), listOpenConflicts(), bpConnectionSummary(), proposalCounts(), getAppSettings(), xeroConnectionSummary(), ninjaConnectionSummary(), twentyIConnectionSummary(), pax8ConnectionSummary(), workerHealth()]);
   const canManage = can(me.role, "integration.manage");
   const canSync = can(me.role, "integration.sync");
   const demo = process.env.DEMO_MODE === "true";
@@ -47,7 +49,7 @@ export default async function IntegrationsPage() {
       <div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {health.connections.map((c) => {
           const provider = c.provider as Provider;
-          const isDemo = provider === "betterproposals" ? bp.demo : provider === "xero" ? xero.demo : provider === "ninjaone" ? ninja.demo : twentyi.demo;
+          const isDemo = provider === "betterproposals" ? bp.demo : provider === "xero" ? xero.demo : provider === "ninjaone" ? ninja.demo : provider === "pax8" ? pax8.demo : twentyi.demo;
           const label = isDemo ? "Demo (not connected)" : c.status.replace("_", " ");
           return (
             <Card
@@ -103,6 +105,11 @@ export default async function IntegrationsPage() {
                   <>
                     {canManage && twentyi.configured && <TwentyITestButton />}
                     {canSync && twentyi.configured && <TwentyISyncButton />}
+                  </>
+                ) : provider === "pax8" ? (
+                  <>
+                    {canManage && pax8.configured && <Pax8TestButton />}
+                    {canSync && pax8.configured && <Pax8SyncButton />}
                   </>
                 ) : (
                   <>

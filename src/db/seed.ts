@@ -225,6 +225,9 @@ export async function seed(url = process.env.DATABASE_URL) {
       // Mirror demo 20i hosting; exact domain matches link themselves to the seed companies.
       const { syncTwentyI } = await import("@/services/twentyi");
       await syncTwentyI("manual", userIds["admin@example.com"]).catch((err) => console.warn("demo 20i sync skipped:", err));
+      // Mirror demo Pax8 subscriptions; domain and exact-name matches link themselves and the licence check runs.
+      const { syncPax8 } = await import("@/services/pax8");
+      await syncPax8("manual", userIds["admin@example.com"]).catch((err) => console.warn("demo pax8 sync skipped:", err));
     }
     await db.insert(schema.auditLog).values({ actorType: "system", action: "seed.run", entityType: "database", details: { users: SEED_USERS.length, companies: COMPANIES.length } });
   } finally {
