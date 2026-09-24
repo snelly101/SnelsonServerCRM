@@ -15,16 +15,32 @@ import { CustomFieldsDisplay } from "@/components/custom-fields";
 import { Alert } from "@/components/ui/alert";
 import { fmtDate } from "@/lib/format";
 import { fullName } from "@/lib/utils";
+import { listTickets } from "@/services/helpdesk";
+import { TicketTable } from "@/components/helpdesk/ticket-table";
 
-export default async function ContactPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ContactPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
   const me = await requirePermission("contact.read");
   const { id } = await params;
-  const [contact, defs, settings] = await Promise.all([getContact(id), listCustomFieldDefs("contact"), getAppSettings()]);
+  const [contact, defs, settings, contactTickets] = await Promise.all([
+    getContact(id),
+    listCustomFieldDefs("contact"),
+    getAppSettings(),
+    can(me.role, "helpdesk.read")
+      ? listTickets({ contactId: id, view: "all", pageSize: 25 })
+      : Promise.resolve(null),
+  ]);
   if (!contact) notFound();
   return (
     <>
       <PageHeader
-        breadcrumbs={[{ label: "Contacts", href: "/contacts" }, { label: fullName(contact) }]}
+        breadcrumbs={[
+          { label: "Contacts", href: "/contacts" },
+          { label: fullName(contact) },
+        ]}
         title={
           <span className="flex flex-wrap items-center gap-2">
             {fullName(contact)}
@@ -37,7 +53,10 @@ export default async function ContactPage({ params }: { params: Promise<{ id: st
         description={
           <>
             {contact.jobTitle && <>{contact.jobTitle} at </>}
-            <Link href={`/companies/${contact.companyId}`} className="text-brand-700 hover:underline">
+            <Link
+              href={`/companies/${contact.companyId}`}
+              className="text-brand-700 hover:underline"
+            >
               {contact.companyName}
             </Link>
           </>
@@ -49,7 +68,17 @@ export default async function ContactPage({ params }: { params: Promise<{ id: st
                 <Pencil className="h-4 w-4" /> Edit
               </ButtonLink>
               {can(me.role, "contact.delete") && !contact.archivedAt && (
-                <ConfirmButton variant="danger-outline" action={archiveContactAction.bind(null, id, contact.companyId)} title={`Archive ${fullName(contact)}?`} description="The contact is hidden from lists but kept for history." confirmLabel="Archive">
+                <ConfirmButton
+                  variant="danger-outline"
+                  action={archiveContactAction.bind(
+                    null,
+                    id,
+                    contact.companyId,
+                  )}
+                  title={`Archive ${fullName(contact)}?`}
+                  description="The contact is hidden from lists but kept for history."
+                  confirmLabel="Archive"
+                >
                   <Archive className="h-4 w-4" /> Archive
                 </ConfirmButton>
               )}
@@ -57,11 +86,22 @@ export default async function ContactPage({ params }: { params: Promise<{ id: st
           )
         }
       />
-      {contact.archivedAt && <Alert tone="warn" className="mb-4">This contact was archived on {fmtDate(contact.archivedAt, settings)}.</Alert>}
+      {contact.archivedAt && (
+        <Alert tone="warn" className="mb-4">
+          This contact was archived on {fmtDate(contact.archivedAt, settings)}.
+        </Alert>
+      )}
       <Card title="Details" className="max-w-3xl">
         <DescriptionList
           items={[
-            { label: "Email", value: contact.email ? <a href={`mailto:${contact.email}`} className="hover:underline">{contact.email}</a> : null },
+            {
+              label: "Email",
+              value: contact.email ? (
+                <a href={`mailto:${contact.email}`} className="hover:underline">
+                  {contact.email}
+                </a>
+              ) : null,
+            },
             { label: "Phone", value: contact.phone },
             { label: "Mobile", value: contact.mobile },
             { label: "Site", value: contact.siteName },
@@ -76,11 +116,48 @@ export default async function ContactPage({ params }: { params: Promise<{ id: st
         )}
         {contact.notes && (
           <div className="mt-4 border-t border-slate-100 pt-4">
-            <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Notes</div>
-            <p className="mt-1 whitespace-pre-wrap text-sm text-slate-800">{contact.notes}</p>
+            <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              Notes
+            </div>
+            <p className="mt-1 whitespace-pre-wrap text-sm text-slate-800">
+              {contact.notes}
+            </p>
           </div>
         )}
       </Card>
+      {contactTickets && (
+        <Card
+          title={`Helpdesk tickets (${contactTickets.total})`}
+          padded={false}
+          className="mt-4 max-w-5xl"
+          actions={
+            can(me.role, "helpdesk.agent") ? (
+              <ButtonLink
+                href={`/helpdesk/tickets/new?companyId=${contact.companyId}&contactId=${id}`}
+                size="sm"
+                variant="secondary"
+              >
+                New ticket
+              </ButtonLink>
+            ) : undefined
+          }
+        >
+          <TicketTable
+            rows={contactTickets.rows}
+            canManage={false}
+            columns={[
+              "reference",
+              "subject",
+              "status",
+              "priority",
+              "assignee",
+              "updated",
+            ]}
+            agents={[]}
+            teams={[]}
+          />
+        </Card>
+      )}
     </>
   );
 }

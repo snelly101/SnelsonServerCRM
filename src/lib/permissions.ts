@@ -60,6 +60,13 @@ export const ACTIONS = [
   // Secure Vault: `vault.use` = may hold per-user grants; `vault.admin` = manage grants, categories, settings, all audit
   "vault.use",
   "vault.admin",
+  // Helpdesk: read = see tickets (Read-only Staff); agent = work tickets, reply, notes, time (Agent);
+  // manage = team queues, bulk actions, assign others, merge/split, export (Team Manager);
+  // admin = mailbox, SLA, automation, categories, deletion (Helpdesk Administrator)
+  "helpdesk.read",
+  "helpdesk.agent",
+  "helpdesk.manage",
+  "helpdesk.admin",
 ] as const;
 export type Action = (typeof ACTIONS)[number];
 
@@ -77,6 +84,7 @@ const everyoneRead = [
   "report.read",
   "settings.read",
   "integration.read",
+  "helpdesk.read",
 ] as const;
 
 const PERMISSIONS: Record<Role, Set<Action>> = {
@@ -103,6 +111,8 @@ const PERMISSIONS: Record<Role, Set<Action>> = {
     "task.write",
     "discrepancy.review",
     "invoice.prepare",
+    "helpdesk.agent",
+    "helpdesk.manage",
   ),
   finance: A(
     ...everyoneRead,
@@ -117,7 +127,7 @@ const PERMISSIONS: Record<Role, Set<Action>> = {
     "report.finance.read",
     "task.write",
   ),
-  technician: A(...everyoneRead, "contact.write", "task.write", "vault.use"),
+  technician: A(...everyoneRead, "contact.write", "task.write", "vault.use", "helpdesk.agent"),
   read_only: A(...everyoneRead),
 };
 

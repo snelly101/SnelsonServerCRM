@@ -1,4 +1,4 @@
-import { FileText, Phone, Mail, Users, StickyNote, Cog, ListChecks, Receipt, FileSignature, MonitorSmartphone, RefreshCw } from "lucide-react";
+import { FileText, Phone, Mail, Users, StickyNote, Cog, ListChecks, Receipt, FileSignature, MonitorSmartphone, RefreshCw, LifeBuoy } from "lucide-react";
 import { EmptyState } from "./ui/page";
 
 const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -13,6 +13,7 @@ const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   contract: FileSignature,
   device: MonitorSmartphone,
   sync: RefreshCw,
+  ticket: LifeBuoy,
 };
 
 export type TimelineItem = {

@@ -9,3 +9,4 @@ export * from "./vault";
 export * from "./hosting";
 export * from "./notes";
 export * from "./pax8";
+export * from "./helpdesk";

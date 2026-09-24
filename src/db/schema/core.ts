@@ -206,7 +206,7 @@ export const companyTags = pgTable(
 );
 
 export const customFieldTypeEnum = pgEnum("custom_field_type", ["text", "number", "date", "boolean", "select"]);
-export const customFieldEntityEnum = pgEnum("custom_field_entity", ["company", "contact", "opportunity"]);
+export const customFieldEntityEnum = pgEnum("custom_field_entity", ["company", "contact", "opportunity", "ticket"]);
 
 export const customFieldDefs = pgTable(
   "custom_field_defs",
@@ -240,6 +240,7 @@ export const activityTypeEnum = pgEnum("activity_type", [
   "contract",
   "device",
   "sync",
+  "ticket",
 ]);
 
 export const activities = pgTable(

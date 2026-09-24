@@ -44,6 +44,8 @@ import { companyDeviceOverview } from "@/services/ninjaone";
 import { companyHostingOverview } from "@/services/twentyi";
 import { HostingPanel } from "@/components/hosting-panel";
 import { companySubscriptionOverview } from "@/services/pax8";
+import { companyTicketSummary, listTickets } from "@/services/helpdesk";
+import { TicketTable } from "@/components/helpdesk/ticket-table";
 import { SubscriptionsPanel } from "@/components/subscriptions-panel";
 import { listCompanyNotes } from "@/services/notes";
 import { NotesPanel } from "@/components/notes/notes-panel";
@@ -88,6 +90,8 @@ export default async function CompanyPage({
     devices,
     hosting,
     subscriptions,
+    ticketSummary,
+    companyTickets,
     notes,
   ] = await Promise.all([
     getCompany(id),
@@ -109,6 +113,12 @@ export default async function CompanyPage({
       : Promise.resolve(null),
     companyHostingOverview(id),
     companySubscriptionOverview(id),
+    can(me.role, "helpdesk.read")
+      ? companyTicketSummary(id)
+      : Promise.resolve(null),
+    can(me.role, "helpdesk.read")
+      ? listTickets({ companyId: id, view: "all", pageSize: 50 })
+      : Promise.resolve(null),
     listCompanyNotes(id, {
       includeArchived: sp.archived === "1" && sp.tab === "notes",
     }),
@@ -203,6 +213,16 @@ export default async function CompanyPage({
       href: `${base}?tab=subscriptions`,
       count: subscriptions?.totals.subscriptions,
     },
+    ...(ticketSummary
+      ? [
+          {
+            key: "tickets",
+            label: "Tickets",
+            href: `${base}?tab=tickets`,
+            count: ticketSummary.open,
+          },
+        ]
+      : []),
     {
       key: "tasks",
       label: "Tasks",
@@ -450,6 +470,17 @@ export default async function CompanyPage({
                           subscriptions.totals.subscriptions,
                           "subscription",
                         )}
+                      </Link>
+                    ) : null}
+                  </Row>
+                  <Row label="Helpdesk">
+                    {ticketSummary && ticketSummary.total > 0 ? (
+                      <Link
+                        href={`${base}?tab=tickets`}
+                        className="text-brand-700 hover:underline"
+                      >
+                        {plural(ticketSummary.open, "open ticket")} of{" "}
+                        {ticketSummary.total}
                       </Link>
                     ) : null}
                   </Row>
@@ -1273,6 +1304,39 @@ export default async function CompanyPage({
               companyId={id}
             />
           </>
+        )}
+        {tab === "tickets" && companyTickets && (
+          <Card
+            title={`Helpdesk tickets · ${ticketSummary?.open ?? 0} open of ${ticketSummary?.total ?? 0}`}
+            padded={false}
+            actions={
+              can(me.role, "helpdesk.agent") ? (
+                <ButtonLink
+                  href={`/helpdesk/tickets/new?companyId=${id}`}
+                  size="sm"
+                  variant="secondary"
+                >
+                  New ticket
+                </ButtonLink>
+              ) : undefined
+            }
+          >
+            <TicketTable
+              rows={companyTickets.rows}
+              canManage={false}
+              columns={[
+                "reference",
+                "subject",
+                "status",
+                "priority",
+                "requester",
+                "assignee",
+                "updated",
+              ]}
+              agents={[]}
+              teams={[]}
+            />
+          </Card>
         )}
         {tab === "subscriptions" && (
           <SubscriptionsPanel
