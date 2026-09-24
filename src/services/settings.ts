@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { appSettings, customFieldDefs, tags, savedViews } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { ActionError } from "@/lib/action-result";
-import type { appSettingsSchema, customFieldDefSchema, tagSchema, savedViewSchema } from "@/lib/validation";
+import type { appSettingsSchema, customFieldDefSchema, tagSchema, savedViewSchema, securitySettingsSchema } from "@/lib/validation";
 
 export async function updateAppSettings(input: z.infer<typeof appSettingsSchema>, actorUserId: string) {
   await db.transaction(async (tx) => {
@@ -13,6 +13,14 @@ export async function updateAppSettings(input: z.infer<typeof appSettingsSchema>
       .set({ ...input, defaultTaxRatePercent: String(input.defaultTaxRatePercent), updatedAt: new Date() })
       .where(eq(appSettings.id, 1));
     await audit({ actorUserId, action: "settings.update", entityType: "app_settings", entityId: "1", details: input }, tx);
+  });
+}
+
+/** Settings → Security: which roles must use a second factor and from when. */
+export async function updateSecuritySettings(input: z.infer<typeof securitySettingsSchema>, actorUserId: string) {
+  await db.transaction(async (tx) => {
+    await tx.update(appSettings).set({ twoFactorRequiredRoles: input.twoFactorRequiredRoles, twoFactorDeadline: input.twoFactorDeadline, updatedAt: new Date() }).where(eq(appSettings.id, 1));
+    await audit({ actorUserId, action: "settings.security.update", entityType: "app_settings", entityId: "1", details: input }, tx);
   });
 }
 

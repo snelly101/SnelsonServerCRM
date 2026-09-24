@@ -133,6 +133,12 @@ export const appSettingsSchema = z.object({
   vaultReviewReminderDays: z.coerce.number().int().min(1).max(180).optional(),
   vaultRevealLimit: z.coerce.number().int().min(1).max(10000).optional(),
 });
+export const securitySettingsSchema = z.object({
+  twoFactorRequiredRoles: z.array(z.enum(["admin", "sales", "account_manager", "finance", "technician", "read_only"])).default([]),
+  twoFactorDeadline: z.preprocess((v) => (v === "" || v === null || v === undefined ? null : v), z.union([z.null(), z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a date")])),
+});
+export type SecuritySettingsInput = z.infer<typeof securitySettingsSchema>;
+
 export const vaultSettingsSchema = appSettingsSchema.pick({ vaultRevealSeconds: true, vaultClipboardSeconds: true, vaultStepUpMinutes: true, vaultReviewReminderDays: true, vaultRevealLimit: true }).required();
 
 export const savedViewSchema = z.object({

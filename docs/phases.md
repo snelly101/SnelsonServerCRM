@@ -232,3 +232,24 @@ Built to the brief in the owner's redesign document: a compact company summary w
 
 - The app has no dark mode yet (see backlog), so only the light palette was applied using the existing tokens.
 - Count badges use the same definitions as before: open opportunities, active contracts, active devices, open tasks, unarchived vault items.
+
+## Phase 9 — Two-factor authentication ✅
+
+### What works
+
+- **Authenticator app (TOTP) as a second factor**, using Better Auth's `twoFactor` plugin on the existing session model: 6 digits, 30 seconds, secret and recovery codes stored encrypted with `BETTER_AUTH_SECRET` in the new `two_factor` table; `user.two_factor_enabled` flips only after a code has been verified.
+- **Enrolment** on the new **Security** page (shield icon in the header, `/account/security`): confirm password → QR code and manual key → verify one code → ten recovery codes shown once with copy and download. Also there: regenerate recovery codes (password), forget trusted browsers, turn off (password; signs out other sessions). Microsoft-only accounts see that Entra handles their MFA.
+- **Sign-in**: after the password is accepted the server deletes the provisional session and sets a 10-minute challenge cookie; `/login/verify` takes the authenticator code or a recovery code, with **Trust this browser for 30 days**. Ten wrong codes lock the second factor for 15 minutes.
+- **Policy** (Settings → Security): roles that must use 2FA and an optional grace-period end date. Before the date affected users see a banner; after it (or with no date) every page redirects them to enrolment. Only accounts with a CRM password are counted; the page lists each user's status.
+- **Admin reset** (Settings → Users → *Reset 2FA*): removes the secret and codes, forgets trusted browsers, signs the user out everywhere, audited as `user.two_factor.reset`. Enable, disable, code regeneration and trusted-browser revocation are audited too.
+
+### What was tested
+
+- **3 unit/integration tests (109 total)**: policy rules (roles, password-less exemption, grace period before/after the date); full API flow — enable does not activate until a code is verified, wrong code refused, stored secret and codes are not plaintext, password-only sign-in then returns a challenge and creates no session, wrong code refused, valid code with trust creates the session and a trust record, a recovery code works once, revoking trusted browsers, admin reset clears everything and writes the audit row, sign-in is password-only again.
+- **2 browser tests (22 total)**: technician enrols (wrong password and wrong code refused), is challenged at sign-in, uses a recovery code with browser trust, is not challenged while trusted, forgets the browser, the used recovery code is refused, admin resets and the technician signs in with the password alone; policy requiring technicians blocks an un-enrolled technician on every page, a grace period turns that into a banner, clearing the policy restores access.
+
+### Remaining dependencies
+
+- Set the policy under Settings → Security once everyone has an authenticator app; a grace period of two weeks is a sensible start.
+- `TWO_FACTOR_ISSUER` (optional) sets the name shown in authenticator apps; defaults to "Snelson Server CRM".
+- Later: passkeys, and accepting an authenticator code as the Secure Vault step-up instead of the password.

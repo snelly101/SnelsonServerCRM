@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
+import { twoFactor } from "better-auth/plugins";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
 import { ROLES } from "./permissions";
@@ -25,6 +26,7 @@ export const auth = betterAuth({
       session: schema.session,
       account: schema.account,
       verification: schema.verification,
+      twoFactor: schema.twoFactor,
     },
   }),
   emailAndPassword: {
@@ -69,12 +71,33 @@ export const auth = betterAuth({
     customRules: {
       // Per-IP sign-in attempts per minute. Override only for automated browser tests.
       "/sign-in/email": { window: 60, max: Number(process.env.AUTH_SIGN_IN_MAX_PER_MINUTE) || 10 },
+      // Second-factor code attempts share the same per-IP budget (the account itself locks after 10 wrong codes).
+      "/two-factor/verify-totp": { window: 60, max: Number(process.env.AUTH_SIGN_IN_MAX_PER_MINUTE) || 10 },
+      "/two-factor/verify-backup-code": { window: 60, max: Number(process.env.AUTH_SIGN_IN_MAX_PER_MINUTE) || 10 },
+      "/two-factor/enable": { window: 60, max: Number(process.env.AUTH_SIGN_IN_MAX_PER_MINUTE) || 10 },
+      "/two-factor/disable": { window: 60, max: Number(process.env.AUTH_SIGN_IN_MAX_PER_MINUTE) || 10 },
+      "/two-factor/generate-backup-codes": { window: 60, max: Number(process.env.AUTH_SIGN_IN_MAX_PER_MINUTE) || 10 },
     },
   },
   advanced: {
     useSecureCookies: process.env.NODE_ENV === "production",
   },
-  plugins: [nextCookies()],
+  plugins: [
+    /**
+     * Second factor: authenticator app (TOTP) with recovery codes. The seed is
+     * only stored once the user has verified a code; a browser can be trusted
+     * for 30 days; ten failed codes lock the account's second factor for 15 min.
+     */
+    twoFactor({
+      issuer: process.env.TWO_FACTOR_ISSUER ?? "Snelson Server CRM",
+      totpOptions: { digits: 6, period: 30 },
+      backupCodeOptions: { amount: 10, length: 10 },
+      twoFactorCookieMaxAge: 10 * 60,
+      trustDeviceMaxAge: 30 * 24 * 3600,
+      accountLockout: { enabled: true, maxFailedAttempts: 10, durationSeconds: 15 * 60 },
+    }),
+    nextCookies(),
+  ],
 });
 
 export type AuthSession = typeof auth.$Infer.Session;

@@ -18,6 +18,7 @@ import {
   Settings,
   Menu,
   LogOut,
+  ShieldCheck,
   X,
 } from "lucide-react";
 import { cn, initials } from "@/lib/utils";
@@ -44,11 +45,14 @@ export function AppShell({
   user,
   companyName,
   demoMode,
+  twoFactorDueBy = null,
   children,
 }: {
   user: { name: string; email: string; role: Role };
   companyName: string;
   demoMode: boolean;
+  /** Set when the security policy requires 2FA the user has not enrolled in yet and the grace period is still running. */
+  twoFactorDueBy?: string | null;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -125,6 +129,9 @@ export function AppShell({
               <div className="font-medium text-slate-800">{user.name}</div>
               <div className="text-slate-500">{ROLE_LABELS[user.role]}</div>
             </div>
+            <Link href="/account/security" className="rounded p-1.5 text-slate-600 hover:bg-slate-100" aria-label="Security" title="Security">
+              <ShieldCheck className="h-4 w-4" />
+            </Link>
             <button
               className="rounded p-1.5 text-slate-600 hover:bg-slate-100"
               aria-label="Sign out"
@@ -139,6 +146,14 @@ export function AppShell({
             </button>
           </div>
         </header>
+        {twoFactorDueBy && (
+          <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800 sm:px-6 lg:px-8">
+            Two-factor authentication is required for your role from {twoFactorDueBy}.{" "}
+            <Link href="/account/security" className="font-medium underline">
+              Set it up now
+            </Link>
+          </div>
+        )}
         <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
       </div>
     </div>

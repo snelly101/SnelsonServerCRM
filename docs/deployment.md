@@ -107,7 +107,7 @@ The customer credentials vault (Phase 7) encrypts every secret with a per-item k
 
 1. `.env` secrets generated and stored in the password manager: `POSTGRES_PASSWORD`, `APP_ENCRYPTION_KEY`, `BETTER_AUTH_SECRET`, `BACKUP_PASSPHRASE`; `DEMO_MODE=false`; `APP_URL`/`BETTER_AUTH_URL`/`CRM_DOMAIN` set to the real hostname.
 2. `docker compose ps` healthy, `/api/health` returns 200, HTTPS certificate issued (Caddy log).
-3. First admin created, then staff users added with the least role they need (Settings → Users).
+3. First admin created, then staff users added with the least role they need (Settings → Users). Each person enrols an authenticator app on their Security page; then set the two-factor policy under Settings → Security (roles + grace period). `BETTER_AUTH_SECRET` encrypts the authenticator secrets, so it must be in the password manager with the other keys.
 4. Integrations entered in the UI: Better Proposals API token (Premium plan), Xero app connected and organisation chosen, NinjaOne client id/secret (Monitoring scope), 20i general API key. Each shows **connected**, not *Demo*.
 5. Customer mapping done for Xero, NinjaOne and 20i; counting rules reviewed; a first sync run is green on the Integrations page.
 6. Backup restore drill completed once (section 5) and off-site bucket configured.

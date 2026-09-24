@@ -36,6 +36,8 @@ Ideas and requests not yet scheduled. Each item states what it is, why, and the 
 
 ## Two-factor authentication for CRM sign-in
 
+**Status:** built (Phase 9, see `docs/phases.md`): authenticator app + recovery codes, trusted browsers, per-role policy with grace period, admin reset. Not yet: passkeys, TOTP as a vault step-up alternative.
+
 **What:** a second factor on every staff login: authenticator app (TOTP) as the baseline, with recovery codes; optionally passkeys/WebAuthn and an admin switch to make it mandatory per role.
 
 **Why:** the CRM now holds customer credentials (Secure Vault) and financial data; a phished or reused staff password should not be enough on its own.

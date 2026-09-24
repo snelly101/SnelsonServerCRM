@@ -2,10 +2,11 @@ import "server-only";
 import { headers } from "next/headers";
 import { cache } from "react";
 import { redirect } from "next/navigation";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { auth } from "./auth";
 import { db } from "@/db";
 import { user as userTable } from "@/db/schema";
+import { getAppSettings } from "./settings";
 import { assertCan, can, type Action, type Role } from "./permissions";
 
 export type CurrentUser = {
@@ -14,7 +15,29 @@ export type CurrentUser = {
   email: string;
   role: Role;
   active: boolean;
+  twoFactorEnabled: boolean;
+  /** Has a CRM password (credential account). SSO-only users get MFA from Entra and are exempt from the policy. */
+  hasPassword: boolean;
 };
+
+export type TwoFactorPolicy = {
+  required: boolean;
+  enabled: boolean;
+  deadline: string | null;
+  /** Required, not enrolled, and past the deadline (or no deadline): pages redirect to enrolment. */
+  mustEnrol: boolean;
+  /** Required, not enrolled, deadline still ahead: show a reminder banner. */
+  dueBy: string | null;
+};
+
+/** Applies the Settings → Security policy to one user. Pure, so it is unit-testable. */
+export function twoFactorPolicy(u: Pick<CurrentUser, "role" | "twoFactorEnabled" | "hasPassword">, settings: { twoFactorRequiredRoles: string[]; twoFactorDeadline: string | null }, today = new Date().toISOString().slice(0, 10)): TwoFactorPolicy {
+  const required = settings.twoFactorRequiredRoles.includes(u.role) && u.hasPassword;
+  const outstanding = required && !u.twoFactorEnabled;
+  const deadline = settings.twoFactorDeadline;
+  const pastDeadline = !deadline || deadline < today;
+  return { required, enabled: u.twoFactorEnabled, deadline, mustEnrol: outstanding && pastDeadline, dueBy: outstanding && !pastDeadline ? deadline : null };
+}
 
 /**
  * Returns the signed-in user with their role read fresh from the database.
@@ -30,18 +53,39 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
       email: userTable.email,
       role: userTable.role,
       active: userTable.active,
+      twoFactorEnabled: userTable.twoFactorEnabled,
+      // Literal SQL: Drizzle renders column references unqualified inside a select-field subquery.
+      hasPassword: sql<boolean>`exists (select 1 from account a where a.user_id = "user".id and a.provider_id = 'credential' and a.password is not null)`,
     })
     .from(userTable)
     .where(eq(userTable.id, session.user.id))
     .limit(1);
   if (!row || !row.active) return null;
-  return row;
+  return { ...row, hasPassword: Boolean(row.hasPassword) };
 });
 
-/** For pages: redirects to /login when signed out. */
-export async function requireUser(): Promise<CurrentUser> {
+/** The signed-in user's two-factor status against the current policy. */
+export const currentTwoFactorPolicy = cache(async (): Promise<TwoFactorPolicy | null> => {
+  const u = await getCurrentUser();
+  if (!u) return null;
+  const settings = await getAppSettings();
+  return twoFactorPolicy(u, settings);
+});
+
+const ENROL_PATH = "/account/security";
+
+/**
+ * For pages: redirects to /login when signed out. When the security policy
+ * requires a second factor the user has not set up (and the deadline has
+ * passed), every page except the enrolment page redirects there.
+ */
+export async function requireUser(opts?: { allowUnenrolled?: boolean }): Promise<CurrentUser> {
   const u = await getCurrentUser();
   if (!u) redirect("/login");
+  if (!opts?.allowUnenrolled) {
+    const policy = await currentTwoFactorPolicy();
+    if (policy?.mustEnrol) redirect(`${ENROL_PATH}?required=1`);
+  }
   return u;
 }
 
