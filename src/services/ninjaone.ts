@@ -349,7 +349,7 @@ export async function runDiscrepancyCheck(actorUserId: string | null, companyId?
     const [{ observed }] = await db.select({ observed: sql<number>`count(*)`.mapWith(Number) }).from(ninjaDevices).where(and(...scope));
     const contracted = Number(line.quantity);
     const diff = observed - contracted;
-    const [existing] = await db.select().from(billingDiscrepancies).where(and(eq(billingDiscrepancies.contractLineId, line.id), inArray(billingDiscrepancies.status, ["open", "accepted"]))).orderBy(desc(billingDiscrepancies.detectedAt)).limit(1);
+    const [existing] = await db.select().from(billingDiscrepancies).where(and(eq(billingDiscrepancies.source, "ninjaone"), eq(billingDiscrepancies.contractLineId, line.id), inArray(billingDiscrepancies.status, ["open", "accepted"]))).orderBy(desc(billingDiscrepancies.detectedAt)).limit(1);
     const basis = { activeDays: settings.deviceActiveDays, billableNodeClasses: classes, approvedOnly, siteScoped: Boolean(line.siteId), checkedAt: now.toISOString() };
     if (diff === 0) {
       if (existing) {
@@ -372,7 +372,7 @@ export async function runDiscrepancyCheck(actorUserId: string | null, companyId?
   return { open, resolved: resolvedCount, checked: lines.length };
 }
 
-export async function listDiscrepancies(p: { status?: string; companyId?: string }) {
+export async function listDiscrepancies(p: { status?: string; companyId?: string; source?: "ninjaone" | "pax8" }) {
   return db
     .select({ d: billingDiscrepancies, companyName: companies.name, contractName: contracts.name, siteName: sites.name, reviewedBy: db._.fullSchema.user.name })
     .from(billingDiscrepancies)
@@ -380,7 +380,7 @@ export async function listDiscrepancies(p: { status?: string; companyId?: string
     .innerJoin(contracts, eq(contracts.id, billingDiscrepancies.contractId))
     .leftJoin(sites, eq(sites.id, billingDiscrepancies.siteId))
     .leftJoin(db._.fullSchema.user, eq(db._.fullSchema.user.id, billingDiscrepancies.reviewedByUserId))
-    .where(and(p.status && p.status !== "all" ? eq(billingDiscrepancies.status, p.status as "open") : undefined, p.companyId ? eq(billingDiscrepancies.companyId, p.companyId) : undefined))
+    .where(and(p.status && p.status !== "all" ? eq(billingDiscrepancies.status, p.status as "open") : undefined, p.companyId ? eq(billingDiscrepancies.companyId, p.companyId) : undefined, p.source ? eq(billingDiscrepancies.source, p.source) : undefined))
     .orderBy(sql`case when ${billingDiscrepancies.status} = 'open' then 0 else 1 end`, desc(billingDiscrepancies.lastSeenAt))
     .then((rows) => rows.map((r) => ({ ...r.d, companyName: r.companyName, contractName: r.contractName, siteName: r.siteName, reviewedBy: r.reviewedBy })));
 }
@@ -390,7 +390,8 @@ export async function reviewDiscrepancy(id: string, status: "accepted" | "dismis
   if (!d) throw new ActionError("Discrepancy not found.");
   await db.update(billingDiscrepancies).set({ status, note, reviewedByUserId: actorUserId, reviewedAt: new Date(), updatedAt: new Date() }).where(eq(billingDiscrepancies.id, id));
   await audit({ actorUserId, action: `discrepancy.${status}`, entityType: "billing_discrepancy", entityId: id, details: { contractLineId: d.contractLineId, contracted: d.contractedQty, observed: d.observedQty, note } });
-  await logActivity({ type: "device", companyId: d.companyId, entityType: "contract", entityId: d.contractId, title: `Device discrepancy ${status}: ${d.lineDescription} (contracted ${d.contractedQty}, observed ${d.observedQty})`, body: note, actorUserId, source: "ninjaone" });
+  const licence = d.source === "pax8";
+  await logActivity({ type: licence ? "sync" : "device", companyId: d.companyId, entityType: "contract", entityId: d.contractId, title: `${licence ? "Licence" : "Device"} discrepancy ${status}: ${d.lineDescription} (contracted ${d.contractedQty}, observed ${d.observedQty})`, body: note, actorUserId, source: d.source });
 }
 
 export async function saveNinjaConfig(input: { billableNodeClasses: string[]; approvedOnly: boolean }, actorUserId: string) {
@@ -402,7 +403,7 @@ export async function companyDeviceOverview(companyId: string) {
   const link = await getLink("ninjaone", "company", companyId);
   if (!link) return null;
   const [org] = await db.select().from(ninjaOrganizations).where(eq(ninjaOrganizations.orgId, link.externalId)).limit(1);
-  const [totals, devices, discrepancies] = await Promise.all([deviceTotals(companyId), listDevices({ companyId, pageSize: 500 }), listDiscrepancies({ companyId })]);
+  const [totals, devices, discrepancies] = await Promise.all([deviceTotals(companyId), listDevices({ companyId, pageSize: 500 }), listDiscrepancies({ companyId, source: "ninjaone" })]);
   const resolved = await getNinjaOneClient();
   return { link, org: org ?? null, totals, devices: devices.rows, activeCutoff: devices.activeCutoff, discrepancies, consoleUrl: resolved?.client.consoleUrl("organization", link.externalId) ?? null, mode: resolved?.mode ?? null };
 }

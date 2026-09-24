@@ -8,3 +8,4 @@ export * from "./system";
 export * from "./vault";
 export * from "./hosting";
 export * from "./notes";
+export * from "./pax8";

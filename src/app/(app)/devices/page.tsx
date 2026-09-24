@@ -32,7 +32,7 @@ export default async function DevicesPage({ searchParams }: { searchParams: Prom
     companyOptions(),
     listDevices({ q: param(sp, "q"), companyId: param(sp, "company"), nodeClass: param(sp, "class"), status, health: param(sp, "health"), page: toInt(param(sp, "page"), 1) }),
     deviceTotals(),
-    listDiscrepancies({ status: discStatus }),
+    listDiscrepancies({ status: discStatus, source: "ninjaone" }),
     getNinjaOneClient(),
   ]);
   const canReview = can(me.role, "discrepancy.review");

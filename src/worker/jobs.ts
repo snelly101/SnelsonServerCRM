@@ -10,6 +10,7 @@ import { setSystemStatus } from "@/lib/system-status";
  *  - Phase 4: xero.sync, xero.webhook, xero.invoice.create, xero.reconcile
  *  - Phase 5: ninjaone.sync, discrepancy.check
  *  - Phase 8: twentyi.sync (hosting mirror), expiry reminders inside crm.reminders
+ *  - Phase 12: pax8.sync (subscription mirror), licence check runs inside
  *
  * Every handler must be idempotent: pg-boss guarantees at-least-once delivery.
  */
@@ -22,6 +23,7 @@ export const QUEUES = {
   xeroInbound: "xero.inbound",
   ninjaSync: "ninjaone.sync",
   twentyISync: "twentyi.sync",
+  pax8Sync: "pax8.sync",
   retention: "system.retention",
 } as const;
 
@@ -117,4 +119,13 @@ export async function registerJobs(boss: PgBoss, mode: "worker" | "tick" = "work
     logger.info({ jobId: job.id, result: res && { status: res.status, ...res.counters } }, "twentyi sync");
   });
   await boss.schedule(QUEUES.twentyISync, "40 * * * *", {}, { retryLimit: 2, singletonKey: "twentyi-sync" });
+
+  // Pax8 (read-only): companies, subscriptions, products and recent invoices hourly; auto-links by domain/name; licence check runs inside.
+  await boss.createQueue(QUEUES.pax8Sync, { deleteAfterSeconds: 7 * 24 * 3600, retryLimit: 2, retryBackoff: true, expireInSeconds: 1800 });
+  await boss.work(QUEUES.pax8Sync, async ([job]) => {
+    const { syncPax8 } = await import("@/services/pax8");
+    const res = await syncPax8("schedule");
+    logger.info({ jobId: job.id, result: res && { status: res.status, ...res.counters } }, "pax8 sync");
+  });
+  await boss.schedule(QUEUES.pax8Sync, "50 * * * *", {}, { retryLimit: 2, singletonKey: "pax8-sync" });
 }
