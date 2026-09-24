@@ -157,8 +157,13 @@ export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 /** Turns any thrown error into a message safe to show on the Integrations page. */
 export function describeError(err: unknown): string {
   if (err instanceof HttpError) {
-    const b = err.body as { message?: string; Message?: string; error?: string; Detail?: string; resultCode?: string } | undefined;
-    const detail = b?.message ?? b?.Message ?? b?.Detail ?? b?.error ?? b?.resultCode;
+    const b = err.body as
+      | { message?: string; Message?: string; error?: string | { code?: string; message?: string }; error_description?: string; Detail?: string; resultCode?: string }
+      | undefined;
+    // Microsoft Graph and the identity platform nest the useful text: { error: { code, message } } / { error, error_description }.
+    const nested = b && typeof b.error === "object" && b.error ? [b.error.code, b.error.message].filter(Boolean).join(": ") : undefined;
+    const flat = b && typeof b.error === "string" ? [b.error, b.error_description].filter(Boolean).join(": ") : undefined;
+    const detail = b?.message ?? b?.Message ?? b?.Detail ?? nested ?? flat ?? b?.resultCode;
     if (err.status === 0) return `Network error: ${err.bodyText}`;
     if (err.status === 401) return `Authentication failed (401)${detail ? `: ${detail}` : ""}. Check the credentials.`;
     if (err.status === 403) return `Permission denied (403)${detail ? `: ${detail}` : ""}. Check the app's scopes or plan.`;
