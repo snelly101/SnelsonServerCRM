@@ -11,6 +11,7 @@ export default async function SettingsLayout({ children }: { children: React.Rea
     { href: "/settings/fields", label: "Tags & custom fields" },
     ...(can(me.role, "settings.write") ? [{ href: "/settings/pipeline", label: "Pipeline stages" }] : []),
     ...(can(me.role, "user.manage") ? [{ href: "/settings/users", label: "Users & roles" }] : []),
+    { href: "/settings/security", label: "Security" },
     ...(can(me.role, "audit.read") ? [{ href: "/settings/audit", label: "Audit log" }] : []),
     ...(can(me.role, "vault.admin") ? [{ href: "/settings/vault", label: "Secure Vault" }] : []),
   ];

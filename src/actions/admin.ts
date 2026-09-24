@@ -9,11 +9,12 @@ import {
   customFieldDefSchema,
   formToObject,
   savedViewSchema,
+  securitySettingsSchema,
   tagSchema,
   userCreateSchema,
   userUpdateSchema,
 } from "@/lib/validation";
-import { createUser, updateUser } from "@/services/users";
+import { createUser, resetTwoFactor, updateUser } from "@/services/users";
 import {
   createCustomFieldDef,
   createSavedView,
@@ -22,6 +23,7 @@ import {
   deleteSavedView,
   deleteTag,
   updateAppSettings,
+  updateSecuritySettings,
 } from "@/services/settings";
 
 export async function createUserAction(_prev: ActionResult<undefined> | null, fd: FormData): Promise<ActionResult<undefined>> {
@@ -51,6 +53,25 @@ export async function updateSettingsAction(_prev: ActionResult<undefined> | null
     const input = appSettingsSchema.parse(formToObject(fd));
     await updateAppSettings(input, u.id);
     revalidatePath("/", "layout");
+    return undefined;
+  });
+}
+
+export async function updateSecuritySettingsAction(_prev: ActionResult<undefined> | null, fd: FormData): Promise<ActionResult<undefined>> {
+  return runAction(async () => {
+    const u = await requireActionPermission("settings.write");
+    const input = securitySettingsSchema.parse({ twoFactorRequiredRoles: fd.getAll("twoFactorRequiredRoles[]").map(String), twoFactorDeadline: fd.get("twoFactorDeadline") });
+    await updateSecuritySettings(input, u.id);
+    revalidatePath("/", "layout");
+    return undefined;
+  });
+}
+
+export async function resetTwoFactorAction(userId: string): Promise<ActionResult<undefined>> {
+  return runAction(async () => {
+    const u = await requireActionPermission("user.manage");
+    await resetTwoFactor(z.uuid().or(z.string().min(1)).parse(userId), u.id);
+    revalidatePath("/settings/users");
     return undefined;
   });
 }

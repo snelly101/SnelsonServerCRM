@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, index, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, index, pgEnum, integer } from "drizzle-orm/pg-core";
 
 /**
  * MSP staff roles. Customer organisations never have logins; they are records
@@ -23,6 +23,8 @@ export const user = pgTable("user", {
   image: text("image"),
   role: userRoleEnum("role").notNull().default("read_only"),
   active: boolean("active").notNull().default(true),
+  /** Maintained by Better Auth's two-factor plugin; true once a TOTP secret has been verified. */
+  twoFactorEnabled: boolean("two_factor_enabled").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -77,4 +79,25 @@ export const verification = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("verification_identifier_idx").on(t.identifier)],
+);
+
+/**
+ * Better Auth two-factor plugin table. `secret` is the TOTP seed encrypted
+ * with BETTER_AUTH_SECRET; `backup_codes` holds the encrypted recovery codes.
+ * Rows are never read by application code except to delete them on reset.
+ */
+export const twoFactor = pgTable(
+  "two_factor",
+  {
+    id: text("id").primaryKey(),
+    secret: text("secret").notNull(),
+    backupCodes: text("backup_codes").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    verified: boolean("verified").notNull().default(true),
+    failedVerificationCount: integer("failed_verification_count").notNull().default(0),
+    lockedUntil: timestamp("locked_until", { withTimezone: true }),
+  },
+  (t) => [index("two_factor_user_id_idx").on(t.userId), index("two_factor_secret_idx").on(t.secret)],
 );

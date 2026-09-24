@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { Field, Input, Select, SubmitButton, FormMessage, fieldErrors, Checkbox } from "@/components/ui/form";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { createUserAction, updateUserAction } from "@/actions/admin";
+import { createUserAction, resetTwoFactorAction, updateUserAction } from "@/actions/admin";
+import { ConfirmButton } from "@/components/ui/confirm-button";
 import { ROLE_LABELS, ROLES, type Role } from "@/lib/permissions";
 
 export function CreateUserForm() {
@@ -92,5 +93,14 @@ export function EditUserDialog({ user }: { user: { id: string; name: string; ema
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Lost phone and no recovery codes: an administrator removes the second factor so the user can enrol again. */
+export function ResetTwoFactorButton({ userId, name }: { userId: string; name: string }) {
+  return (
+    <ConfirmButton variant="ghost" size="sm" action={resetTwoFactorAction.bind(null, userId)} title={`Reset two-factor authentication for ${name}?`} description="Their authenticator app and recovery codes stop working, trusted browsers are forgotten and they are signed out everywhere. They can set it up again from their Security page. This is recorded in the audit log." confirmLabel="Reset">
+      Reset 2FA
+    </ConfirmButton>
   );
 }

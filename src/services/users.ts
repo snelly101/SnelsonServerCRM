@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import { eq, asc } from "drizzle-orm";
 import { hashPassword } from "better-auth/crypto";
 import { db } from "@/db";
-import { user, account, session } from "@/db/schema";
+import { user, account, session, twoFactor, verification } from "@/db/schema";
+import { and, like } from "drizzle-orm";
 import { audit } from "@/lib/audit";
 import { ActionError } from "@/lib/action-result";
 import type { Role } from "@/lib/permissions";
@@ -15,10 +16,39 @@ export async function listUsers() {
       email: user.email,
       role: user.role,
       active: user.active,
+      twoFactorEnabled: user.twoFactorEnabled,
       createdAt: user.createdAt,
     })
     .from(user)
     .orderBy(asc(user.name));
+}
+
+/**
+ * Forgets every browser the user has trusted for 30 days, so the next sign-in
+ * asks for a code again. Better Auth stores trust records in `verification`
+ * with a `trust-device-` identifier and the user id as the value.
+ */
+export async function revokeTrustedDevices(userId: string, actorUserId: string) {
+  const gone = await db.delete(verification).where(and(like(verification.identifier, "trust-device-%"), eq(verification.value, userId))).returning({ id: verification.id });
+  await audit({ actorUserId, action: "user.two_factor.trusted_devices_revoked", entityType: "user", entityId: userId, details: { count: gone.length, self: actorUserId === userId } });
+  return gone.length;
+}
+
+/**
+ * Administrator reset of a user's second factor (lost phone, no recovery
+ * codes). Removes the authenticator secret and recovery codes, forgets
+ * trusted browsers and signs the user out everywhere. Audited.
+ */
+export async function resetTwoFactor(userId: string, actorUserId: string) {
+  const [existing] = await db.select({ id: user.id, email: user.email, enabled: user.twoFactorEnabled }).from(user).where(eq(user.id, userId)).limit(1);
+  if (!existing) throw new ActionError("User not found.");
+  await db.transaction(async (tx) => {
+    await tx.delete(twoFactor).where(eq(twoFactor.userId, userId));
+    await tx.update(user).set({ twoFactorEnabled: false, updatedAt: new Date() }).where(eq(user.id, userId));
+    await tx.delete(verification).where(and(like(verification.identifier, "trust-device-%"), eq(verification.value, userId)));
+    await tx.delete(session).where(eq(session.userId, userId));
+    await audit({ actorUserId, action: "user.two_factor.reset", entityType: "user", entityId: userId, details: { email: existing.email, wasEnabled: existing.enabled } }, tx);
+  });
 }
 
 /**

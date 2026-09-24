@@ -9,6 +9,7 @@ import {
   index,
   uniqueIndex,
   integer,
+  date,
   primaryKey,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
@@ -41,6 +42,9 @@ export const appSettings = pgTable("app_settings", {
   vaultStepUpMinutes: integer("vault_step_up_minutes").notNull().default(30),
   vaultReviewReminderDays: integer("vault_review_reminder_days").notNull().default(14),
   vaultRevealLimit: integer("vault_reveal_limit").notNull().default(60),
+  // Two-factor policy: roles that must enrol, and the date from which sign-in without it is blocked (null = immediately).
+  twoFactorRequiredRoles: text("two_factor_required_roles").array().notNull().default(sql`'{}'::text[]`),
+  twoFactorDeadline: date("two_factor_deadline"),
   ...timestamps,
 });
 

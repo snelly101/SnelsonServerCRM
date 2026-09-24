@@ -52,7 +52,7 @@ test("create an opportunity with line items, mark it won, and get onboarding + d
 
   // Company is now a customer, and onboarding checklist has tasks
   await page.goto(companyUrl);
-  await expect(page.getByRole("banner").or(page.locator("header")).first()).toContainText("customer");
+  await expect(page.locator("header").filter({ hasText: `Won Co ${stamp}` })).toContainText("customer");
   await openSection(page, /Tasks/);
   await expect(page.getByText("Welcome call and kick-off meeting")).toBeVisible();
 

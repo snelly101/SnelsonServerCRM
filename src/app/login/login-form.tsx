@@ -27,6 +27,10 @@ export function LoginForm({ next, microsoft, initialError }: { next: string; mic
           setError(res.error.message ?? "Sign-in failed. Check your email and password.");
           return;
         }
+        if ((res.data as { twoFactorRedirect?: boolean } | null)?.twoFactorRedirect) {
+          router.push(`/login/verify?next=${encodeURIComponent(next)}`);
+          return;
+        }
         router.push(next);
         router.refresh();
       }}

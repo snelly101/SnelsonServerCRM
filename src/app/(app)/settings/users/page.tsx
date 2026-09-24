@@ -3,7 +3,7 @@ import { listUsers } from "@/services/users";
 import { Card } from "@/components/ui/page";
 import { Badge } from "@/components/ui/badge";
 import { ROLE_LABELS, ROLES, actionsForRole } from "@/lib/permissions";
-import { CreateUserForm, EditUserDialog } from "./forms";
+import { CreateUserForm, EditUserDialog, ResetTwoFactorButton } from "./forms";
 
 export const metadata = { title: "Users & roles" };
 
@@ -20,6 +20,7 @@ export default async function UsersPage() {
               <th>Email</th>
               <th>Role</th>
               <th>Status</th>
+              <th>Two-factor</th>
               <th />
             </tr>
           </thead>
@@ -33,8 +34,12 @@ export default async function UsersPage() {
                 <td>{u.email}</td>
                 <td>{ROLE_LABELS[u.role]}</td>
                 <td>{u.active ? <Badge tone="green">active</Badge> : <Badge>disabled</Badge>}</td>
+                <td>{u.twoFactorEnabled ? <Badge tone="green">on</Badge> : <Badge>off</Badge>}</td>
                 <td className="text-right">
-                  <EditUserDialog user={u} />
+                  <span className="inline-flex items-center gap-1">
+                    {u.twoFactorEnabled && <ResetTwoFactorButton userId={u.id} name={u.name} />}
+                    <EditUserDialog user={u} />
+                  </span>
                 </td>
               </tr>
             ))}
