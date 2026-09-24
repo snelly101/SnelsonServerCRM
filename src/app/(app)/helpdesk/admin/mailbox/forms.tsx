@@ -601,14 +601,17 @@ export function QueueTable({
                     </Button>
                   )}
                 {kind === "outbox" &&
-                  (r.status === "failed" || r.status === "unknown") && (
+                  (r.status === "failed" ||
+                    r.status === "unknown" ||
+                    r.status === "queued") && (
                     <span className="inline-flex gap-1">
                       <Button
                         size="sm"
                         variant="ghost"
                         onClick={() => run(() => retryOutboxAction(r.id))}
                       >
-                        <RotateCcw className="h-3.5 w-3.5" /> Retry
+                        <RotateCcw className="h-3.5 w-3.5" />{" "}
+                        {r.status === "queued" ? "Send now" : "Retry"}
                       </Button>
                       <Button
                         size="sm"
