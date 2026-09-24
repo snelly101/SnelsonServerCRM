@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, Search, User, LifeBuoy } from "lucide-react";
+import { Building2, Search, User, LifeBuoy, BookOpen } from "lucide-react";
 import type { SearchHit } from "@/services/search";
 
 export function GlobalSearch() {
@@ -102,7 +102,7 @@ export function GlobalSearch() {
               onMouseDown={() => go(h)}
               onMouseEnter={() => setActive(i)}
             >
-              {h.type === "company" ? <Building2 className="h-4 w-4 text-slate-400" /> : h.type === "ticket" ? <LifeBuoy className="h-4 w-4 text-slate-400" /> : <User className="h-4 w-4 text-slate-400" />}
+              {h.type === "company" ? <Building2 className="h-4 w-4 text-slate-400" /> : h.type === "ticket" ? <LifeBuoy className="h-4 w-4 text-slate-400" /> : h.type === "article" ? <BookOpen className="h-4 w-4 text-slate-400" /> : <User className="h-4 w-4 text-slate-400" />}
               <span className="font-medium text-slate-800">{h.title}</span>
               {h.subtitle && <span className="truncate text-slate-500">· {h.subtitle}</span>}
             </li>

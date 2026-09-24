@@ -67,7 +67,8 @@ export const auth = betterAuth({
   rateLimit: {
     enabled: process.env.NODE_ENV === "production",
     window: 60,
-    max: 100,
+    // Shared per-IP window for every auth endpoint (session reads, sign-out…). Override only for automated browser tests.
+    max: Number(process.env.AUTH_RATE_LIMIT_MAX_PER_MINUTE) || 100,
     customRules: {
       // Per-IP sign-in attempts per minute. Override only for automated browser tests.
       "/sign-in/email": { window: 60, max: Number(process.env.AUTH_SIGN_IN_MAX_PER_MINUTE) || 10 },

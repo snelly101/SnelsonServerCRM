@@ -37,6 +37,9 @@ export default async function HelpdeskAdminPage() {
             <ButtonLink href="/helpdesk/admin/templates" variant="secondary">
               Templates
             </ButtonLink>
+            <ButtonLink href="/helpdesk/admin/operations" variant="secondary">
+              Operations
+            </ButtonLink>
           </div>
         }
       />

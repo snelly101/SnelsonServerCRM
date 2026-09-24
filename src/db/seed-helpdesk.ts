@@ -590,4 +590,66 @@ export async function seedHelpdesk(
   const { recomputeTicketSla } = await import("@/services/helpdesk-sla");
   const all = await db.select({ id: schema.tickets.id }).from(schema.tickets);
   for (const t of all) await recomputeTicketSla(t.id, "seed");
+
+  // Stage 4: knowledge base articles (two published, one draft) and a device on a ticket.
+  const articles: (typeof schema.kbArticles)["$inferInsert"][] = [
+    {
+      title: "Outlook keeps asking for a password",
+      slug: "outlook-keeps-asking-for-a-password",
+      summary: "Modern authentication token stuck; clear the credential and sign in again.",
+      category: "Microsoft 365",
+      tags: ["outlook", "password", "m365"],
+      status: "published",
+      customerVisible: true,
+      publishedAt: hours(200),
+      body: "## Symptoms\n\nOutlook shows the sign-in box every few minutes and rejects the correct password.\n\n## Fix\n\n1. Close Outlook.\n2. Open **Credential Manager** → Windows Credentials and remove every entry starting with `MicrosoftOffice16_Data:ADAL`.\n3. Start Outlook and sign in when prompted; approve the MFA request.\n\nIf it returns within a day, check for a stale `ProtectionPolicy` registry key.",
+      createdByUserId: admin,
+      updatedByUserId: admin,
+    },
+    {
+      title: "Printer offline: reset the print spooler",
+      slug: "printer-offline-reset-the-print-spooler",
+      summary: "Most 'offline' printers are a stuck spooler or a changed IP address.",
+      category: "Hardware",
+      tags: ["printer", "spooler"],
+      status: "published",
+      customerVisible: false,
+      publishedAt: hours(300),
+      body: "## Check first\n\n- Ping the printer's address from the affected PC.\n- Compare the port address in the printer properties with the DHCP lease.\n\n## Fix\n\n```\nnet stop spooler\ndel /q %systemroot%\\System32\\spool\\PRINTERS\\*\nnet start spooler\n```\n\nSet a DHCP reservation so the address stops changing.",
+      createdByUserId: tech,
+      updatedByUserId: tech,
+    },
+    {
+      title: "VPN drops on 4G (draft)",
+      slug: "vpn-drops-on-4g",
+      summary: "Work in progress from the Northern Freight investigation.",
+      category: "Network",
+      tags: ["vpn"],
+      status: "draft",
+      customerVisible: false,
+      body: "## Symptoms\n\nTunnel drops every ~20 minutes on mobile data.\n\n## Notes\n\nSuspect DPD timers; testing a longer keepalive.",
+      createdByUserId: tech,
+      updatedByUserId: tech,
+    },
+  ];
+  const inserted = await db
+    .insert(schema.kbArticles)
+    .values(articles)
+    .returning({ id: schema.kbArticles.id, title: schema.kbArticles.title, body: schema.kbArticles.body, summary: schema.kbArticles.summary });
+  await db.insert(schema.kbArticleRevisions).values(
+    inserted.map((a) => ({ articleId: a.id, version: 1, title: a.title, body: a.body, summary: a.summary, editedByUserId: admin, note: "Created" })),
+  );
+  const printerTicket = await db
+    .select({ id: schema.tickets.id, companyId: schema.tickets.companyId })
+    .from(schema.tickets)
+    .where(eq(schema.tickets.subject, "Printer offline in the meeting room"))
+    .limit(1);
+  if (printerTicket[0]) {
+    const printerArticle = inserted.find((a) => a.title.startsWith("Printer offline"));
+    if (printerArticle)
+      await db
+        .insert(schema.ticketKbLinks)
+        .values({ ticketId: printerTicket[0].id, articleId: printerArticle.id, kind: "linked", linkedByUserId: tech })
+        .onConflictDoNothing();
+  }
 }

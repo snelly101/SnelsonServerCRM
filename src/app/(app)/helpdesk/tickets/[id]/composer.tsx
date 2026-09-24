@@ -33,6 +33,7 @@ import { MarkdownLite } from "@/lib/markdown-lite";
 import { addMessageAction, saveDraftAction } from "@/actions/helpdesk";
 import { sendReplyAction, uploadAttachmentAction } from "@/actions/mailbox";
 import { renderTemplateAction } from "@/actions/helpdesk-collab";
+import { insertArticleAction } from "@/actions/helpdesk-kb";
 import {
   TICKET_STATUSES,
   TICKET_STATUS_LABELS,
@@ -62,6 +63,7 @@ export function Composer({
   signature,
   templates = [],
   openChecklist = 0,
+  articles = [],
 }: {
   ticketId: string;
   version: number;
@@ -79,6 +81,8 @@ export function Composer({
   templates?: { id: string; name: string; scope: string; body: string; category: string | null }[];
   /** Open checklist items: shown as a warning next to "then mark resolved". */
   openChecklist?: number;
+  /** Published knowledge articles; only customer-visible ones are offered for customer replies. */
+  articles?: { id: string; title: string; category: string | null; customerVisible: boolean }[];
 }) {
   const [kind, setKind] = useState<"public" | "internal">(
     draft?.kind ?? "internal",
@@ -109,6 +113,15 @@ export function Composer({
   const usable = templates.filter(
     (t) => t.scope === "both" || t.scope === (kind === "internal" ? "internal" : "public"),
   );
+  const usableArticles = articles.filter((a) => kind === "internal" || a.customerVisible);
+  const insertArticle = (id: string) => {
+    startInsert(async () => {
+      const r = await insertArticleAction(ticketId, id, kind === "public");
+      if (!r.ok) return;
+      const text = `**${r.data.title}**\n\n${r.data.body}`;
+      onChange(body.trim() ? `${body.replace(/\s+$/, "")}\n\n${text}` : text);
+    });
+  };
   const insertTemplate = (id: string) => {
     const t = templates.find((x) => x.id === id);
     if (!t) return;
@@ -224,6 +237,25 @@ export function Composer({
               ))}
             </Select>
           </label>
+        )}
+        {usableArticles.length > 0 && !preview && (
+          <Select
+            aria-label="Insert article"
+            className="h-7 w-auto text-xs"
+            value=""
+            disabled={inserting}
+            onChange={(e) => {
+              insertArticle(e.target.value);
+            }}
+          >
+            <option value="">Insert article…</option>
+            {usableArticles.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.category ? `${a.category}: ` : ""}
+                {a.title}
+              </option>
+            ))}
+          </Select>
         )}
         <span className="ml-auto text-xs text-slate-500">
           {savedAt ? `Draft saved ${savedAt.toLocaleTimeString()}` : ""}

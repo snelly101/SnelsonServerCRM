@@ -1,10 +1,11 @@
 import { and, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { companies, contacts, tickets } from "@/db/schema";
+import { kbArticles } from "@/db/schema/helpdesk-kb";
 import { findTicketReferences, ticketReference } from "@/lib/validation-helpdesk";
 
 export type SearchHit = {
-  type: "company" | "contact" | "ticket";
+  type: "company" | "contact" | "ticket" | "article";
   id: string;
   title: string;
   subtitle: string | null;
@@ -21,7 +22,7 @@ export async function globalSearch(q: string, limit = 8): Promise<SearchHit[]> {
   const like = `%${term}%`;
 
   const refs = findTicketReferences(term);
-  const [companyRows, contactRows, ticketRows] = await Promise.all([
+  const [companyRows, contactRows, ticketRows, articleRows] = await Promise.all([
     db
       .select({ id: companies.id, name: companies.name, status: companies.status, city: companies.city })
       .from(companies)
@@ -56,6 +57,12 @@ export async function globalSearch(q: string, limit = 8): Promise<SearchHit[]> {
       .where(and(isNull(tickets.mergedIntoTicketId), refs.length ? sql`${tickets.number} in (${sql.join(refs.map((n) => sql`${n}`), sql`, `)})` : or(ilike(tickets.subject, like), ilike(tickets.requesterEmail, like), ilike(tickets.requesterName, like))))
       .orderBy(desc(tickets.lastActivityAt))
       .limit(limit),
+    db
+      .select({ id: kbArticles.id, title: kbArticles.title, slug: kbArticles.slug, category: kbArticles.category, status: kbArticles.status })
+      .from(kbArticles)
+      .where(and(sql`${kbArticles.status} <> 'archived'`, or(ilike(kbArticles.title, like), ilike(kbArticles.summary, like), sql`exists (select 1 from unnest(${kbArticles.tags}) t where t ilike ${like})`)))
+      .orderBy(desc(kbArticles.updatedAt))
+      .limit(limit),
   ]);
 
   return [
@@ -72,6 +79,13 @@ export async function globalSearch(q: string, limit = 8): Promise<SearchHit[]> {
       title: c.name,
       subtitle: [c.status, c.city].filter(Boolean).join(" · "),
       href: `/companies/${c.id}`,
+    })),
+    ...articleRows.map<SearchHit>((a) => ({
+      type: "article",
+      id: a.id,
+      title: a.title,
+      subtitle: [a.category, a.status === "draft" ? "draft" : null].filter(Boolean).join(" · ") || null,
+      href: `/helpdesk/kb/${a.slug}`,
     })),
     ...contactRows.map<SearchHit>((c) => ({
       type: "contact",

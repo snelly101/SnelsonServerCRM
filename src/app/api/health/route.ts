@@ -37,5 +37,13 @@ export async function GET() {
   } catch {
     checks.vault = { configured: vaultConfigured(), chainOk: null };
   }
+  try {
+    const { helpdeskHealth } = await import("@/services/helpdesk-monitoring");
+    const h = await helpdeskHealth();
+    checks.helpdesk = h;
+    if (h.status === "degraded") ok = false;
+  } catch {
+    checks.helpdesk = { status: "unknown" };
+  }
   return NextResponse.json({ status: ok ? "ok" : "degraded", ...checks, time: new Date().toISOString() }, { status: ok ? 200 : 503, headers: { "Cache-Control": "no-store" } });
 }
