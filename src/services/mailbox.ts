@@ -2558,6 +2558,7 @@ export async function replayInbound(queueId: string, actorUserId: string) {
   });
   return processInboundRow(queueId);
 }
+/** Retries a failed or unknown row, or sends a queued row now instead of waiting out its backoff. */
 export async function retryOutbox(outboxId: string, actorUserId: string) {
   await db
     .update(mailboxOutbox)
@@ -2570,7 +2571,7 @@ export async function retryOutbox(outboxId: string, actorUserId: string) {
     .where(
       and(
         eq(mailboxOutbox.id, outboxId),
-        inArray(mailboxOutbox.status, ["failed", "unknown"]),
+        inArray(mailboxOutbox.status, ["failed", "unknown", "queued"]),
       ),
     );
   await audit({
