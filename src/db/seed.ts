@@ -224,6 +224,22 @@ export async function seed(url = process.env.DATABASE_URL) {
           if (site) await linkLocation(locationId, site.id, userIds["admin@example.com"]).catch((err) => console.warn("demo ninjaone location link skipped:", err));
         }
       }
+      // Link a mirrored device to the printer ticket now that devices are mapped to companies.
+      {
+        const [printer] = await db
+          .select({ id: schema.tickets.id, companyId: schema.tickets.companyId })
+          .from(schema.tickets)
+          .where(eq(schema.tickets.subject, "Printer offline in the meeting room"))
+          .limit(1);
+        const [device] = printer?.companyId
+          ? await db.select({ id: schema.ninjaDevices.id }).from(schema.ninjaDevices).where(eq(schema.ninjaDevices.companyId, printer.companyId)).limit(1)
+          : [];
+        if (printer && device)
+          await db
+            .insert(schema.ticketAssets)
+            .values({ ticketId: printer.id, deviceId: device.id, linkedByUserId: userIds["tech@example.com"] })
+            .onConflictDoNothing();
+      }
       // Mirror demo 20i hosting; exact domain matches link themselves to the seed companies.
       const { syncTwentyI } = await import("@/services/twentyi");
       await syncTwentyI("manual", userIds["admin@example.com"]).catch((err) => console.warn("demo 20i sync skipped:", err));

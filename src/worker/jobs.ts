@@ -67,6 +67,8 @@ export async function registerJobs(
   await boss.work(QUEUES.retention, async () => {
     const { runRetention } = await import("@/services/retention");
     await runRetention();
+    const { runHelpdeskRetention } = await import("@/services/helpdesk-retention");
+    await runHelpdeskRetention();
     // Nightly integrity check of the vault audit chain (hashing only; needs no key).
     const { verifyAuditChain } = await import("@/services/vault");
     const chain = await verifyAuditChain(null);
@@ -333,6 +335,10 @@ export async function registerJobs(
         { breaches: res.breaches.length, dueSoon: res.dueSoon.length },
         "helpdesk sla check",
       );
+    await setSystemStatus("helpdesk.sla.last", {
+      breaches: res.breaches.length,
+      dueSoon: res.dueSoon.length,
+    });
   });
   await boss.schedule(
     QUEUES.helpdeskSla,
@@ -351,6 +357,7 @@ export async function registerJobs(
     const { runScheduledRules } = await import("@/services/helpdesk-automation");
     const res = await runScheduledRules();
     if (res.applied) logger.info(res, "helpdesk scheduled rules");
+    await setSystemStatus("helpdesk.rules.last", { applied: res.applied });
   });
   await boss.schedule(
     QUEUES.helpdeskRules,

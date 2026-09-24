@@ -379,10 +379,34 @@ The helpdesk is delivered in four stages, each its own pull request: **1** ticke
 ### What was tested
 
 - **14 unit/integration tests (161 total)**: business-hours maths across a holiday, a weekend and the BST/GMT change; SLA clocks start on creation, first response met on the first public reply, pause and resume with status (events written), recompute on priority change, breach flagged by the scheduled check with a notification; rule condition evaluation; ordered rules with stop-processing, cooldown, run log, priority change recomputing the deadline, assignment notification and a bounded status ping-pong; scheduled auto-close after the idle period; form JSON parsing; mentions resolved and notified (never the author), followers notified, mark-read; template rendering with unknown placeholders left intact; checklist add/toggle with assignee notification; report summary, breakdowns, CSV export without message bodies and range parsing.
-- **1 browser test (32 total)**: admin pages for SLA, automation (creating a tagging rule through the builder) and templates; a technician's new ticket picks up the customer's 24×7 policy with deadlines and the rule's tag, works a checklist, inserts a template into a note and mentions a colleague; the colleague sees the badge and the notification and marks all read; reports filter by customer and export the SLA CSV.
+- **1 browser test (31 total)**: admin pages for SLA, automation (creating a tagging rule through the builder) and templates; a technician's new ticket picks up the customer's 24×7 policy with deadlines and the rule's tag, works a checklist, inserts a template into a note and mentions a colleague; the colleague sees the badge and the notification and marks all read; reports filter by customer and export the SLA CSV.
 
 ### Remaining dependencies
 
 - Live Microsoft 365 verification is still outstanding (stage 2). Rule triggers for customer and agent replies are exercised through the demo mailbox double.
-- Knowledge base, assets, retention/anonymisation and the final hardening pass arrive in stage 4.
+- Knowledge base, assets, retention/anonymisation and the final hardening pass arrived in stage 4.
+
+## Phase 13 — IT helpdesk (stage 4 of 4: knowledge base, assets, retention, operations) ✅
+
+### What works
+
+- **Knowledge base** (`src/db/schema/helpdesk-kb.ts`, migration `0015_helpdesk_kb_assets.sql`, Helpdesk → Knowledge base): Markdown articles with summary, category, tags, review-due date and a **customer-visible** flag; drafts → published → archived (publishing and the customer-visible flag need `helpdesk.manage`, deletion `helpdesk.admin`); every content change writes a revision and any version can be restored; view and use counts. Search across title, summary, tags and body; articles appear in global search. On a ticket: linked articles, suggestions matched on the subject, a picker to link more, **Write article** pre-filled from the ticket's subject, resolution and last notes (linked back as the source), and **Insert article** in the composer, which offers only customer-visible articles for customer replies and records the article as *sent* on the ticket. Internal-only articles can never be inserted into a customer message (enforced in the service, not just the UI).
+- **Assets**: tickets link to devices from the NinjaOne mirror (`ticket_assets`); the ticket page shows each device's online/offline, reboot, threat and patch flags with a picker limited to the requester's company (linking another customer's device is refused); events record links; devices list their tickets.
+- **Retention and anonymisation** (`src/services/helpdesk-retention.ts`, nightly with the existing retention job): finished inbound-queue and outbox rows, read notifications and automation run logs after 90 days, abandoned drafts after 30; closed or cancelled tickets anonymised after `HELPDESK_ANONYMISE_AFTER_DAYS` (unset = never). Anonymising removes the requester's name, e-mail, contact link, participants, message addresses, HTML bodies and attachments (files deleted from the volume) while keeping message text, events, notes and time so reports stay honest; audited and marked on the ticket. An admin can anonymise one ticket from its page, or every ticket for an e-mail address from Administration → Operations (data-subject request). Tickets are never deleted by a job.
+- **Monitoring** (`/api/health` gains a `helpdesk` block; Administration → Operations): mailbox state and subscription, stale inbound sync, dead inbound rows, unknown/failed outbox rows, open/review/breaching counts, last SLA check, rules run and retention run; `degraded` when any needs attention. Replay and retry tools stay on the mailbox page.
+- **Docs**: `docs/helpdesk-operations.md` (runbook: daily checks, queues and replay, retention, data requests, rollback per stage, known limitations), deployment checklist and architecture retention table updated.
+
+### What was tested
+
+- **7 unit/integration tests (170 total, with 2 for Graph error text from the mailbox hotfix)**: article drafts with revisions, publish gating for suggestions/insertion, search and global search, version restore; ticket links, sent counting, source links from a ticket, internal-only articles refused for customers; device linking limited to the customer, idempotent, unlinking, tickets per device; anonymisation of a closed ticket (identity, participants, addresses, attachments removed; text, note and events kept; second run no-op); data-subject request across tickets; nightly retention prunes read notifications only and never tickets; health facts carry no content; the helpdesk permission ladder.
+- **1 browser test (32 total)**: technician writes an article from a ticket, cannot publish; manager publishes; the ticket shows it as source; inserting into a note works and the internal article is absent from the customer-reply picker; a device is linked from the customer's mirror; admin opens Operations and anonymises the ticket.
+
+### Known limitations (helpdesk, all stages)
+
+- Live Microsoft 365 behaviour is verified only through the in-memory Graph double; the first live connection is being done now and the connect check was corrected as a result (inbox read, not user object).
+- Knowledge search is `ILIKE` word matching, not full-text ranking; fine for hundreds of articles, revisit with `tsvector` beyond that.
+- Suggestions match subject words against titles, summaries and tags only.
+- Article bodies are the in-house safe Markdown subset (no tables, no images).
+- Anonymisation keeps message text; if a requester wrote personal data into the body, edit or delete the message by hand.
+- No customer portal (backlog), no e-mail commands from Outlook, no satisfaction surveys.
 

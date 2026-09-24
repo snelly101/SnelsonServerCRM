@@ -20,6 +20,7 @@ export default async function HelpdeskLayout({
     ...(can(me.role, "helpdesk.agent")
       ? [{ href: "/helpdesk/tickets/new", label: "New ticket" }]
       : []),
+    { href: "/helpdesk/kb", label: "Knowledge base" },
     { href: "/helpdesk/reports", label: "Reports" },
     { href: "/helpdesk/notifications", label: "Notifications", count: unread },
     ...(can(me.role, "helpdesk.admin")

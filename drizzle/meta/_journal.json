@@ -106,6 +106,13 @@
       "when": 1790281291928,
       "tag": "0014_helpdesk_sla",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1790283735089,
+      "tag": "0015_helpdesk_kb_assets",
+      "breakpoints": true
     }
   ]
 }

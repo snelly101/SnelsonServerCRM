@@ -97,7 +97,7 @@ The customer credentials vault (Phase 7) encrypts every secret with a per-item k
 
 ## 6. Monitoring
 
-- **`GET https://crm.example.com/api/health`** returns `200 {"status":"ok","database":"ok","worker":"alive",...}` when the database answers and the worker heartbeat is under 15 minutes old, otherwise `503 {"status":"degraded",...}`. Point an uptime monitor (UptimeRobot, Better Stack, Healthchecks.io, all have free tiers) at it every 5 minutes; that one check covers the web app, the database and the worker.
+- **`GET https://crm.example.com/api/health`** returns `200 {"status":"ok","database":"ok","worker":"alive",...}` when the database answers, the worker heartbeat is under 15 minutes old and the helpdesk block reports no problems (mailbox subscription, stale inbound sync, dead inbound or unknown/failed outbox rows, SLA job overdue), otherwise `503 {"status":"degraded",...}` with the reasons under `helpdesk.problems`. Point an uptime monitor (UptimeRobot, Better Stack, Healthchecks.io, all have free tiers) at it every 5 minutes; that one check covers the web app, the database and the worker.
 - `docker compose ps` — all services `running`; `migrate` is expected to show `exited (0)`.
 - `docker compose logs --since 1h worker` — job failures are logged as JSON with `level: 50`.
 - The Integrations page shows *worker alive / stale / never* with the last heartbeat, last successful sync per provider, paused connectors and unresolved conflicts. Reports → Integration health adds failed/partial runs in the last 24 hours.
@@ -109,7 +109,7 @@ The customer credentials vault (Phase 7) encrypts every secret with a per-item k
 2. `docker compose ps` healthy, `/api/health` returns 200, HTTPS certificate issued (Caddy log).
 3. First admin created, then staff users added with the least role they need (Settings → Users). Each person enrols an authenticator app on their Security page; then set the two-factor policy under Settings → Security (roles + grace period). `BETTER_AUTH_SECRET` encrypts the authenticator secrets, so it must be in the password manager with the other keys.
 4. Integrations entered in the UI: Better Proposals API token (Premium plan), Xero app connected and organisation chosen, NinjaOne client id/secret (Monitoring scope), 20i general API key, Pax8 API client id/secret. Each shows **connected**, not *Demo*.
-5. Helpdesk mailbox connected per `docs/helpdesk-m365.md` (app registration, admin consent, application access policy, test e-mail accepted), `appdata` volume present.
+5. Helpdesk mailbox connected per `docs/helpdesk-m365.md` (app registration, admin consent, application access policy, test e-mail accepted), `appdata` volume present; a default SLA policy created; `HELPDESK_ANONYMISE_AFTER_DAYS` decided (see `docs/helpdesk-operations.md`).
 6. Customer mapping done for Xero, NinjaOne, 20i and Pax8; counting rules reviewed; a first sync run is green on the Integrations page.
 6. Backup restore drill completed once (section 5) and off-site bucket configured.
 7. Uptime monitor pointed at `/api/health`.

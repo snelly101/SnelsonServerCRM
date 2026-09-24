@@ -24,6 +24,11 @@ import { SlaPanel } from "./sla-panel";
 import { Checklist } from "./checklist";
 import { ticketSlaSummary } from "@/services/helpdesk-sla";
 import { listChecklist, listTemplates } from "@/services/helpdesk-collab";
+import { insertableArticles, suggestArticles, ticketArticles } from "@/services/helpdesk-kb";
+import { deviceOptionsForTicket, ticketDevices } from "@/services/helpdesk-assets";
+import { KnowledgePanel } from "./knowledge";
+import { AssetsPanel } from "./assets";
+import { AnonymiseButton } from "./anonymise";
 import { TRANSITIONS } from "@/lib/helpdesk-transitions";
 import { markdownExcerpt } from "@/lib/markdown-parse";
 import { param } from "@/lib/utils";
@@ -69,6 +74,10 @@ export default async function TicketPage({
     sla,
     checklist,
     templates,
+    linkedArticles,
+    articleOptions,
+    devices,
+    deviceOptions,
   ] = await Promise.all([
     getAppSettings(),
     listOwners(),
@@ -81,7 +90,15 @@ export default async function TicketPage({
     ticketSlaSummary(id),
     listChecklist(id),
     canEdit ? listTemplates({ activeOnly: true }) : Promise.resolve([]),
+    ticketArticles(id),
+    canEdit ? insertableArticles(false) : Promise.resolve([]),
+    ticketDevices(id),
+    canEdit ? deviceOptionsForTicket(id) : Promise.resolve([]),
   ]);
+  const suggested = await suggestArticles(
+    t.subject,
+    linkedArticles.map((a) => a.id),
+  );
   const showEvents = param(sp, "events") !== "0";
   const base = `/helpdesk/tickets/${id}`;
   return (
@@ -119,6 +136,9 @@ export default async function TicketPage({
         </div>
         {canManage && !t.mergedInto && (
           <div className="flex flex-wrap gap-2">
+            {can(me.role, "helpdesk.admin") && !t.anonymizedAt && (
+              <AnonymiseButton ticketId={t.id} reference={t.reference} />
+            )}
             <MergeDialog ticketId={t.id} reference={t.reference} />
             <SplitDialog
               ticketId={t.id}
@@ -142,6 +162,13 @@ export default async function TicketPage({
             {t.mergedInto.reference} {t.mergedInto.subject}
           </Link>
           . Replies to this reference are attached there.
+        </Alert>
+      )}
+      {t.anonymizedAt && (
+        <Alert tone="info" title="Anonymised" className="mb-4">
+          The requester&apos;s identity, addresses and attachments were removed
+          from this ticket under the retention policy. The conversation text
+          and history are kept for reporting.
         </Alert>
       )}
       {t.needsReview && !t.mergedInto && (
@@ -205,6 +232,12 @@ export default async function TicketPage({
                   category: x.category,
                 }))}
                 openChecklist={checklist.filter((c) => !c.done).length}
+                articles={articleOptions.map((a) => ({
+                  id: a.id,
+                  title: a.title,
+                  category: a.category,
+                  customerVisible: a.customerVisible,
+                }))}
               />
             </Card>
           )}
@@ -218,6 +251,20 @@ export default async function TicketPage({
               canAdmin={can(me.role, "helpdesk.admin")}
             />
           )}
+          <KnowledgePanel
+            ticketId={t.id}
+            linked={linkedArticles}
+            suggested={suggested}
+            options={articleOptions.map((a) => ({ id: a.id, title: a.title, category: a.category }))}
+            editable={canEdit && !t.mergedInto}
+          />
+          <AssetsPanel
+            ticketId={t.id}
+            devices={devices}
+            options={deviceOptions}
+            editable={canEdit && !t.mergedInto}
+            hasCompany={Boolean(t.companyId)}
+          />
           <Checklist
             ticketId={t.id}
             items={checklist.map((c) => ({

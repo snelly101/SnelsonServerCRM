@@ -44,7 +44,7 @@ export function Checklist({
   settings: DisplaySettings;
 }) {
   const router = useRouter();
-  const [pending, start] = useTransition();
+  const [, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const run = (fn: () => Promise<{ ok: boolean; error?: string }>) =>
     start(async () => {
