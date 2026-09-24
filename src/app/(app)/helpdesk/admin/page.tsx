@@ -3,6 +3,7 @@ import { requirePermission } from "@/lib/session";
 import { listCategories, listTeams } from "@/services/helpdesk";
 import { listOwners } from "@/services/companies";
 import { PageHeader, Card } from "@/components/ui/page";
+import { ButtonLink } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmButton } from "@/components/ui/confirm-button";
 import { deleteCategoryAction, deleteTeamAction } from "@/actions/helpdesk";
@@ -21,7 +22,12 @@ export default async function HelpdeskAdminPage() {
     <>
       <PageHeader
         title="Helpdesk administration"
-        description="Teams, categories and (in later stages) the support mailbox, SLA policies and automation rules."
+        description="Teams, categories, the support mailbox and (in later stages) SLA policies and automation rules."
+        actions={
+          <ButtonLink href="/helpdesk/admin/mailbox" variant="secondary">
+            Support mailbox
+          </ButtonLink>
+        }
       />
       <div className="grid gap-4 lg:grid-cols-2">
         <Card

@@ -132,13 +132,22 @@ export default async function ContactPage({
           className="mt-4 max-w-5xl"
           actions={
             can(me.role, "helpdesk.agent") ? (
-              <ButtonLink
-                href={`/helpdesk/tickets/new?companyId=${contact.companyId}&contactId=${id}`}
-                size="sm"
-                variant="secondary"
-              >
-                New ticket
-              </ButtonLink>
+              <span className="flex gap-2">
+                <ButtonLink
+                  href={`/helpdesk/compose?companyId=${contact.companyId}&contactId=${id}`}
+                  size="sm"
+                  variant="secondary"
+                >
+                  E-mail
+                </ButtonLink>
+                <ButtonLink
+                  href={`/helpdesk/tickets/new?companyId=${contact.companyId}&contactId=${id}`}
+                  size="sm"
+                  variant="secondary"
+                >
+                  New ticket
+                </ButtonLink>
+              </span>
             ) : undefined
           }
         >

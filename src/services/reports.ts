@@ -239,7 +239,7 @@ export async function integrationHealthReport() {
     db.select({ provider: syncRuns.provider, failed: sql<number>`count(*) filter (where status = 'failed')`.mapWith(Number), partial: sql<number>`count(*) filter (where status = 'partial')`.mapWith(Number), runs: sql<number>`count(*)`.mapWith(Number), errors: sql<number>`coalesce(sum(errors), 0)`.mapWith(Number) }).from(syncRuns).where(gte(syncRuns.startedAt, new Date(Date.now() - 86400000))).groupBy(syncRuns.provider),
     db.select({ provider: mappingConflicts.provider, open: sql<number>`count(*)`.mapWith(Number) }).from(mappingConflicts).where(eq(mappingConflicts.status, "open")).groupBy(mappingConflicts.provider),
   ]);
-  const demo: Record<Provider, boolean> = { betterproposals: bp.demo, xero: xero.demo, ninjaone: ninja.demo, twentyi: twentyi.demo, pax8: pax8.demo };
+  const demo: Record<Provider, boolean> = { betterproposals: bp.demo, xero: xero.demo, ninjaone: ninja.demo, twentyi: twentyi.demo, pax8: pax8.demo, m365: false };
   const f = new Map(failed.map((r) => [r.provider, r]));
   const c = new Map(conflicts.map((r) => [r.provider, r.open]));
   const providers = conns.map((x) => {

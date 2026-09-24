@@ -3,7 +3,7 @@ import { user } from "./auth";
 import { companies, contacts, timestamps } from "./core";
 import { opportunities } from "./sales";
 
-export const providerEnum = pgEnum("integration_provider", ["betterproposals", "xero", "ninjaone", "twentyi", "pax8"]);
+export const providerEnum = pgEnum("integration_provider", ["betterproposals", "xero", "ninjaone", "twentyi", "pax8", "m365"]);
 
 /** live = real API with stored credentials; demo = synthetic adapter (never shows as connected). */
 export const connectionModeEnum = pgEnum("connection_mode", ["live", "demo"]);

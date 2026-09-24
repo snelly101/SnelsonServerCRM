@@ -1,28 +1,53 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import {
+  useActionState,
+  useEffect,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import { useRouter } from "next/navigation";
-import { MessageSquare, StickyNote, Send } from "lucide-react";
+import {
+  MessageSquare,
+  StickyNote,
+  Send,
+  Paperclip,
+  X,
+  Eye,
+  Pencil,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Field,
+  Input,
   Select,
   SubmitButton,
   FormMessage,
   fieldErrors,
 } from "@/components/ui/form";
 import { MarkdownEditor } from "@/components/helpdesk/markdown-editor";
+import { MarkdownLite } from "@/lib/markdown-lite";
 import { addMessageAction, saveDraftAction } from "@/actions/helpdesk";
+import { sendReplyAction, uploadAttachmentAction } from "@/actions/mailbox";
 import {
   TICKET_STATUSES,
   TICKET_STATUS_LABELS,
 } from "@/lib/validation-helpdesk";
 
+type Upload = { id: string; name: string; size: number };
+const newKey = () =>
+  typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random()}`;
+
 /**
- * Reply / note composer. Drafts are saved automatically (debounced) per user
- * and ticket; a stale draft (ticket changed since) is shown with a warning.
- * Stage 1 records public messages by hand (phone, in person); e-mail replies
- * arrive with the mailbox stage.
+ * Reply / note composer. Internal notes are never e-mailed. With a mailbox
+ * connected, "Reply to customer" sends through it (To/CC/BCC editable,
+ * attachments uploaded and scanned first, preview before sending, an
+ * idempotency key so a double click or retry never sends twice). Without
+ * one it logs the message. Drafts save automatically per user.
  */
 export function Composer({
   ticketId,
@@ -30,7 +55,9 @@ export function Composer({
   draft,
   emailEnabled,
   requesterEmail,
+  ccDefaults,
   allowedStatuses,
+  signature,
 }: {
   ticketId: string;
   version: number;
@@ -42,7 +69,9 @@ export function Composer({
   } | null;
   emailEnabled: boolean;
   requesterEmail: string | null;
+  ccDefaults: string[];
   allowedStatuses: string[];
+  signature: string | null;
 }) {
   const [kind, setKind] = useState<"public" | "internal">(
     draft?.kind ?? "internal",
@@ -51,21 +80,40 @@ export function Composer({
   const [savedAt, setSavedAt] = useState<Date | null>(
     draft ? new Date(draft.updatedAt) : null,
   );
-  const [result, formAction] = useActionState(
+  const [to, setTo] = useState(requesterEmail ?? "");
+  const [cc, setCc] = useState(ccDefaults.join(", "));
+  const [bcc, setBcc] = useState("");
+  const [showBcc, setShowBcc] = useState(false);
+  const [uploads, setUploads] = useState<Upload[]>([]);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [preview, setPreview] = useState(false);
+  const [key, setKey] = useState(newKey);
+  const [noteResult, noteAction] = useActionState(
     addMessageAction.bind(null, ticketId),
     null,
   );
+  const [mailResult, mailAction] = useActionState(
+    sendReplyAction.bind(null, ticketId),
+    null,
+  );
+  const [uploading, startUpload] = useTransition();
   const router = useRouter();
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const stale =
     draft?.ticketVersion !== null &&
     draft?.ticketVersion !== undefined &&
     draft.ticketVersion < version;
+  const email = emailEnabled && kind === "public";
+  const result = email ? mailResult : noteResult;
   useEffect(() => {
     if (result?.ok) {
       setBody("");
+      setUploads([]);
+      setPreview(false);
       setSavedAt(null);
+      setKey(newKey());
       router.refresh();
     }
   }, [result, router]);
@@ -81,11 +129,24 @@ export function Composer({
       if (r.ok) setSavedAt(v.trim() ? new Date() : null);
     }, 800);
   };
-  const submitRef = useRef<HTMLFormElement>(null);
+  const upload = (files: FileList | null) => {
+    if (!files?.length) return;
+    setUploadError(null);
+    startUpload(async () => {
+      for (const f of Array.from(files)) {
+        const fd = new FormData();
+        fd.set("file", f);
+        const r = await uploadAttachmentAction(ticketId, fd);
+        if (r.ok) setUploads((u) => [...u, r.data]);
+        else setUploadError(r.error);
+      }
+      if (fileRef.current) fileRef.current.value = "";
+    });
+  };
   return (
     <form
-      ref={submitRef}
-      action={formAction}
+      ref={formRef}
+      action={email ? mailAction : noteAction}
       className="space-y-2"
       aria-label="Add to conversation"
     >
@@ -96,10 +157,17 @@ export function Composer({
         name="channel"
         value={kind === "internal" ? "note" : "manual"}
       />
+      <input type="hidden" name="idempotencyKey" value={key} />
+      {uploads.map((u) => (
+        <input key={u.id} type="hidden" name="attachmentIds" value={u.id} />
+      ))}
       <div className="flex flex-wrap items-center gap-1">
         <button
           type="button"
-          onClick={() => setKind("internal")}
+          onClick={() => {
+            setKind("internal");
+            setPreview(false);
+          }}
           aria-pressed={kind === "internal"}
           className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-sm ${kind === "internal" ? "bg-amber-100 text-amber-900" : "text-slate-600 hover:bg-slate-100"}`}
         >
@@ -130,35 +198,144 @@ export function Composer({
         </p>
       ) : !emailEnabled ? (
         <p className="text-xs text-slate-500">
-          No support mailbox is connected yet, so this records what was said to{" "}
+          No support mailbox is connected, so this records what was said to{" "}
           {requesterEmail ?? "the requester"} (by phone or in person) without
           sending anything.
         </p>
       ) : null}
       <FormMessage result={result && !result.ok ? result : null} />
-      <Field
-        label={kind === "internal" ? "Note" : "Message"}
-        htmlFor="composer-body"
-        error={fieldErrors(result, "body")}
-      >
-        <MarkdownEditor
-          id="composer-body"
-          name="body"
-          value={body}
-          onChange={onChange}
-          textareaRef={textareaRef}
-          rows={6}
-          placeholder={
-            kind === "internal"
-              ? "Notes for the team… use @name to mention someone"
-              : "What was said to the customer…"
-          }
-          onKeyDown={(e) => {
-            if ((e.metaKey || e.ctrlKey) && e.key === "Enter")
-              submitRef.current?.requestSubmit();
-          }}
-        />
-      </Field>
+      {email && (
+        <div className="grid gap-2 sm:grid-cols-2">
+          <Field
+            label="To"
+            htmlFor="composer-to"
+            required
+            error={fieldErrors(result, "to")}
+          >
+            <Input
+              id="composer-to"
+              name="to"
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+              placeholder="customer@example.com, other@example.com"
+            />
+          </Field>
+          <Field label="CC" htmlFor="composer-cc">
+            <Input
+              id="composer-cc"
+              name="cc"
+              value={cc}
+              onChange={(e) => setCc(e.target.value)}
+              placeholder="optional"
+            />
+          </Field>
+          {showBcc ? (
+            <Field
+              label="BCC (never shown to recipients)"
+              htmlFor="composer-bcc"
+            >
+              <Input
+                id="composer-bcc"
+                name="bcc"
+                value={bcc}
+                onChange={(e) => setBcc(e.target.value)}
+              />
+            </Field>
+          ) : (
+            <button
+              type="button"
+              className="justify-self-start text-xs text-brand-700 hover:underline"
+              onClick={() => setShowBcc(true)}
+            >
+              Add BCC
+            </button>
+          )}
+        </div>
+      )}
+      {preview && email ? (
+        <div
+          className="rounded-md border border-slate-200 bg-surface p-3 text-sm"
+          aria-live="polite"
+        >
+          <p className="mb-1 text-xs text-slate-500">
+            To: {to || "—"}
+            {cc && ` · CC: ${cc}`}
+            {bcc && ` · BCC: ${bcc}`}
+          </p>
+          <MarkdownLite text={body} />
+          {signature && (
+            <div className="mt-3 border-t border-slate-100 pt-2 text-xs text-slate-500">
+              <MarkdownLite text={signature} />
+            </div>
+          )}
+          {uploads.length > 0 && (
+            <p className="mt-2 text-xs text-slate-500">
+              Attachments: {uploads.map((u) => u.name).join(", ")}
+            </p>
+          )}
+        </div>
+      ) : (
+        <Field
+          label={kind === "internal" ? "Note" : "Message"}
+          htmlFor="composer-body"
+          error={fieldErrors(result, "body")}
+        >
+          <MarkdownEditor
+            id="composer-body"
+            name="body"
+            value={body}
+            onChange={onChange}
+            rows={6}
+            placeholder={
+              kind === "internal"
+                ? "Notes for the team… use @name to mention someone"
+                : emailEnabled
+                  ? "Your reply to the customer…"
+                  : "What was said to the customer…"
+            }
+            onKeyDown={(e) => {
+              if ((e.metaKey || e.ctrlKey) && e.key === "Enter")
+                formRef.current?.requestSubmit();
+            }}
+          />
+        </Field>
+      )}
+      {preview && email && <input type="hidden" name="body" value={body} />}
+      {kind === "public" && emailEnabled && (
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-slate-700 hover:bg-slate-50">
+            <Paperclip className="h-3.5 w-3.5" />{" "}
+            {uploading ? "Uploading…" : "Attach files"}
+            <input
+              ref={fileRef}
+              type="file"
+              multiple
+              className="sr-only"
+              onChange={(e) => upload(e.target.files)}
+              disabled={uploading}
+            />
+          </label>
+          {uploads.map((u) => (
+            <Badge key={u.id} tone="slate">
+              {u.name}{" "}
+              <span className="ml-1 text-slate-400">
+                {Math.max(1, Math.round(u.size / 1024))} KB
+              </span>
+              <button
+                type="button"
+                aria-label={`Remove ${u.name}`}
+                className="ml-1 text-slate-500 hover:text-red-700"
+                onClick={() =>
+                  setUploads((x) => x.filter((y) => y.id !== u.id))
+                }
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          ))}
+          {uploadError && <span className="text-red-700">{uploadError}</span>}
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <Select
           name="status"
@@ -175,9 +352,32 @@ export function Composer({
             ),
           )}
         </Select>
-        <SubmitButton size="sm">
+        {email && (
+          <Button
+            size="sm"
+            variant="secondary"
+            type="button"
+            onClick={() => setPreview((p) => !p)}
+            disabled={!body.trim()}
+          >
+            {preview ? (
+              <>
+                <Pencil className="h-3.5 w-3.5" /> Edit
+              </>
+            ) : (
+              <>
+                <Eye className="h-3.5 w-3.5" /> Preview
+              </>
+            )}
+          </Button>
+        )}
+        <SubmitButton size="sm" disabled={uploading}>
           <Send className="h-3.5 w-3.5" />{" "}
-          {kind === "internal" ? "Add note" : "Save message"}
+          {kind === "internal"
+            ? "Add note"
+            : email
+              ? "Send e-mail"
+              : "Save message"}
         </SubmitButton>
         <Button
           size="sm"
@@ -185,6 +385,7 @@ export function Composer({
           type="button"
           onClick={() => {
             setBody("");
+            setUploads([]);
             void saveDraftAction(ticketId, {
               kind,
               body: "",
