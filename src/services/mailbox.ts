@@ -36,6 +36,8 @@ import {
 import { htmlToText, sanitizeEmailHtml } from "@/lib/email/sanitize";
 import { splitQuotedText } from "@/lib/email/quotes";
 import { bounceDetails, classifyAutomated } from "@/lib/email/automated";
+import { afterTicketChange } from "./helpdesk-hooks";
+import { notifyUsers, ticketAudience } from "./helpdesk-notifications";
 import {
   checkAttachmentPolicy,
   readAttachmentBytes,
@@ -1053,6 +1055,12 @@ export async function processInboundMessage(
         tx,
       );
     });
+    await notifyUsers(await ticketAudience(ticketId), {
+      kind: "bounce",
+      title: `Delivery failed${details.failedRecipient ? ` for ${details.failedRecipient}` : ""}`,
+      body: subject,
+      ticketId,
+    });
     return { action: "bounce", ticketId, automated: "bounce" };
   }
 
@@ -1391,7 +1399,26 @@ async function appendToTicket(
         body: b.newText.slice(0, 300),
         source: "helpdesk-email",
       });
-  }
+    await notifyUsers(await ticketAudience(t.id), {
+      kind: "customer_replied",
+      title: `${ticketReference(t.number)}: reply from ${b.from?.name ?? b.fromEmail}`,
+      body: b.newText.slice(0, 300),
+      ticketId: t.id,
+      messageId,
+    });
+    await afterTicketChange(
+      t.id,
+      "customer_replied",
+      EMAIL_ACTOR,
+      "customer replied",
+    );
+  } else if (!b.automated.kind && (fromMailbox || staff))
+    await afterTicketChange(
+      t.id,
+      "agent_replied",
+      EMAIL_ACTOR,
+      "reply sent from the mailbox",
+    );
   return { action: "appended", ticketId: t.id, automated: b.automated.kind };
 }
 
@@ -2022,6 +2049,13 @@ async function markAccepted(
         actorUserId: ob.createdByUserId,
         source: "helpdesk-email",
       });
+    if (ob.kind !== "ack")
+      await afterTicketChange(
+        ob.ticketId,
+        "agent_replied",
+        { id: ob.createdByUserId, type: "user" },
+        "reply accepted by Microsoft 365",
+      );
   }
   return "accepted" as const;
 }

@@ -344,3 +344,194 @@ export function findTicketReferences(
   }
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// Stage 3: SLA policies, business hours, automation, templates, checklists
+// ---------------------------------------------------------------------------
+const lineList = (max: number) =>
+  z
+    .union([z.string(), z.array(z.string())])
+    .optional()
+    .transform((v) =>
+      (Array.isArray(v) ? v : (v ?? "").split(/\r?\n/))
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .slice(0, max),
+    );
+/** Hours (decimal allowed) → business minutes; blank = no target. */
+const hoursToMinutes = z
+  .union([z.literal(""), z.coerce.number().min(0).max(24 * 365)])
+  .optional()
+  .transform((v) =>
+    v === "" || v === undefined || v === null || Number(v) === 0
+      ? null
+      : Math.round(Number(v) * 60),
+  );
+
+export const businessHoursSchema = z.object({
+  name: trimmed.min(1).max(80),
+  timezone: trimmed.min(1).max(64).default("Europe/London"),
+  always: z.coerce.boolean().default(false),
+  /** Seven "HH:MM-HH:MM" strings (Monday first), blank for a closed day. */
+  days: z.array(z.string()).length(7),
+  holidays: lineList(200).pipe(
+    z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD")),
+  ),
+});
+
+export const slaPolicySchema = z.object({
+  name: trimmed.min(1).max(80),
+  description: optionalText,
+  businessHoursId: optionalUuid,
+  fr_low: hoursToMinutes,
+  fr_normal: hoursToMinutes,
+  fr_high: hoursToMinutes,
+  fr_critical: hoursToMinutes,
+  res_low: hoursToMinutes,
+  res_normal: hoursToMinutes,
+  res_high: hoursToMinutes,
+  res_critical: hoursToMinutes,
+  pauseStatuses: z.array(z.enum(TICKET_STATUSES)).optional().default([]),
+  isDefault: z.coerce.boolean().default(false),
+  active: z.coerce.boolean().default(true),
+  companyIds: z.array(uuid).optional().default([]),
+});
+
+export const AUTOMATION_TRIGGERS = [
+  "ticket_created",
+  "ticket_updated",
+  "customer_replied",
+  "agent_replied",
+  "status_changed",
+  "sla_breached",
+  "sla_due_soon",
+  "schedule",
+] as const;
+export const AUTOMATION_TRIGGER_LABELS: Record<
+  (typeof AUTOMATION_TRIGGERS)[number],
+  string
+> = {
+  ticket_created: "Ticket created",
+  ticket_updated: "Ticket updated",
+  customer_replied: "Customer replied",
+  agent_replied: "Agent replied",
+  status_changed: "Status changed",
+  sla_breached: "SLA breached",
+  sla_due_soon: "SLA due within the hour",
+  schedule: "On a schedule (every 15 minutes)",
+};
+export const RULE_OPS = [
+  "eq",
+  "neq",
+  "in",
+  "contains",
+  "empty",
+  "not_empty",
+  "gt",
+  "lt",
+] as const;
+export const RULE_OP_LABELS: Record<(typeof RULE_OPS)[number], string> = {
+  eq: "is",
+  neq: "is not",
+  in: "is one of",
+  contains: "contains",
+  empty: "is empty",
+  not_empty: "is not empty",
+  gt: "is greater than",
+  lt: "is less than",
+};
+export const RULE_ACTION_TYPES = [
+  "assign_user",
+  "assign_team",
+  "set_priority",
+  "set_status",
+  "set_category",
+  "set_type",
+  "add_tag",
+  "remove_tag",
+  "add_note",
+  "notify_users",
+  "notify_assignee",
+  "close",
+] as const;
+export const RULE_ACTION_LABELS: Record<
+  (typeof RULE_ACTION_TYPES)[number],
+  string
+> = {
+  assign_user: "Assign to agent",
+  assign_team: "Assign to team",
+  set_priority: "Set priority",
+  set_status: "Set status",
+  set_category: "Set category",
+  set_type: "Set type",
+  add_tag: "Add tag",
+  remove_tag: "Remove tag",
+  add_note: "Add internal note",
+  notify_users: "Notify users",
+  notify_assignee: "Notify assignee",
+  close: "Close (if resolved)",
+};
+const ruleConditionSchema = z.object({
+  field: trimmed.min(1).max(60),
+  op: z.enum(RULE_OPS),
+  value: z
+    .union([z.string(), z.array(z.string()), z.number(), z.null()])
+    .optional(),
+});
+const ruleActionSchema = z.object({
+  type: z.enum(RULE_ACTION_TYPES),
+  value: z.union([z.string(), z.array(z.string()), z.null()]).optional(),
+});
+const jsonArray = <T extends z.ZodTypeAny>(item: T) =>
+  z
+    .union([z.string(), z.array(z.unknown())])
+    .optional()
+    .transform((v, ctx) => {
+      if (Array.isArray(v)) return v;
+      if (!v) return [];
+      try {
+        const parsed = JSON.parse(v);
+        if (!Array.isArray(parsed)) throw new Error("not an array");
+        return parsed as unknown[];
+      } catch {
+        ctx.addIssue({ code: "custom", message: "Invalid list" });
+        return z.NEVER;
+      }
+    })
+    .pipe(z.array(item).max(20));
+export const automationRuleSchema = z.object({
+  name: trimmed.min(1).max(120),
+  description: optionalText,
+  trigger: z.enum(AUTOMATION_TRIGGERS),
+  match: z.enum(["all", "any"]).default("all"),
+  conditions: jsonArray(ruleConditionSchema),
+  actions: jsonArray(ruleActionSchema),
+  sortOrder: z.coerce.number().int().min(0).max(9999).default(0),
+  stopProcessing: z.coerce.boolean().default(false),
+  cooldownMinutes: z.coerce.number().int().min(0).max(60 * 24 * 30).default(60),
+  afterMinutes: z
+    .union([z.literal(""), z.coerce.number().int().min(0).max(60 * 24 * 365)])
+    .optional()
+    .transform((v) => (v === "" || v === undefined ? null : Number(v))),
+  active: z.coerce.boolean().default(true),
+});
+export type AutomationRuleInput = z.infer<typeof automationRuleSchema>;
+
+export const templateSchema = z.object({
+  name: trimmed.min(1).max(120),
+  scope: z.enum(["public", "internal", "both"]).default("public"),
+  subject: optionalText,
+  body: trimmed.min(1).max(20_000),
+  category: optionalText,
+  active: z.coerce.boolean().default(true),
+});
+
+export const checklistAddSchema = z.object({
+  items: lineList(50).pipe(z.array(z.string().max(300)).min(1, "Enter at least one item")),
+  assigneeUserId: optionalUserId,
+  dueDate: trimmed
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional()
+    .or(z.literal(""))
+    .transform((v) => (v ? v : null)),
+});

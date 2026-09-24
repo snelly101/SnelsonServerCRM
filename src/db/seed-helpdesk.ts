@@ -473,4 +473,121 @@ export async function seedHelpdesk(
         source: "helpdesk-email",
       });
   }
+
+  // Stage 3: business hours, SLA policies, templates and a routing rule.
+  const [ukHours] = await db
+    .insert(schema.helpdeskBusinessHours)
+    .values({
+      name: "UK office hours",
+      timezone: "Europe/London",
+      schedule: {
+        mon: [{ start: "08:30", end: "17:30" }],
+        tue: [{ start: "08:30", end: "17:30" }],
+        wed: [{ start: "08:30", end: "17:30" }],
+        thu: [{ start: "08:30", end: "17:30" }],
+        fri: [{ start: "08:30", end: "17:00" }],
+        sat: [],
+        sun: [],
+      },
+      holidays: ["2026-12-25", "2026-12-28", "2027-01-01"],
+    })
+    .returning({ id: schema.helpdeskBusinessHours.id });
+  await db
+    .insert(schema.helpdeskSlaPolicies)
+    .values({
+      name: "Standard support",
+      description: "Default agreement: office hours, resolution clock pauses while awaiting the customer.",
+      businessHoursId: ukHours.id,
+      firstResponseMinutes: { low: 480, normal: 240, high: 60, critical: 30 },
+      resolutionMinutes: { low: 4800, normal: 2400, high: 480, critical: 240 },
+      pauseStatuses: ["awaiting_customer", "awaiting_third_party"],
+      isDefault: true,
+    });
+  const [priority] = await db
+    .insert(schema.helpdeskSlaPolicies)
+    .values({
+      name: "Priority 24×7",
+      description: "Round-the-clock cover for critical customers.",
+      businessHoursId: null,
+      firstResponseMinutes: { low: 240, normal: 120, high: 30, critical: 15 },
+      resolutionMinutes: { low: 2400, normal: 960, high: 240, critical: 120 },
+      pauseStatuses: ["awaiting_customer"],
+      isDefault: false,
+    })
+    .returning({ id: schema.helpdeskSlaPolicies.id });
+  const dental = await company("Harrowgate Dental Practice");
+  if (dental)
+    await db
+      .insert(schema.helpdeskSlaAssignments)
+      .values({ companyId: dental.id, policyId: priority.id })
+      .onConflictDoNothing();
+  await db.insert(schema.helpdeskTemplates).values([
+    {
+      name: "Need more information",
+      scope: "public",
+      category: "General",
+      body: "Hi {{requester.first_name}},\n\nThanks for getting in touch. To look into this I need a little more detail:\n\n- What were you doing when it happened?\n- Does it affect one person or several?\n- Any error message (a screenshot is ideal)?\n\nReply to this e-mail and it will come straight back to me.\n\n{{agent.name}}",
+      createdByUserId: admin,
+    },
+    {
+      name: "Resolved – closing in 5 days",
+      scope: "public",
+      category: "General",
+      body: "Hi {{requester.first_name}},\n\nI believe {{ticket.reference}} is now resolved. If anything is still not right, reply to this e-mail within the next 5 days and it will reopen automatically; otherwise it will close.\n\n{{agent.name}}",
+      createdByUserId: admin,
+    },
+    {
+      name: "Leaver checklist",
+      scope: "internal",
+      category: "Accounts",
+      body: "Leaver process for {{company.name}}:\n\n- Convert mailbox to shared, forward to manager\n- Remove licences (M365, Pax8)\n- Disable sign-in, revoke sessions\n- Wipe/return laptop\n- Update the CRM contact",
+      createdByUserId: admin,
+    },
+  ]);
+  await db.insert(schema.helpdeskAutomationRules).values([
+    {
+      name: "Route new e-mail tickets to the service desk",
+      description: "Anything arriving by e-mail without a team goes to first line.",
+      trigger: "ticket_created",
+      match: "all",
+      conditions: [
+        { field: "source", op: "eq", value: "email" },
+        { field: "teamId", op: "empty" },
+      ],
+      actions: [{ type: "assign_team", value: serviceDesk.id }],
+      sortOrder: 10,
+      cooldownMinutes: 0,
+      createdByUserId: admin,
+    },
+    {
+      name: "Outage keywords are critical",
+      trigger: "ticket_created",
+      match: "any",
+      conditions: [
+        { field: "subject", op: "contains", value: "outage" },
+        { field: "subject", op: "contains", value: "everyone is down" },
+      ],
+      actions: [
+        { type: "set_priority", value: "critical" },
+        { type: "add_tag", value: "major-incident" },
+      ],
+      sortOrder: 20,
+      cooldownMinutes: 60,
+      createdByUserId: admin,
+    },
+    {
+      name: "Close resolved tickets after 5 days",
+      trigger: "schedule",
+      match: "all",
+      conditions: [{ field: "status", op: "eq", value: "resolved" }],
+      actions: [{ type: "close" }],
+      sortOrder: 90,
+      afterMinutes: 5 * 24 * 60,
+      cooldownMinutes: 24 * 60,
+      createdByUserId: admin,
+    },
+  ]);
+  const { recomputeTicketSla } = await import("@/services/helpdesk-sla");
+  const all = await db.select({ id: schema.tickets.id }).from(schema.tickets);
+  for (const t of all) await recomputeTicketSla(t.id, "seed");
 }

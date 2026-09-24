@@ -29,7 +29,16 @@ export async function runAction<T>(fn: () => Promise<T>): Promise<ActionResult<T
         const key = issue.path.join(".") || "_";
         (fieldErrors[key] ??= []).push(issue.message);
       }
-      return fail("Please correct the highlighted fields.", fieldErrors);
+      // Name the fields too, so a validation failure on an input the form does
+      // not render is never a silent "nothing is highlighted".
+      const named = Object.entries(fieldErrors)
+        .filter(([k]) => k !== "_")
+        .map(([k, v]) => `${k}: ${v[0]}`)
+        .join("; ");
+      return fail(
+        named ? `Please correct the highlighted fields (${named}).` : "Please correct the highlighted fields.",
+        fieldErrors,
+      );
     }
     if (err instanceof ForbiddenError) return fail(err.message);
     if (err instanceof Error && err.message.startsWith("NEXT_REDIRECT")) throw err;

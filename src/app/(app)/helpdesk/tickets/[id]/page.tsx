@@ -20,6 +20,10 @@ import { Conversation } from "./conversation";
 import { Composer } from "./composer";
 import { SidePanel } from "./side-panel";
 import { MergeDialog, SplitDialog } from "./merge-split";
+import { SlaPanel } from "./sla-panel";
+import { Checklist } from "./checklist";
+import { ticketSlaSummary } from "@/services/helpdesk-sla";
+import { listChecklist, listTemplates } from "@/services/helpdesk-collab";
 import { TRANSITIONS } from "@/lib/helpdesk-transitions";
 import { markdownExcerpt } from "@/lib/markdown-parse";
 import { param } from "@/lib/utils";
@@ -62,6 +66,9 @@ export default async function TicketPage({
     contacts,
     defs,
     draft,
+    sla,
+    checklist,
+    templates,
   ] = await Promise.all([
     getAppSettings(),
     listOwners(),
@@ -71,6 +78,9 @@ export default async function TicketPage({
     contactOptions(),
     listCustomFieldDefs("ticket"),
     canEdit ? getDraft(id, me.id) : Promise.resolve(null),
+    ticketSlaSummary(id),
+    listChecklist(id),
+    canEdit ? listTemplates({ activeOnly: true }) : Promise.resolve([]),
   ]);
   const showEvents = param(sp, "events") !== "0";
   const base = `/helpdesk/tickets/${id}`;
@@ -187,10 +197,41 @@ export default async function TicketPage({
                   .map((p) => p.email!)}
                 allowedStatuses={TRANSITIONS[t.status as TicketStatus]}
                 signature={mailbox?.signature ?? null}
+                templates={templates.map((x) => ({
+                  id: x.id,
+                  name: x.name,
+                  scope: x.scope,
+                  body: x.body,
+                  category: x.category,
+                }))}
+                openChecklist={checklist.filter((c) => !c.done).length}
               />
             </Card>
           )}
         </div>
+        <div className="space-y-4">
+          {sla && (
+            <SlaPanel
+              summary={sla}
+              settings={settings}
+              showHistory={showEvents}
+              canAdmin={can(me.role, "helpdesk.admin")}
+            />
+          )}
+          <Checklist
+            ticketId={t.id}
+            items={checklist.map((c) => ({
+              id: c.id,
+              title: c.title,
+              done: c.done,
+              assigneeUserId: c.assigneeUserId,
+              assigneeName: c.assigneeName,
+              dueDate: c.dueDate,
+            }))}
+            agents={agents}
+            editable={canEdit && !t.mergedInto}
+            settings={settings}
+          />
         <SidePanel
           t={t}
           me={{ id: me.id, name: me.name }}
@@ -216,6 +257,7 @@ export default async function TicketPage({
           }))}
           settings={settings}
         />
+        </div>
       </div>
     </>
   );

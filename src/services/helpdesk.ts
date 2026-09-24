@@ -59,6 +59,11 @@ export type Actor = {
 const SYSTEM: Actor = { id: null, type: "system" };
 
 import { canTransition, TRANSITIONS } from "@/lib/helpdesk-transitions";
+import {
+  afterTicketChange,
+  notifyAssigned,
+  notifyMessage,
+} from "./helpdesk-hooks";
 export { canTransition, TRANSITIONS };
 
 // ---------------------------------------------------------------------------
@@ -291,9 +296,17 @@ export async function createTicket(
       },
       tx,
     );
-    return row.id;
+    return { id: row.id, number: row.number };
   });
-  return id;
+  await notifyAssigned(
+    id.id,
+    input.assigneeUserId,
+    actor,
+    ticketReference(id.number),
+    input.subject,
+  );
+  await afterTicketChange(id.id, "ticket_created", actor, "created");
+  return id.id;
 }
 
 // ---------------------------------------------------------------------------
@@ -995,6 +1008,20 @@ export async function updateTicketFields(
     );
     return v;
   });
+  if ("assigneeUserId" in changes)
+    await notifyAssigned(
+      id,
+      input.assigneeUserId,
+      actor,
+      ticketReference(existing.number),
+      input.subject,
+    );
+  await afterTicketChange(
+    id,
+    "ticket_updated",
+    actor,
+    `fields changed: ${Object.keys(changes).join(", ")}`,
+  );
   return { changed: true, version };
 }
 
@@ -1116,6 +1143,12 @@ export async function changeStatus(
     );
     return v;
   });
+  await afterTicketChange(
+    id,
+    "status_changed",
+    actor,
+    `status ${t.status} → ${status}`,
+  );
   return { changed: true, version, reopened: reopening };
 }
 
@@ -1174,6 +1207,15 @@ export async function assignTicket(
       tx,
     );
   });
+  if (patch.assigneeUserId)
+    await notifyAssigned(
+      id,
+      patch.assigneeUserId,
+      actor,
+      ticketReference(t.number),
+      t.subject,
+    );
+  await afterTicketChange(id, "ticket_updated", actor, "assignment changed");
   return { changed: true };
 }
 
@@ -1248,6 +1290,17 @@ export async function addMessage(
       );
     return m.id;
   });
+  await notifyMessage(
+    id,
+    messageId,
+    input.body,
+    internal,
+    actor,
+    ticketReference(t.number),
+    t.subject,
+  );
+  if (!internal)
+    await afterTicketChange(id, "agent_replied", actor, "message logged");
   if (
     input.status &&
     input.status !== (t.status === "new" && !internal ? "open" : t.status)
@@ -1626,6 +1679,7 @@ export async function bulkUpdate(
             from: t.priority,
             to: value,
           });
+          await afterTicketChange(id, "ticket_updated", actor, "priority");
         }
       } else
         await changeStatus(id, value as TicketStatus, actor, {
