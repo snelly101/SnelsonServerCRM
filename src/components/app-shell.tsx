@@ -62,9 +62,13 @@ export function AppShell({
   const [open, setOpen] = useState(false);
 
   const nav = (
-    <nav aria-label="Main" className="flex-1 space-y-0.5 px-2">
+    <nav
+      aria-label="Main"
+      className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-2 py-1"
+    >
       {NAV.map((item) => {
-        const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+        const active =
+          item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
         return (
           <Link
             key={item.href}
@@ -73,7 +77,9 @@ export function AppShell({
             aria-current={active ? "page" : undefined}
             className={cn(
               "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium transition-colors",
-              active ? "bg-brand-600 text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white",
+              active
+                ? "bg-brand-600 text-white"
+                : "text-slate-300 hover:bg-slate-800 hover:text-white",
             )}
           >
             <item.icon className="h-4 w-4 shrink-0" aria-hidden />
@@ -87,13 +93,18 @@ export function AppShell({
   return (
     <div className="flex min-h-screen">
       {/* Sidebar (desktop) */}
-      <aside data-theme="light" className="hidden w-60 shrink-0 flex-col bg-sidebar text-white lg:flex">
-        <div className="flex h-14 items-center gap-2 px-4 text-sm font-semibold">
-          <span className="grid h-7 w-7 place-items-center rounded bg-brand-500 text-xs">{initials(companyName)}</span>
+      <aside
+        data-theme="light"
+        className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col self-start bg-sidebar text-white lg:flex"
+      >
+        <div className="flex h-14 shrink-0 items-center gap-2 px-4 text-sm font-semibold">
+          <span className="grid h-7 w-7 place-items-center rounded bg-brand-500 text-xs">
+            {initials(companyName)}
+          </span>
           <span className="truncate">{companyName}</span>
         </div>
         {nav}
-        <div className="border-t border-slate-800 p-3 text-xs text-slate-400">
+        <div className="shrink-0 border-t border-slate-800 p-3 text-xs text-slate-400">
           <div className="truncate font-medium text-slate-200">{user.name}</div>
           <div className="truncate">{ROLE_LABELS[user.role]}</div>
         </div>
@@ -102,11 +113,21 @@ export function AppShell({
       {/* Sidebar (mobile) */}
       {open && (
         <div className="fixed inset-0 z-40 lg:hidden">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setOpen(false)} />
-          <aside data-theme="light" className="absolute inset-y-0 left-0 flex w-64 flex-col bg-sidebar text-white">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setOpen(false)}
+          />
+          <aside
+            data-theme="light"
+            className="absolute inset-y-0 left-0 flex w-64 flex-col bg-sidebar text-white"
+          >
             <div className="flex h-14 items-center justify-between px-4 text-sm font-semibold">
               <span className="truncate">{companyName}</span>
-              <button aria-label="Close menu" onClick={() => setOpen(false)} className="rounded p-1 hover:bg-slate-800">
+              <button
+                aria-label="Close menu"
+                onClick={() => setOpen(false)}
+                className="rounded p-1 hover:bg-slate-800"
+              >
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -117,13 +138,20 @@ export function AppShell({
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-slate-200 bg-surface px-4">
-          <button className="rounded p-1.5 text-slate-600 hover:bg-slate-100 lg:hidden" aria-label="Open menu" onClick={() => setOpen(true)}>
+          <button
+            className="rounded p-1.5 text-slate-600 hover:bg-slate-100 lg:hidden"
+            aria-label="Open menu"
+            onClick={() => setOpen(true)}
+          >
             <Menu className="h-5 w-5" />
           </button>
           <GlobalSearch />
           <div className="ml-auto flex items-center gap-3">
             {demoMode && (
-              <span className="hidden rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 sm:inline" title="Integrations without credentials use synthetic demo data">
+              <span
+                className="hidden rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 sm:inline"
+                title="Integrations without credentials use synthetic demo data"
+              >
                 DEMO MODE
               </span>
             )}
@@ -132,7 +160,12 @@ export function AppShell({
               <div className="text-slate-500">{ROLE_LABELS[user.role]}</div>
             </div>
             <ThemeToggle initial={user.theme} />
-            <Link href="/account/security" className="rounded p-1.5 text-slate-600 hover:bg-slate-100" aria-label="Security" title="Security">
+            <Link
+              href="/account/security"
+              className="rounded p-1.5 text-slate-600 hover:bg-slate-100"
+              aria-label="Security"
+              title="Security"
+            >
               <ShieldCheck className="h-4 w-4" />
             </Link>
             <button
@@ -151,7 +184,8 @@ export function AppShell({
         </header>
         {twoFactorDueBy && (
           <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800 sm:px-6 lg:px-8">
-            Two-factor authentication is required for your role from {twoFactorDueBy}.{" "}
+            Two-factor authentication is required for your role from{" "}
+            {twoFactorDueBy}.{" "}
             <Link href="/account/security" className="font-medium underline">
               Set it up now
             </Link>
