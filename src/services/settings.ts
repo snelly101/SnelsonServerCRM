@@ -36,7 +36,7 @@ export async function deleteTag(id: string, actorUserId: string) {
   await audit({ actorUserId, action: "tag.delete", entityType: "tag", entityId: id });
 }
 
-export async function listCustomFieldDefs(entity?: "company" | "contact" | "opportunity") {
+export async function listCustomFieldDefs(entity?: "company" | "contact" | "opportunity" | "ticket") {
   const q = db.select().from(customFieldDefs).orderBy(asc(customFieldDefs.sortOrder), asc(customFieldDefs.label));
   return entity ? q.where(eq(customFieldDefs.entity, entity)) : q;
 }
@@ -61,7 +61,7 @@ export async function deleteCustomFieldDef(id: string, actorUserId: string) {
  * Validates custom field values against the definitions for an entity.
  * Unknown keys are dropped; typed values are coerced.
  */
-export async function validateCustomFields(entity: "company" | "contact" | "opportunity", raw: Record<string, unknown>) {
+export async function validateCustomFields(entity: "company" | "contact" | "opportunity" | "ticket", raw: Record<string, unknown>) {
   const defs = await listCustomFieldDefs(entity);
   const out: Record<string, unknown> = {};
   const errors: Record<string, string[]> = {};

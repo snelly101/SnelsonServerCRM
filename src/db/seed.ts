@@ -189,6 +189,8 @@ export async function seed(url = process.env.DATABASE_URL) {
       ]);
     }
     await seedSales(db, userIds);
+    const { seedHelpdesk } = await import("./seed-helpdesk");
+    await seedHelpdesk(db, userIds);
     if (process.env.DEMO_MODE === "true") {
       // Mirror the demo Better Proposals data so the Proposals page has content.
       const { syncProposals } = await import("@/services/proposals");

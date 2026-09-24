@@ -84,7 +84,7 @@ export const tagSchema = z.object({
 });
 
 export const customFieldDefSchema = z.object({
-  entity: z.enum(["company", "contact", "opportunity"]),
+  entity: z.enum(["company", "contact", "opportunity", "ticket"]),
   key: trimmed
     .min(1)
     .max(50)

@@ -56,6 +56,7 @@ export function CustomFieldForm() {
             <option value="company">Company</option>
             <option value="contact">Contact</option>
             <option value="opportunity">Opportunity</option>
+            <option value="ticket">Helpdesk ticket</option>
           </Select>
         </Field>
         <Field label="Type" htmlFor="cf-type">

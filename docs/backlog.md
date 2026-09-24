@@ -103,6 +103,29 @@ Ideas and requests not yet scheduled. Each item states what it is, why, and the 
 - Write actions behind confirmation and audit: renew a domain, create a mailbox or reset its password, suspend a package for non-payment, edit DNS from the company page.
 - Helpdesk sidebar showing the sender's hosting and mailbox state once the email helpdesk exists.
 
+## MRR shown for annually billed lines
+
+**What:** contract and company headers show an MRR figure that includes lines billed annually (or quarterly), normalised to a monthly amount. Nothing is invoiced monthly for those lines, so the number reads as cash that is not arriving each month.
+
+**Why:** the header figure is used as "what we bill this customer a month"; an annual licence renewal inflates it and misleads whoever is checking invoices against it.
+
+**Design notes and decisions needed:**
+- Decide what the headline should be: (a) true monthly billing only (annual lines excluded, shown separately as "billed annually: £X/year"), (b) keep normalised MRR but label it "annualised recurring ÷ 12" with the annual lines listed underneath, or (c) show both, monthly billing and normalised MRR, side by side.
+- Reports → MRR uses the normalised figure for forecasting; that view should keep the formula and say so, whichever headline the contract page adopts.
+- Xero invoice comparison on the company page should compare against what is actually invoiced per period, not the normalised figure.
+
+## Helpdesk customer portal
+
+**What:** an authenticated customer-facing portal for the helpdesk (deferred from the helpdesk build): customers create tickets, see their own permitted tickets, add replies and attachments, follow status and the public conversation, search published customer-visible knowledge articles, and give optional satisfaction feedback after resolution. Designated company administrators may see their company's tickets only when explicitly authorised.
+
+**Why:** email covers most customer interaction; a portal adds self-service and visibility for larger customers without another inbox.
+
+**Design notes and decisions needed:**
+- Needs a customer identity: the CRM has no customer authentication today, so this means a separate Better Auth user type (or magic-link sign-in bound to a verified contact email) with its own session scope, never staff roles.
+- Customers must only ever see: their own tickets (or the company's when the contact is a company administrator), public messages, customer-visible attachments, published customer-visible articles. Internal notes, time entries, restricted attachments and other customers' data are never queryable from portal code paths; enforce at the service layer with a portal-specific query surface and cover it with the "internal notes never leak" acceptance test.
+- Ticket `source = portal` already exists in the data model; the knowledge base already carries a customer-visible flag.
+- Decisions: who invites customers (agents from a contact record), whether company administrators are a contact flag or a separate grant, rate limits and attachment limits for anonymous-adjacent traffic, and whether satisfaction feedback is portal-only or also sent by email link.
+
 ## Pax8 integration (Microsoft 365 and other cloud subscriptions)
 
 **Status:** built (Phase 12, see `docs/phases.md`): read-only mirror of companies, subscriptions, products and recent invoices; company linking; line matching by choice / SKU / name; licence discrepancies; Pax8 price as line cost. Remaining from the plan: write actions (quantity changes behind confirmation and audit), Pax8 invoice vs Xero bill reconciliation.
