@@ -381,17 +381,27 @@ export class LiveM365Client implements M365Client {
     let id: string;
     if (replyToId) {
       // createReply keeps In-Reply-To / References and the conversation; we then replace body and recipients.
+      // Graph only accepts internetMessageHeaders when a message is created, never on an update, so the
+      // reply draft carries none of our X- headers (threading comes from createReply itself).
       const created = await this.http.post<GraphMessage>(
         `${this.user(address)}/messages/${encodeURIComponent(replyToId)}/${replyAll ? "createReplyAll" : "createReply"}`,
         {},
         IMMUTABLE,
       );
       id = created.data.id;
-      await this.http.request(
-        "PATCH",
-        `${this.user(address)}/messages/${encodeURIComponent(id)}`,
-        { body, headers: IMMUTABLE },
-      );
+      const { internetMessageHeaders: _omit, ...patch } = body;
+      void _omit;
+      try {
+        await this.http.request(
+          "PATCH",
+          `${this.user(address)}/messages/${encodeURIComponent(id)}`,
+          { body: patch, headers: IMMUTABLE },
+        );
+      } catch (err) {
+        // Never leave a half-built reply in Drafts for every retry.
+        await this.deleteDraft(address, id).catch(() => undefined);
+        throw err;
+      }
     } else {
       const created = await this.http.post<GraphMessage>(
         `${this.user(address)}/messages`,

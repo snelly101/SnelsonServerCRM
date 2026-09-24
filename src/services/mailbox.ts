@@ -37,6 +37,7 @@ import { htmlToText, sanitizeEmailHtml } from "@/lib/email/sanitize";
 import { splitQuotedText } from "@/lib/email/quotes";
 import { bounceDetails, classifyAutomated } from "@/lib/email/automated";
 import { afterTicketChange } from "./helpdesk-hooks";
+import { describeError } from "@/lib/integrations/http";
 import { notifyUsers, ticketAudience } from "./helpdesk-notifications";
 import {
   checkAttachmentPolicy,
@@ -1878,7 +1879,7 @@ export async function sendOutboxRow(
       await resolved.client.sendDraft(m.address, created.id);
     } catch (err) {
       // Microsoft may have accepted the send even though we did not hear back: never resend blindly.
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = describeError(err);
       if (/timeout|ETIMEDOUT|ECONNRESET|socket hang up|fetch failed/i.test(msg))
         return markUnknown(claimed, msg);
       throw err;
@@ -1893,7 +1894,8 @@ export async function sendOutboxRow(
       created.id,
     );
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    // describeError carries Graph's own code and message, which is what an admin needs on the outbox row.
+    const msg = describeError(err);
     const auth = /401|403|InvalidAuthenticationToken|ErrorAccessDenied/i.test(
       msg,
     );

@@ -233,6 +233,55 @@ describe("e-mail utilities", () => {
       calls.slice(1).every((c) => c.includes("/users/support%40x.com")),
     ).toBe(true);
   });
+
+  it("live client: a reply draft is created with createReply and patched without internetMessageHeaders (Graph rejects them on update); a failed patch deletes the draft", async () => {
+    const calls: { method: string; url: string; body: unknown }[] = [];
+    let failPatch = false;
+    const fetchImpl = async (url: string | URL, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      const raw = init?.body ? String(init.body) : "";
+      calls.push({ method, url: String(url), body: raw.startsWith("{") ? JSON.parse(raw) : null });
+      if (String(url).includes("login.microsoftonline.com"))
+        return new Response(JSON.stringify({ access_token: "tok", expires_in: 3600 }), { headers: { "content-type": "application/json" } });
+      if (method === "PATCH" && failPatch)
+        return new Response(JSON.stringify({ error: { code: "ErrorInvalidPropertyRequest", message: "internetMessageHeaders cannot be updated." } }), { status: 400, headers: { "content-type": "application/json" } });
+      if (method === "DELETE") return new Response(null, { status: 204 });
+      return new Response(JSON.stringify({ id: "draft-1" }), { headers: { "content-type": "application/json" } });
+    };
+    const client = new LiveM365Client(
+      { tenantId: "t", clientId: "c", authMode: "secret", clientSecret: "s" },
+      async () => undefined,
+      fetchImpl as unknown as typeof fetch,
+    );
+    const draft = {
+      subject: "Re: help",
+      html: "<p>hi</p>",
+      text: "hi",
+      to: [{ email: "kim@x.com" }],
+      cc: [],
+      bcc: [],
+      headers: { "X-CRM-Outbox": "ob1", "X-CRM-Ticket": "IT-000001" },
+      attachments: [],
+    };
+    const created = await client.createDraft("support@x.com", draft, "orig-1", false);
+    expect(created.id).toBe("draft-1");
+    const reply = calls.find((c) => c.url.endsWith("/messages/orig-1/createReply"));
+    expect(reply?.method).toBe("POST");
+    const patch = calls.find((c) => c.method === "PATCH");
+    expect(patch?.url).toMatch(/\/messages\/draft-1$/);
+    expect(patch?.body).not.toHaveProperty("internetMessageHeaders");
+    expect((patch?.body as { toRecipients: unknown[] }).toRecipients).toHaveLength(1);
+    // A fresh message (no reply) keeps the headers, which Graph accepts on create.
+    calls.length = 0;
+    await client.createDraft("support@x.com", draft, null, false);
+    const post = calls.find((c) => c.method === "POST" && c.url.endsWith("/messages"));
+    expect((post?.body as { internetMessageHeaders: unknown[] }).internetMessageHeaders).toHaveLength(2);
+    // Patch failure: the orphan draft is deleted and the error surfaces with Graph's text.
+    calls.length = 0;
+    failPatch = true;
+    await expect(client.createDraft("support@x.com", draft, "orig-1", false)).rejects.toThrow(/400/);
+    expect(calls.some((c) => c.method === "DELETE" && c.url.endsWith("/messages/draft-1"))).toBe(true);
+  });
 });
 
 describe("inbound e-mail → tickets (demo mailbox)", () => {

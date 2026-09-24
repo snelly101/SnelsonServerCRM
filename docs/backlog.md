@@ -158,6 +158,18 @@ Ideas and requests not yet scheduled. Each item states what it is, why, and the 
 - Print stylesheet forces light.
 - Playwright screenshot pass in both themes on the main pages to catch missed colours.
 
+## Move helpdesk settings into the main Settings section
+
+**What:** the helpdesk's administration pages (teams, categories, support mailbox, SLA policies and business hours, automation rules, templates, operations) currently live under Helpdesk → Administration. Move them under the main **Settings** section (Settings → Helpdesk, with its own sub-navigation) so every configuration screen in the CRM is in one place, and leave the Helpdesk section for day-to-day work only.
+
+**Why:** administrators expect all set-up in Settings; the split puts helpdesk configuration where agents work and hides it from the usual settings path.
+
+**Design notes:**
+- Routes move from `/helpdesk/admin/*` to `/settings/helpdesk/*` with redirects from the old paths so bookmarks and the runbook keep working.
+- Permission checks stay as they are (`helpdesk.admin` for mailbox, SLA, rules, operations; `helpdesk.manage` for templates); the Settings navigation shows the helpdesk group only to roles that hold them.
+- Keep small contextual links where agents need them (the SLA panel's link to the policy, the composer's link to templates, the mailbox queue links from Operations).
+- Update `docs/helpdesk-m365.md` and `docs/helpdesk-operations.md` paths, and the browser tests that navigate to the admin pages.
+
 ## Earlier ideas parked
 
 - Creditsafe credit checks via Creditsafe Connect (manual "Run credit check" on the company page, score/limit/band history, optional scheduled refresh). Needs a Connect API subscription; each report consumes credits.
