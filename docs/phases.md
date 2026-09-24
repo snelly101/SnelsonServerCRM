@@ -253,3 +253,23 @@ Built to the brief in the owner's redesign document: a compact company summary w
 - Set the policy under Settings → Security once everyone has an authenticator app; a grace period of two weeks is a sensible start.
 - `TWO_FACTOR_ISSUER` (optional) sets the name shown in authenticator apps; defaults to "Snelson Server CRM".
 - Later: passkeys, and accepting an authenticator code as the Secure Vault step-up instead of the password.
+
+## Phase 10 — Customer notes ✅
+
+### What works
+
+- **Notes section** on every company (after Overview in the section navigation, with a count): standing information such as site access, escalation contacts and preferences, kept apart from the dated Activity timeline. Any number of notes per company, each with a title, a Markdown body and a **pin** flag; pinned notes are also rendered at the top of the Overview.
+- **Editor**: dialog with a title, a pin checkbox, a plain textarea with a small toolbar (heading, bold, bullet list, link inserted at the cursor) and a **Preview** toggle that renders through the same code as the page.
+- **Safe rendering** (`src/lib/markdown-lite.tsx`): a small in-house Markdown subset (headings, paragraphs, bullet and numbered lists, bold, italic, inline code, links limited to http(s)/mailto/tel, horizontal rule) that builds React elements directly, so a note can never inject HTML. No new dependency.
+- **Traceability**: every save is audited (`note.create`, `note.update` with a field diff of title, body and pin, `note.pin`/`note.unpin`, `note.archive`/`note.restore`) and the timeline gets a line; each note shows *Edited … by …*.
+- **Permissions**: readable by everyone who can read the company, editable with `company.write`. Archive is soft, with a *Show archived* toggle and restore.
+- **Migration**: the old free-text *Internal notes* field becomes a pinned note titled "Internal notes" on each company that had one; the form field is gone, and free-text notes on CSV import become a pinned note too.
+
+### What was tested
+
+- **5 unit/integration tests (114 total)**: Markdown parsing (headings, paragraphs, lists, rules; a `<script>` tag stays text), link scheme filtering, excerpts; create/list order/counts, no-op update, audited field diff, pin, archive removes and un-pins, updating an archived note refused, restore, timeline lines; CSV-style notes become a pinned note.
+- **1 browser test (23 total)**: account manager adds a note with every toolbar action and a raw script tag, previews it, pins it; it renders on Notes and Overview with the script shown as text and absent from the page source; edit, unpin, archive, show archived, restore; read-only user sees it without controls.
+
+### Remaining dependencies
+
+- None to deploy. Later: per-site and per-contact notes with the same component; notes in global search.

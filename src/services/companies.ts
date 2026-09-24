@@ -227,7 +227,7 @@ function toRow(input: CompanyInput, actorUserId: string | null) {
     region: input.region,
     postcode: input.postcode,
     country: input.country,
-    notes: input.notes,
+    notes: null,
     customFields: input.customFields,
   };
 }
@@ -255,6 +255,11 @@ export async function createCompany(input: CompanyInput, actorUserId: string | n
     await syncTags(tx, row.id, input.tagIds);
     await audit({ actorUserId, action: "company.create", entityType: "company", entityId: row.id, details: { name: input.name, status: input.status } }, tx);
     await logActivity({ type: "system", companyId: row.id, title: `Company created as ${input.status}`, actorUserId }, tx);
+    // Free-text notes (CSV import) become a pinned note rather than the legacy column.
+    if (input.notes?.trim()) {
+      const { createNote } = await import("./notes");
+      await createNote(row.id, { title: "Internal notes", body: input.notes.trim(), pinned: true }, actorUserId, tx);
+    }
     return row.id;
   });
 }

@@ -43,6 +43,9 @@ import { fmtRelative } from "@/lib/format";
 import { companyDeviceOverview } from "@/services/ninjaone";
 import { companyHostingOverview } from "@/services/twentyi";
 import { HostingPanel } from "@/components/hosting-panel";
+import { listCompanyNotes } from "@/services/notes";
+import { NotesPanel } from "@/components/notes/notes-panel";
+import { MarkdownLite } from "@/lib/markdown-lite";
 import {
   DeviceTable,
   FRESHNESS_LABEL,
@@ -82,6 +85,7 @@ export default async function CompanyPage({
     xero,
     devices,
     hosting,
+    notes,
   ] = await Promise.all([
     getCompany(id),
     getCompanyTimeline(id),
@@ -101,6 +105,9 @@ export default async function CompanyPage({
       ? companyDeviceOverview(id)
       : Promise.resolve(null),
     companyHostingOverview(id),
+    listCompanyNotes(id, {
+      includeArchived: sp.archived === "1" && sp.tab === "notes",
+    }),
   ]);
   if (!company) notFound();
   const vaultCaps = await resolveCapabilities(me.id, me.role, id);
@@ -127,10 +134,17 @@ export default async function CompanyPage({
   ].filter(Boolean);
   const plural = (n: number, one: string, many = `${one}s`) =>
     `${n} ${n === 1 ? one : many}`;
+  const pinnedNotes = notes.filter((n) => n.pinned && !n.archivedAt);
 
   const base = `/companies/${id}`;
   const sections: SectionItem[] = [
     { key: "overview", label: "Overview", href: base },
+    {
+      key: "notes",
+      label: "Notes",
+      href: `${base}?tab=notes`,
+      count: notes.filter((n) => !n.archivedAt).length,
+    },
     {
       key: "contacts",
       label: "Contacts",
@@ -452,14 +466,27 @@ export default async function CompanyPage({
                 </dl>
               </div>
             </div>
-            {company.notes && (
-              <div className="mt-3 rounded-md border border-slate-200 bg-white px-4 py-3">
-                <h3 className="mb-1 text-xs font-medium text-slate-500">
-                  Internal notes
-                </h3>
-                <p className="whitespace-pre-wrap text-[13px] text-slate-800">
-                  {company.notes}
-                </p>
+            {pinnedNotes.length > 0 && (
+              <div className="mt-3 space-y-3">
+                {pinnedNotes.map((n) => (
+                  <div
+                    key={n.id}
+                    className="rounded-md border border-slate-200 bg-white px-4 py-3"
+                  >
+                    <div className="mb-1 flex items-center justify-between gap-2">
+                      <h3 className="text-xs font-medium text-slate-500">
+                        {n.title}
+                      </h3>
+                      <Link
+                        href={`${base}?tab=notes`}
+                        className="text-[11px] text-slate-500 hover:underline"
+                      >
+                        pinned note
+                      </Link>
+                    </div>
+                    <MarkdownLite text={n.body} />
+                  </div>
+                ))}
               </div>
             )}
             <div className="mt-2 flex flex-wrap items-center justify-between gap-2 px-1 text-xs text-slate-500">
@@ -477,6 +504,23 @@ export default async function CompanyPage({
               </Link>
             </div>
           </section>
+        )}
+
+        {tab === "notes" && (
+          <NotesPanel
+            companyId={id}
+            notes={notes.map((n) => ({
+              id: n.id,
+              title: n.title,
+              body: n.body,
+              pinned: n.pinned,
+              archivedAt: n.archivedAt ? n.archivedAt.toISOString() : null,
+              updatedAt: fmtRelative(n.updatedAt),
+              updatedByName: n.updatedByName,
+            }))}
+            canWrite={canWrite}
+            showArchived={sp.archived === "1"}
+          />
         )}
 
         {tab === "activity" && (

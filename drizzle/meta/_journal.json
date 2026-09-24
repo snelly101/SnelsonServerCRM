@@ -64,6 +64,13 @@
       "when": 1790237953610,
       "tag": "0008_two_factor",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790241847777,
+      "tag": "0009_company_notes",
+      "breakpoints": true
     }
   ]
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
-import { Field, Input, Select, Textarea, SubmitButton, FormMessage, fieldErrors, Checkbox } from "@/components/ui/form";
+import { Field, Input, Select, SubmitButton, FormMessage, fieldErrors, Checkbox } from "@/components/ui/form";
 import { ButtonLink } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import { CustomFieldsInputs, type CustomFieldDef } from "./custom-fields";
@@ -180,10 +180,6 @@ export function CompanyForm({
           <CustomFieldsInputs defs={customFieldDefs} values={initial.customFields ?? {}} errors={result && !result.ok ? result.fieldErrors : undefined} />
         </section>
       )}
-
-      <Field label="Internal notes" htmlFor="notes" error={e("notes")}>
-        <Textarea id="notes" name="notes" defaultValue={initial.notes ?? ""} rows={4} />
-      </Field>
 
       <div className="flex items-center gap-2 border-t border-slate-200 pt-4">
         <SubmitButton>{initial.id ? "Save changes" : "Create company"}</SubmitButton>

@@ -133,6 +133,13 @@ export const appSettingsSchema = z.object({
   vaultReviewReminderDays: z.coerce.number().int().min(1).max(180).optional(),
   vaultRevealLimit: z.coerce.number().int().min(1).max(10000).optional(),
 });
+export const companyNoteSchema = z.object({
+  title: trimmed.min(1, "Give the note a title").max(120),
+  body: z.string().max(20000, "Keep notes under 20,000 characters").default(""),
+  pinned: boolish.default(false),
+});
+export type CompanyNoteInput = z.infer<typeof companyNoteSchema>;
+
 export const securitySettingsSchema = z.object({
   twoFactorRequiredRoles: z.array(z.enum(["admin", "sales", "account_manager", "finance", "technician", "read_only"])).default([]),
   twoFactorDeadline: z.preprocess((v) => (v === "" || v === null || v === undefined ? null : v), z.union([z.null(), z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a date")])),
