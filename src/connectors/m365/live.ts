@@ -166,31 +166,49 @@ export class LiveM365Client implements M365Client {
 
   async testMailbox(address: string) {
     try {
-      const me = await this.http.get<{
-        id: string;
-        displayName?: string | null;
-      }>(`${this.user(address)}`, { $select: "id,displayName,mail" });
-      let canRead = false;
+      // The inbox is the real test: it is what Mail.ReadWrite grants and what
+      // the application access policy scopes. Reading the user object itself
+      // needs a directory permission (User.Read.All) the app deliberately does
+      // not have, so it is only attempted afterwards for the display name and
+      // a 403 there is not an error.
       try {
         await this.http.get(
           `${this.user(address)}/mailFolders/inbox/messages`,
           { $top: 1, $select: "id" },
           IMMUTABLE,
         );
-        canRead = true;
       } catch (err) {
+        const status = err instanceof HttpError ? err.status : undefined;
+        const hint =
+          status === 403
+            ? "Grant admin consent for the Mail.ReadWrite application permission, confirm the application access policy includes this mailbox (Test-ApplicationAccessPolicy) and allow up to 30 minutes for a new policy to apply."
+            : status === 404
+              ? "No mailbox with this address exists in the tenant (check for a typo, and that it is a mailbox rather than a distribution list)."
+              : "Check the tenant id, client id and credential.";
         return {
           ok: false as const,
-          error: `Mailbox found but cannot be read (${describeError(err)}). Check Mail.ReadWrite and the application access policy.`,
-          status: err instanceof HttpError ? err.status : undefined,
+          error: `${describeError(err)} ${hint}`,
+          status,
         };
+      }
+      let displayName: string | null = null;
+      let userId = address;
+      try {
+        const me = await this.http.get<{ id: string; displayName?: string | null }>(
+          `${this.user(address)}`,
+          { $select: "id,displayName,mail" },
+        );
+        displayName = me.data.displayName ?? null;
+        userId = me.data.id;
+      } catch {
+        // Directory read not permitted: fine, the mailbox address is enough.
       }
       // Mail.Send cannot be probed without sending; report unknown until the first send.
       return {
         ok: true as const,
-        displayName: me.data.displayName ?? null,
-        userId: me.data.id,
-        canRead,
+        displayName,
+        userId,
+        canRead: true,
         canSend: null,
       };
     } catch (err) {
