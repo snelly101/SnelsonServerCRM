@@ -15,11 +15,11 @@ test("admin sees SLA policies, automation rules and templates; a technician crea
   page,
 }) => {
   await login(page, "admin@example.com");
-  await page.goto("/helpdesk/admin/sla");
+  await page.goto("/settings/helpdesk/sla");
   await expect(page.getByRole("heading", { name: "SLA policies and business hours" })).toBeVisible();
   await expect(page.getByText("Standard support", { exact: true })).toBeVisible();
   await expect(page.getByText("UK office hours", { exact: true }).first()).toBeVisible();
-  await page.goto("/helpdesk/admin/automation");
+  await page.goto("/settings/helpdesk/automation");
   await expect(page.getByText("Route new e-mail tickets to the service desk")).toBeVisible();
   await page.getByRole("button", { name: "New rule" }).click();
   const stamp = Date.now();
@@ -33,7 +33,7 @@ test("admin sees SLA policies, automation rules and templates; a technician crea
   await page.getByLabel("Action value").fill("e2e-auto");
   await page.getByRole("button", { name: "Save rule" }).click();
   await expect(page.getByText(`E2E tag rule ${stamp}`)).toBeVisible();
-  await page.goto("/helpdesk/admin/templates");
+  await page.goto("/settings/helpdesk/templates");
   await expect(page.getByText("Need more information")).toBeVisible();
 
   // Technician creates a ticket: the rule tags it and the SLA panel shows the customer's policy.

@@ -14,7 +14,7 @@ test("mailbox admin page (demo) shows state and queues and accepts a test e-mail
   page,
 }) => {
   await login(page, "admin@example.com");
-  await page.goto("/helpdesk/admin/mailbox");
+  await page.goto("/settings/helpdesk/mailbox");
   await expect(page.getByText("Demo (not connected)").first()).toBeVisible();
   await expect(page.getByText("support@example.com").first()).toBeVisible();
   await expect(

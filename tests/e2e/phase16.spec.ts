@@ -71,7 +71,7 @@ test("knowledge base: technician writes an article from a ticket, manager publis
 
   // Admin: operations page and anonymisation.
   await login(page, "admin@example.com");
-  await page.goto("/helpdesk/admin/operations");
+  await page.goto("/settings/helpdesk/operations");
   await expect(page.getByRole("heading", { name: "Helpdesk operations" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Retention policy" })).toBeVisible();
   await page.goto(ticketUrl);

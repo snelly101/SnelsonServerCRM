@@ -50,9 +50,9 @@ export default async function ComposePage({
       {!enabled ? (
         <EmptyState
           title="No support mailbox connected"
-          description="Connect the Microsoft 365 mailbox under Helpdesk → Administration → Support mailbox to send e-mail from the CRM."
+          description="Connect the Microsoft 365 mailbox under Settings → Helpdesk → Support mailbox to send e-mail from the CRM."
           action={
-            <ButtonLink href="/helpdesk/admin/mailbox" variant="secondary">
+            <ButtonLink href="/settings/helpdesk/mailbox" variant="secondary">
               Mailbox settings
             </ButtonLink>
           }

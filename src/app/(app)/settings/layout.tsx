@@ -14,6 +14,7 @@ export default async function SettingsLayout({ children }: { children: React.Rea
     { href: "/settings/security", label: "Security" },
     ...(can(me.role, "audit.read") ? [{ href: "/settings/audit", label: "Audit log" }] : []),
     ...(can(me.role, "vault.admin") ? [{ href: "/settings/vault", label: "Secure Vault" }] : []),
+    ...(can(me.role, "helpdesk.manage") ? [{ href: "/settings/helpdesk", label: "Helpdesk" }] : []),
   ];
   void Link;
   return (

@@ -39,7 +39,7 @@ Policies take up to 30 minutes to apply. For a **shared mailbox**, nothing else 
 
 ## 4. Connect in the CRM
 
-Helpdesk → Administration → **Support mailbox**:
+Settings → Helpdesk → **Support mailbox**:
 
 1. Mailbox address, display name, tenant id, client id, credential (secret value, or private key + certificate PEM), optional credential expiry, and the **import cutoff** (mail received before it is never turned into tickets; default: from now).
 2. **Verify and connect**: the CRM obtains a token and reads one message from the inbox before storing anything (encrypted with `APP_ENCRYPTION_KEY`). It then creates the change-notification subscription.

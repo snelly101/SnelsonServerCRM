@@ -1,18 +1,21 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { requirePermission } from "@/lib/session";
+import { can } from "@/lib/permissions";
 import { listCategories, listTeams } from "@/services/helpdesk";
 import { listOwners } from "@/services/companies";
 import { PageHeader, Card } from "@/components/ui/page";
-import { ButtonLink } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmButton } from "@/components/ui/confirm-button";
 import { deleteCategoryAction, deleteTeamAction } from "@/actions/helpdesk";
 import { TeamDialog, CategoryDialog } from "./forms";
 
-export const metadata = { title: "Helpdesk administration" };
+export const metadata = { title: "Helpdesk settings" };
 
 export default async function HelpdeskAdminPage() {
-  await requirePermission("helpdesk.admin");
+  // Managers may edit templates only; the tab strip in the layout hides the rest.
+  const me = await requirePermission("helpdesk.manage");
+  if (!can(me.role, "helpdesk.admin")) redirect("/settings/helpdesk/templates");
   const [teams, categories, users] = await Promise.all([
     listTeams(),
     listCategories(),
@@ -21,27 +24,8 @@ export default async function HelpdeskAdminPage() {
   return (
     <>
       <PageHeader
-        title="Helpdesk administration"
-        description="Teams, categories, the support mailbox, SLA policies with business hours, automation rules and response templates."
-        actions={
-          <div className="flex flex-wrap gap-2">
-            <ButtonLink href="/helpdesk/admin/mailbox" variant="secondary">
-              Support mailbox
-            </ButtonLink>
-            <ButtonLink href="/helpdesk/admin/sla" variant="secondary">
-              SLA policies
-            </ButtonLink>
-            <ButtonLink href="/helpdesk/admin/automation" variant="secondary">
-              Automation rules
-            </ButtonLink>
-            <ButtonLink href="/helpdesk/admin/templates" variant="secondary">
-              Templates
-            </ButtonLink>
-            <ButtonLink href="/helpdesk/admin/operations" variant="secondary">
-              Operations
-            </ButtonLink>
-          </div>
-        }
+        title="Helpdesk settings"
+        description="Teams and categories here; the support mailbox, SLA policies, automation rules, templates and operations are in the tabs above."
       />
       <div className="grid gap-4 lg:grid-cols-2">
         <Card
