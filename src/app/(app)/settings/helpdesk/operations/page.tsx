@@ -30,8 +30,8 @@ export default async function HelpdeskOperationsPage() {
   return (
     <>
       <nav aria-label="Breadcrumb" className="py-2 text-xs text-slate-500">
-        <Link href="/helpdesk/admin" className="hover:text-slate-800">
-          Administration
+        <Link href="/settings/helpdesk" className="hover:text-slate-800">
+          Helpdesk settings
         </Link>{" "}
         / Operations
       </nav>
@@ -75,7 +75,7 @@ export default async function HelpdeskOperationsPage() {
                     <Badge tone={health.mailbox.subscription === "active" || health.mailbox.subscription === "demo" ? "green" : "amber"}>subscription {health.mailbox.subscription}</Badge>
                     {health.mailbox.staleInbound && <Badge tone="red">inbound stale</Badge>}
                     {health.mailbox.credentialExpiringSoon && <Badge tone="amber">credential expiring</Badge>}
-                    <Link href="/helpdesk/admin/mailbox" className="text-xs text-brand-700 hover:underline">
+                    <Link href="/settings/helpdesk/mailbox" className="text-xs text-brand-700 hover:underline">
                       queues and replay
                     </Link>
                   </span>

@@ -136,7 +136,10 @@ test("technician sees the helpdesk dashboard and queues, creates a ticket, adds 
     .getByLabel("Resolution summary")
     .fill("Keyboard replaced.");
   await page.getByRole("button", { name: "Update status" }).click();
-  await expect(page.getByText("Keyboard replaced.")).toBeVisible();
+  // Scope to the side panel: the dialog's textarea holds the same text until it closes.
+  await expect(
+    page.getByLabel("Ticket details").getByText("Keyboard replaced."),
+  ).toBeVisible();
   await expect(
     page.locator("aside").getByText("Resolved").first(),
   ).toBeVisible();
@@ -215,6 +218,6 @@ test("account manager bulk-assigns, merges with a preview and the merged referen
   await page.getByRole("link", { name: /VPN drops every 20 minutes/ }).click();
   await expect(page.getByRole("button", { name: "Take" })).toHaveCount(0);
   await expect(page.getByLabel("Note")).toHaveCount(0);
-  await page.goto("/helpdesk/admin");
+  await page.goto("/settings/helpdesk");
   await expect(page).toHaveURL(/forbidden/);
 });

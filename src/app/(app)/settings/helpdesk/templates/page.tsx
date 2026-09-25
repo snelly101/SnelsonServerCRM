@@ -16,8 +16,8 @@ export default async function TemplatesAdminPage() {
   return (
     <>
       <nav aria-label="Breadcrumb" className="py-2 text-xs text-slate-500">
-        <Link href="/helpdesk/admin" className="hover:text-slate-800">
-          Administration
+        <Link href="/settings/helpdesk" className="hover:text-slate-800">
+          Helpdesk settings
         </Link>{" "}
         / Response templates
       </nav>

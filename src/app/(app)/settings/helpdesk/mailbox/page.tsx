@@ -64,7 +64,7 @@ export default async function MailboxAdminPage({
       <PageHeader
         breadcrumbs={[
           { label: "Helpdesk", href: "/helpdesk" },
-          { label: "Administration", href: "/helpdesk/admin" },
+          { label: "Helpdesk settings", href: "/settings/helpdesk" },
           { label: "Mailbox" },
         ]}
         title={
@@ -292,7 +292,7 @@ export default async function MailboxAdminPage({
             {["all", "pending", "done", "skipped", "dead"].map((s) => (
               <Link
                 key={s}
-                href={`/helpdesk/admin/mailbox?inbound=${s}`}
+                href={`/settings/helpdesk/mailbox?inbound=${s}`}
                 className={`rounded px-2 py-0.5 ${(param(sp, "inbound") ?? "all") === s ? "bg-fg text-surface" : "text-slate-600 hover:bg-slate-100"}`}
               >
                 {s}
@@ -327,7 +327,7 @@ export default async function MailboxAdminPage({
             {["all", "queued", "accepted", "unknown", "failed"].map((s) => (
               <Link
                 key={s}
-                href={`/helpdesk/admin/mailbox?outbox=${s}`}
+                href={`/settings/helpdesk/mailbox?outbox=${s}`}
                 className={`rounded px-2 py-0.5 ${(param(sp, "outbox") ?? "all") === s ? "bg-fg text-surface" : "text-slate-600 hover:bg-slate-100"}`}
               >
                 {s}

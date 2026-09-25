@@ -4,9 +4,9 @@ How to keep the helpdesk healthy day to day, what the jobs do, how to recover, h
 
 ## 1. Daily checks (two minutes)
 
-1. **Helpdesk → Administration → Operations**: the banner is green, or lists what needs attention. The same facts are in `GET /api/health` under `helpdesk`, so an uptime monitor pointed at `/api/health` already alerts on them.
+1. **Settings → Helpdesk → Operations**: the banner is green, or lists what needs attention. The same facts are in `GET /api/health` under `helpdesk`, so an uptime monitor pointed at `/api/health` already alerts on them.
 2. **Needs review** queue (`/helpdesk/tickets?view=review`): unknown senders, unmatched replies, bounces. Link the right contact or merge; every item there was held back on purpose.
-3. **Mailbox page** (Administration → Support mailbox): *inbound dead* and *outbox unknown/failed* tiles are zero. If not, section 3.
+3. **Mailbox page** (Settings → Helpdesk → Support mailbox): *inbound dead* and *outbox unknown/failed* tiles are zero. If not, section 3.
 
 ## 2. Jobs and what "healthy" means
 
@@ -49,7 +49,7 @@ Nightly (`runHelpdeskRetention`, inside `system.retention`):
 **Anonymising a ticket** removes the requester's name, e-mail and contact link, all participants except staff followers, sender/recipient addresses on every message, HTML bodies and quoted text, custom fields, and every attachment (files deleted from the `appdata` volume). It keeps message text, internal notes, events, time entries and the SLA outcome, so reports and statistics stay correct. It is audited (`ticket.anonymise`), recorded as an event, and shown as a banner on the ticket. It cannot be undone.
 
 - **Policy decision for go-live**: set `HELPDESK_ANONYMISE_AFTER_DAYS` in `.env` (for example `730` for two years) and restart. Leave it unset to keep identities until asked.
-- **Data-subject request** (right to erasure): Administration → Operations → *Anonymise their tickets* with the person's e-mail. Every ticket they raised, open or closed, is anonymised. The CRM contact itself is archived or deleted separately (Contacts).
+- **Data-subject request** (right to erasure): Settings → Helpdesk → Operations → *Anonymise their tickets* with the person's e-mail. Every ticket they raised, open or closed, is anonymised. The CRM contact itself is archived or deleted separately (Contacts).
 - **One ticket now**: the *Anonymise* button on the ticket page (helpdesk administrators).
 - Message text can still contain personal data the requester typed; that is a manual edit.
 

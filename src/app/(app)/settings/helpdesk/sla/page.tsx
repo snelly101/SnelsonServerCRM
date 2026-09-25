@@ -41,8 +41,8 @@ export default async function SlaAdminPage() {
   return (
     <>
       <nav aria-label="Breadcrumb" className="py-2 text-xs text-slate-500">
-        <Link href="/helpdesk/admin" className="hover:text-slate-800">
-          Administration
+        <Link href="/settings/helpdesk" className="hover:text-slate-800">
+          Helpdesk settings
         </Link>{" "}
         / SLA policies
       </nav>

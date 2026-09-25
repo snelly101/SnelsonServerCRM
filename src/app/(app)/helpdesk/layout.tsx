@@ -24,7 +24,7 @@ export default async function HelpdeskLayout({
     { href: "/helpdesk/reports", label: "Reports" },
     { href: "/helpdesk/notifications", label: "Notifications", count: unread },
     ...(can(me.role, "helpdesk.admin")
-      ? [{ href: "/helpdesk/admin", label: "Administration" }]
+      ? [{ href: "/settings/helpdesk", label: "Settings" }]
       : []),
   ];
   return (

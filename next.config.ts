@@ -7,6 +7,13 @@ const nextConfig: NextConfig = {
     serverActions: { bodySizeLimit: "5mb" },
   },
   poweredByHeader: false,
+  async redirects() {
+    // Helpdesk administration moved under Settings; keep old bookmarks and runbook links working.
+    return [
+      { source: "/helpdesk/admin", destination: "/settings/helpdesk", permanent: true },
+      { source: "/helpdesk/admin/:path*", destination: "/settings/helpdesk/:path*", permanent: true },
+    ];
+  },
   async headers() {
     return [
       {

@@ -2151,7 +2151,7 @@ export async function sendTicketReply(
   const m = await getDefaultMailbox();
   if (!m || (!mailboxIsLive(m) && process.env.DEMO_MODE !== "true"))
     throw new ActionError(
-      "No support mailbox is connected. Connect one under Helpdesk → Administration → Mailbox.",
+      "No support mailbox is connected. Connect one under Settings → Helpdesk → Support mailbox.",
     );
   const t = await surviving(ticketId);
   if (!t || t.id !== ticketId)

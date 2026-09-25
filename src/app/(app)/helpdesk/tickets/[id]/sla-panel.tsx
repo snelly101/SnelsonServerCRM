@@ -74,7 +74,7 @@ export function SlaPanel({
         <span className="text-xs text-slate-500">
           {summary.policy ? (
             canAdmin ? (
-              <Link href="/helpdesk/admin/sla" className="hover:underline">
+              <Link href="/settings/helpdesk/sla" className="hover:underline">
                 {summary.policy.name}
               </Link>
             ) : (
@@ -122,7 +122,7 @@ export function SlaPanel({
           {canAdmin && (
             <>
               {" "}
-              <Link href="/helpdesk/admin/sla" className="text-brand-700 hover:underline">
+              <Link href="/settings/helpdesk/sla" className="text-brand-700 hover:underline">
                 Create one
               </Link>
               .
