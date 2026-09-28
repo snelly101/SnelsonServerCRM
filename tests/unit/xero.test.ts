@@ -230,6 +230,8 @@ describe("Xero workflow (demo adapter)", () => {
     expect(before.map((r) => r.contactId)).not.toContain("demo-c-2"); // already linked
     expect(before.map((r) => r.contactId)).not.toContain("demo-c-6"); // supplier, not a customer
     expect(before.some((r) => r.contactId === "demo-c-4")).toBe(true);
+    // Never invoiced in Xero, so IsCustomer is false there: still a customer to import.
+    expect(before.some((r) => r.contactId === "demo-c-7")).toBe(true);
 
     const created = await importXeroContactAsCompany("demo-c-4", admin.id);
     expect(created.action).toBe("created");
@@ -249,6 +251,7 @@ describe("Xero workflow (demo adapter)", () => {
     expect(all.created + all.linked + all.skipped.length).toBe(all.results.length);
     expect(await listUnlinkedXeroCustomers()).toHaveLength(0);
     expect((await db.select().from(companies).where(eq(companies.name, "Old Supplier Ltd"))).length).toBe(0);
+    expect((await db.select().from(companies).where(eq(companies.name, "Kestrel Marketing Ltd"))).length).toBe(1);
     const [bramley] = await db.select({ id: companies.id }).from(companies).where(eq(companies.name, "Bramley Accountants Ltd"));
     expect(bramley).toBeTruthy();
     const people = await db.select().from(contacts).where(eq(contacts.companyId, bramley.id));

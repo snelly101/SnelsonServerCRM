@@ -23,6 +23,8 @@ function seed() {
   mk("demo-c-4", "Greenfield Primary Academy", "finance@greenfieldacademy.org.uk");
   mk("demo-c-5", "Bramley Accountants Ltd", "helen.bramley@bramleyaccountants.co.uk");
   mk("demo-c-6", "Old Supplier Ltd", "ap@oldsupplier.example", { IsCustomer: false, IsSupplier: true });
+  // A contact created in Xero that has never been invoiced: Xero leaves both flags false.
+  mk("demo-c-7", "Kestrel Marketing Ltd", "hello@kestrelmarketing.example", { IsCustomer: false, IsSupplier: false });
   const inv = (id: string, contact: string, number: string, status: XeroInvoiceRaw["Status"], total: number, dateOffset: number, due: number, paid = 0) =>
     invoices.set(id, { InvoiceID: id, Type: "ACCREC", InvoiceNumber: number, Reference: "", Status: status, Contact: { ContactID: contact, Name: contacts.get(contact)!.Name }, DateString: day(dateOffset), DueDateString: day(due), CurrencyCode: "GBP", LineAmountTypes: "Exclusive", SubTotal: total / 1.2, TotalTax: total - total / 1.2, Total: total, AmountPaid: paid, AmountDue: status === "PAID" ? 0 : total - paid, AmountCredited: 0, FullyPaidOnDate: status === "PAID" ? day(due - 3) : undefined, SentToContact: status !== "DRAFT", UpdatedDateUTC: iso(dateOffset), LineItems: [{ Description: "Managed IT services", Quantity: 1, UnitAmount: total / 1.2, AccountCode: "200", TaxType: "OUTPUT2", LineAmount: total / 1.2 }] });
   inv("demo-i-1", "demo-c-1", "INV-0101", "AUTHORISED", 1238.64, -12, 18);

@@ -328,6 +328,14 @@ export async function processXeroInboundEvents() {
 // ---------------------------------------------------------------------------
 export type XeroMatch = { contactId: string; name: string; emailAddress: string | null; reason: "linked" | "company_number" | "tax_number" | "domain" | "exact_name" | "similar_name"; confidence: "linked" | "high" | "medium" | "low" };
 
+/**
+ * Contacts the CRM may treat as customers. Xero sets IsCustomer only once a
+ * contact has had a sales invoice, so a customer added in Xero last week
+ * (or one only ever invoiced elsewhere) carries neither flag. Everything
+ * active that is not supplier-only counts; suppliers are never imported.
+ */
+const customerCandidate = and(eq(xeroContacts.contactStatus, "ACTIVE"), or(eq(xeroContacts.isCustomer, true), eq(xeroContacts.isSupplier, false)));
+
 export async function suggestXeroContacts(company: { id: string; name: string; companyNumber: string | null; vatNumber: string | null; domain: string | null; email: string | null }): Promise<XeroMatch[]> {
   const out = new Map<string, XeroMatch>();
   const add = (rows: { contactId: string; name: string; emailAddress: string | null }[], reason: XeroMatch["reason"], confidence: XeroMatch["confidence"]) => {
@@ -360,7 +368,7 @@ export async function mappingOverview() {
     const suggestions = link ? [] : (await suggestXeroContacts(c)).filter((s) => !linkedExternal.has(s.contactId));
     out.push({ ...c, link, suggestions });
   }
-  const [{ total }] = await db.select({ total: sql<number>`count(*)`.mapWith(Number) }).from(xeroContacts).where(and(eq(xeroContacts.contactStatus, "ACTIVE"), eq(xeroContacts.isCustomer, true)));
+  const [{ total }] = await db.select({ total: sql<number>`count(*)`.mapWith(Number) }).from(xeroContacts).where(customerCandidate);
   return { companies: out, xeroCustomerCount: total, linkedCount: links.length };
 }
 
@@ -675,7 +683,7 @@ export async function listUnlinkedXeroCustomers() {
   const links = await listLinks("xero", "company");
   const linkedExternal = new Set(links.map((l) => l.externalId));
   const linkedLocal = new Set(links.map((l) => l.localId));
-  const rows = await db.select().from(xeroContacts).where(and(eq(xeroContacts.contactStatus, "ACTIVE"), eq(xeroContacts.isCustomer, true))).orderBy(xeroContacts.name);
+  const rows = await db.select().from(xeroContacts).where(customerCandidate).orderBy(xeroContacts.name);
   const out = [];
   for (const c of rows) {
     if (linkedExternal.has(c.contactId)) continue;
