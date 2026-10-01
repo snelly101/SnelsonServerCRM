@@ -230,13 +230,25 @@ async function upsertInvoice(inv: XeroInvoiceRaw): Promise<"created" | "updated"
     await linkDraftIfMatching(inv);
     return "created";
   }
-  const changed = existing.updatedDateUtc?.getTime() !== updated?.getTime() || existing.status !== inv.Status || existing.amountDue !== values.amountDue || existing.companyId !== values.companyId;
+  // Postgres returns numeric columns as "0.00" while Xero gives 0: compare as numbers, never as strings.
+  const paidBefore = Number(existing.amountPaid ?? 0);
+  const paidNow = Number(values.amountPaid ?? 0);
+  const paidChanged = Math.abs(paidNow - paidBefore) >= 0.005;
+  const changed = existing.updatedDateUtc?.getTime() !== updated?.getTime() || existing.status !== inv.Status || Number(existing.amountDue ?? 0) !== Number(values.amountDue ?? 0) || paidChanged || existing.companyId !== values.companyId;
   await db.update(xeroInvoices).set(changed ? values : { fetchedAt: new Date() }).where(eq(xeroInvoices.id, existing.id));
-  if (existing.status !== inv.Status || existing.amountPaid !== values.amountPaid) {
-    const evId = await recordInboundEvent("xero", `invoice:${inv.InvoiceID}:${inv.Status}:${values.amountPaid ?? 0}`, `invoice.${inv.Status.toLowerCase()}`, { from: existing.status, to: inv.Status }, inv.InvoiceID);
+  if (existing.status !== inv.Status || paidChanged) {
+    const evId = await recordInboundEvent("xero", `invoice:${inv.InvoiceID}:${inv.Status}:${paidNow.toFixed(2)}`, `invoice.${inv.Status.toLowerCase()}`, { from: existing.status, to: inv.Status, paidBefore, paidNow }, inv.InvoiceID);
     if (evId) {
       if (values.companyId) {
-        const title = inv.Status === "PAID" ? `Invoice ${inv.InvoiceNumber} paid in full` : existing.status !== inv.Status ? `Invoice ${inv.InvoiceNumber} ${inv.Status.toLowerCase()}` : `Payment received on invoice ${inv.InvoiceNumber} (${fmt(values.amountPaid, values.currencyCode)} paid)`;
+        const delta = round(paidNow - paidBefore);
+        const title =
+          inv.Status === "PAID"
+            ? `Invoice ${inv.InvoiceNumber} paid in full (${fmt(values.total, values.currencyCode)})`
+            : existing.status !== inv.Status
+              ? `Invoice ${inv.InvoiceNumber} ${inv.Status.toLowerCase()}`
+              : delta > 0
+                ? `Payment of ${fmt(delta, values.currencyCode)} received on invoice ${inv.InvoiceNumber} (${fmt(paidNow, values.currencyCode)} of ${fmt(values.total, values.currencyCode)} paid)`
+                : `Payment of ${fmt(-delta, values.currencyCode)} removed from invoice ${inv.InvoiceNumber} (${fmt(paidNow, values.currencyCode)} of ${fmt(values.total, values.currencyCode)} paid)`;
         await logActivity({ type: "invoice", companyId: values.companyId, entityType: "xero_invoice", entityId: inv.InvoiceID, title, source: "xero" });
       }
       await markEventProcessed(evId);

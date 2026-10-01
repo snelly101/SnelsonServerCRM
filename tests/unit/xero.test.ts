@@ -188,6 +188,27 @@ describe("Xero workflow (demo adapter)", () => {
     expect(totals.outstanding).toBeGreaterThan(0);
   });
 
+  it("an unchanged invoice never logs a payment; a partial payment logs the amount received, a full one logs paid in full", async () => {
+    const activityCount = async (invoiceId: string) => (await db.select().from(db._.fullSchema.activities).where(eq(db._.fullSchema.activities.entityId, invoiceId))).length;
+    // demo-i-3: authorised, £3611.04, nothing paid, linked company. Two syncs with no change must add nothing.
+    await syncXero("manual", admin.id, { full: true });
+    const before = await activityCount("demo-i-3");
+    await syncXero("manual", admin.id, { full: true });
+    expect(await activityCount("demo-i-3")).toBe(before);
+    const rows = await db.select().from(db._.fullSchema.activities).where(eq(db._.fullSchema.activities.entityId, "demo-i-3"));
+    expect(rows.some((r) => /£0\.00/.test(r.title))).toBe(false);
+    // Partial payment: the delta is named, not the running total alone.
+    demoXeroPay("demo-i-3", 1000);
+    await syncXero("manual", admin.id, { full: true });
+    const afterPartial = await db.select().from(db._.fullSchema.activities).where(eq(db._.fullSchema.activities.entityId, "demo-i-3"));
+    expect(afterPartial.some((r) => r.title.includes("Payment of £1,000.00 received on invoice INV-0102") && r.title.includes("of £3,611.04 paid"))).toBe(true);
+    // Settle it.
+    demoXeroPay("demo-i-3");
+    await syncXero("manual", admin.id, { full: true });
+    const afterFull = await db.select().from(db._.fullSchema.activities).where(eq(db._.fullSchema.activities.entityId, "demo-i-3"));
+    expect(afterFull.some((r) => r.title.startsWith("Invoice INV-0102 paid in full"))).toBe(true);
+  });
+
   it("field ownership: pushing CRM email/phone is refused with a review item when Xero changed first", async () => {
     // Xero changes the email after our last sync, and it differs from the CRM value.
     demoXeroTouchContact("demo-c-2", { EmailAddress: "newbilling@northernfreight.co.uk" });
@@ -207,7 +228,7 @@ describe("Xero workflow (demo adapter)", () => {
     demoXeroAuthorise("demo-i-7");
     await syncXero("manual", admin.id);
     await syncXero("manual", admin.id);
-    const evs = await db.select().from(inboundEvents).where(eq(inboundEvents.eventId, "invoice:demo-i-7:AUTHORISED:0"));
+    const evs = await db.select().from(inboundEvents).where(eq(inboundEvents.eventId, "invoice:demo-i-7:AUTHORISED:0.00"));
     expect(evs).toHaveLength(1);
   });
 
