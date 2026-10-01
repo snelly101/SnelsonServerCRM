@@ -16,6 +16,8 @@ export type XeroConfig = {
   defaultTaxType?: string;
   dueDays?: number;
   brandingThemeId?: string;
+  /** "true" to create a Xero contact when a company becomes a customer (form values are strings). */
+  autoCreateContacts?: string | boolean;
   lastWebhookAt?: string;
   webhookEvents?: number;
 };
