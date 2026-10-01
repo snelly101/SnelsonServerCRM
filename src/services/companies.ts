@@ -247,7 +247,7 @@ export async function createCompany(input: CompanyInput, actorUserId: string | n
       );
     }
   }
-  return db.transaction(async (tx) => {
+  const id = await db.transaction(async (tx) => {
     const [row] = await tx
       .insert(companies)
       .values({ ...toRow(input, actorUserId), createdByUserId: actorUserId })
@@ -262,6 +262,14 @@ export async function createCompany(input: CompanyInput, actorUserId: string | n
     }
     return row.id;
   });
+  if (input.status === "customer") await afterBecameCustomer(id, actorUserId, "created as customer");
+  return id;
+}
+
+/** Post-commit hook: optional automatic Xero contact (Integrations → Xero → defaults). Dynamic import avoids a module cycle; never throws. */
+async function afterBecameCustomer(companyId: string, actorUserId: string | null, reason: string) {
+  const { ensureXeroContactForCustomer } = await import("./xero");
+  await ensureXeroContactForCustomer(companyId, actorUserId, reason);
 }
 
 export async function updateCompany(id: string, input: CompanyInput, actorUserId: string) {
@@ -280,6 +288,7 @@ export async function updateCompany(id: string, input: CompanyInput, actorUserId
       );
     }
   });
+  if (changes.status?.to === "customer") await afterBecameCustomer(id, actorUserId, "status changed to customer");
 }
 
 export async function archiveCompany(id: string, actorUserId: string, restore = false) {

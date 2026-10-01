@@ -1,8 +1,9 @@
 import { randomBytes } from "node:crypto";
 import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { companies, contractLines, contracts, invoiceDrafts, opportunityLines, opportunities, xeroContacts, xeroInvoices, xeroPayments, type InvoiceDraftLine } from "@/db/schema";
+import { companies, contractLines, contracts, invoiceDrafts, opportunityLines, opportunities, user, xeroContacts, xeroInvoices, xeroPayments, type InvoiceDraftLine } from "@/db/schema";
 import { audit, logActivity } from "@/lib/audit";
+import { logger } from "@/lib/logger";
 import { ActionError } from "@/lib/action-result";
 import { getAppSettings } from "@/lib/settings";
 import { extractDomain, normalizeCompanyName } from "@/lib/utils";
@@ -425,6 +426,49 @@ export async function createXeroContactForCompany(companyId: string, actorUserId
   await createLink({ provider: "xero", entityType: "company", localId: companyId, externalId: result.externalId, externalName: co.name, source: "created_by_crm" }, actorUserId);
   await logActivity({ type: "sync", companyId, title: `Created Xero contact "${co.name}"${resolved.mode === "demo" ? " (DEMO)" : ""}`, actorUserId, source: "xero" });
   return result.externalId;
+}
+
+/**
+ * Called after a company is created as, or becomes, a customer. With the
+ * "auto-create contacts" setting on and Xero connected, creates the Xero
+ * contact when nothing in Xero looks like this company; when something does
+ * (company number, VAT number, e-mail domain or exact name) it raises a
+ * review item instead so a person links the right one. Never throws: the
+ * company change that triggered it has already been committed.
+ */
+export async function ensureXeroContactForCustomer(companyId: string, actorUserId: string | null, reason: string): Promise<{ action: "created" | "review" | "skipped" | "failed"; detail?: string }> {
+  try {
+    const resolved = await getXeroClient();
+    if (!resolved) return { action: "skipped", detail: "Xero not connected" };
+    if (String(resolved.config.autoCreateContacts) !== "true") return { action: "skipped", detail: "auto-create off" };
+    const [co] = await db.select().from(companies).where(eq(companies.id, companyId)).limit(1);
+    if (!co || co.archivedAt || co.status !== "customer") return { action: "skipped", detail: "not an active customer" };
+    if (await getLink("xero", "company", companyId)) return { action: "skipped", detail: "already linked" };
+    const matches = (await suggestXeroContacts({ id: co.id, name: co.name, companyNumber: co.companyNumber, vatNumber: co.vatNumber, domain: co.domain, email: co.email })).filter((s) => s.confidence === "high" || s.confidence === "medium");
+    if (matches.length) {
+      const m = matches[0];
+      await raiseConflict({
+        provider: "xero",
+        entityType: "company",
+        localId: companyId,
+        externalId: m.contactId,
+        kind: "ambiguous_match",
+        message: `"${co.name}" became a customer (${reason}) but Xero already has "${m.name}" (matched by ${m.reason.replace("_", " ")}). Link it from the Xero page, or create a new contact there if it really is a different business. Nothing was created automatically.`,
+        details: { reason, match: m },
+      });
+      await logActivity({ type: "sync", companyId, title: `Xero contact not created automatically: "${m.name}" looks like this company; review item raised`, actorUserId, source: "xero" });
+      return { action: "review", detail: m.name };
+    }
+    const actor = actorUserId ?? (await db.select({ id: user.id }).from(user).where(eq(user.role, "admin")).limit(1))[0]?.id ?? null;
+    if (!actor) return { action: "skipped", detail: "no actor" };
+    await createXeroContactForCompany(companyId, actor);
+    return { action: "created" };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.warn({ err: msg, companyId }, "automatic Xero contact creation failed");
+    await logActivity({ type: "sync", companyId, title: `Xero contact could not be created automatically: ${msg}`, actorUserId, source: "xero" }).catch(() => undefined);
+    return { action: "failed", detail: msg };
+  }
 }
 
 /**

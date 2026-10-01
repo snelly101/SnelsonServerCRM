@@ -3,7 +3,7 @@ import { createHmac } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { companies, contacts, contractLines, contracts, invoiceDrafts, products, xeroContacts, xeroInvoices, outboundRequests, inboundEvents } from "@/db/schema";
-import { createCompany } from "@/services/companies";
+import { createCompany, updateCompany } from "@/services/companies";
 import { companySchema } from "@/lib/validation";
 import { createContract } from "@/services/contracts";
 import { contractSchema } from "@/lib/validation-sales";
@@ -129,6 +129,35 @@ describe("Xero workflow (demo adapter)", () => {
     const rows = await db.select().from(outboundRequests).where(eq(outboundRequests.idempotencyKey, `xero:contact:${fresh}`));
     expect(rows).toHaveLength(1);
     expect(rows[0].status).toBe("succeeded");
+  });
+
+  it("auto-create on customer status: off by default, creates when enabled, raises a review item instead when Xero has a likely match, and fires on a prospect turning customer", async () => {
+    // Off by default: a new customer gets no Xero contact.
+    const off = await createCompany(companySchema.parse({ name: "Quiet Default Ltd", website: "quietdefault.example", status: "customer" }), admin.id);
+    expect(await getLink("xero", "company", off)).toBeNull();
+
+    await setConnectionConfig("xero", { autoCreateContacts: "true" }, admin.id);
+    try {
+      // Created as a customer with no match in Xero: a contact is created and linked.
+      const fresh = await createCompany(companySchema.parse({ name: "Auto Created Customer Ltd", website: "autocreated.example", email: "accounts@autocreated.example", status: "customer" }), admin.id);
+      const link = await getLink("xero", "company", fresh);
+      expect(link).not.toBeNull();
+      expect((await db.select().from(xeroContacts).where(eq(xeroContacts.contactId, link!.externalId))).map((c) => c.name)).toEqual(["Auto Created Customer Ltd"]);
+
+      // A prospect is left alone until it becomes a customer.
+      const prospect = await createCompany(companySchema.parse({ name: "Soon A Customer Ltd", website: "soonacustomer.example" }), admin.id);
+      expect(await getLink("xero", "company", prospect)).toBeNull();
+      await updateCompany(prospect, companySchema.parse({ name: "Soon A Customer Ltd", website: "soonacustomer.example", status: "customer" }), admin.id);
+      expect(await getLink("xero", "company", prospect)).not.toBeNull();
+
+      // Likely duplicate in Xero (shared domain): nothing is created, a review item asks for a manual link.
+      const dupe = await createCompany(companySchema.parse({ name: "Harrowgate Dental Clinic", website: "harrowgatedental.co.uk", status: "customer" }), admin.id);
+      expect(await getLink("xero", "company", dupe)).toBeNull();
+      const review = (await listOpenConflicts("xero")).find((c) => c.entityType === "company" && c.localId === dupe);
+      expect(review).toMatchObject({ kind: "ambiguous_match", externalId: "demo-c-1" });
+    } finally {
+      await setConnectionConfig("xero", { autoCreateContacts: "false" }, admin.id);
+    }
   });
 
   it("prepare → approve creates one DRAFT in Xero, retries reuse it, and permissions are enforced by the action layer", async () => {

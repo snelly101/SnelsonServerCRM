@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { RefreshCw, Stethoscope, Link2, Plus, Unlink, Upload, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Field, Select, Input, SubmitButton, FormMessage } from "@/components/ui/form";
+import { Field, Select, Input, SubmitButton, FormMessage, Checkbox } from "@/components/ui/form";
 import { createXeroContactAction, importAllRepeatingInvoicesAction, importRepeatingInvoiceAction, importAllXeroCustomersAction, importXeroContactAction, linkXeroContactAction, pushContactToXeroAction, selectTenantAction, syncXeroAction, testXeroAction, unlinkXeroContactAction } from "@/actions/xero";
 import { saveIntegrationConfigAction } from "@/actions/integrations";
 import type { XeroMatch } from "@/services/xero";
@@ -67,7 +67,7 @@ export function TenantPicker({ tenants }: { tenants: { tenantId: string; tenantN
   );
 }
 
-export function XeroConfigForm({ accounts, taxRates, themes, config, readOnly }: { accounts: { Code?: string; Name: string }[]; taxRates: { TaxType: string; Name: string; EffectiveRate?: number }[]; themes: { BrandingThemeID: string; Name: string }[]; config: { defaultAccountCode?: string; hardwareAccountCode?: string; defaultTaxType?: string; dueDays?: number; brandingThemeId?: string }; readOnly: boolean }) {
+export function XeroConfigForm({ accounts, taxRates, themes, config, readOnly }: { accounts: { Code?: string; Name: string }[]; taxRates: { TaxType: string; Name: string; EffectiveRate?: number }[]; themes: { BrandingThemeID: string; Name: string }[]; config: { defaultAccountCode?: string; hardwareAccountCode?: string; defaultTaxType?: string; dueDays?: number; brandingThemeId?: string; autoCreateContacts?: string | boolean }; readOnly: boolean }) {
   const [result, formAction] = useActionState(saveIntegrationConfigAction.bind(null, "xero"), null);
   return (
     <form action={formAction} className="space-y-3">
@@ -117,6 +117,19 @@ export function XeroConfigForm({ accounts, taxRates, themes, config, readOnly }:
             ))}
           </Select>
         </Field>
+      </fieldset>
+      <fieldset disabled={readOnly} className="space-y-1">
+        {/* The hidden field comes first so a ticked box's "true" wins when both are posted. */}
+        <input type="hidden" name="autoCreateContacts" value="false" />
+        <Checkbox
+          name="autoCreateContacts"
+          value="true"
+          label="Create a Xero contact automatically when a company becomes a customer"
+          defaultChecked={String(config.autoCreateContacts) === "true"}
+        />
+        <p className="text-xs text-slate-500">
+          Runs when a company is created as, or changed to, <em>customer</em>, including when an opportunity is won. If Xero already has a likely match (company number, VAT number, e-mail domain or exact name) nothing is created and a review item asks you to link it instead.
+        </p>
       </fieldset>
       {!readOnly && <SubmitButton size="sm">Save defaults</SubmitButton>}
     </form>

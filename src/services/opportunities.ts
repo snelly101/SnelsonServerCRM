@@ -361,9 +361,15 @@ export async function markWon(id: string, actorUserId: string | null, opts?: { c
         t,
       );
     }
-    return { alreadyWon, onboardingId };
+    return { alreadyWon, onboardingId, companyId: opp.companyId };
   };
-  return tx ? run(tx) : db.transaction(run);
+  const result = tx ? await run(tx) : await db.transaction(run);
+  // Only once the outer transaction is committed (when we own it): a won deal may make the company a customer.
+  if (!tx && !result.alreadyWon) {
+    const { ensureXeroContactForCustomer } = await import("./xero");
+    await ensureXeroContactForCustomer(result.companyId, actorUserId, "opportunity won");
+  }
+  return result;
 }
 
 export async function markLost(id: string, reason: string, actorUserId: string) {
