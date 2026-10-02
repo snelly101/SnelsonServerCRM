@@ -7,6 +7,7 @@ import { getCompany, getCompanyTimeline } from "@/services/companies";
 import { listCustomFieldDefs } from "@/services/settings";
 import { getAppSettings } from "@/lib/settings";
 import { archiveSiteAction } from "@/actions/companies";
+import { pushCompanyToBetterProposalsAction } from "@/actions/integrations";
 import { archiveContactAction } from "@/actions/contacts";
 import { Card, EmptyState } from "@/components/ui/page";
 import { ButtonLink } from "@/components/ui/button";
@@ -954,7 +955,20 @@ export default async function CompanyPage({
                 <div className="p-4">
                   <EmptyState
                     title="No proposals"
-                    description="Create one from an opportunity, or link an existing Better Proposals document on the Proposals page."
+                    description="Create one from an opportunity, or link an existing Better Proposals document on the Proposals page. The company itself can be pushed to Better Proposals now so it is ready to pick when a proposal is written."
+                    action={
+                      can(me.role, "integration.manage") ? (
+                        <ConfirmButton
+                          variant="secondary"
+                          action={pushCompanyToBetterProposalsAction.bind(null, id)}
+                          title="Push this company to Better Proposals?"
+                          description="A company with this name is created in Better Proposals and linked here. If one with the same name already exists there, it is linked instead. Contacts are sent with each proposal, not now."
+                          confirmLabel="Push to Better Proposals"
+                        >
+                          Push to Better Proposals
+                        </ConfirmButton>
+                      ) : undefined
+                    }
                   />
                 </div>
               ) : (

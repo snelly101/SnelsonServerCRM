@@ -29,7 +29,7 @@ export default async function BetterProposalsPage() {
       templateError = err instanceof Error ? err.message : String(err);
     }
   }
-  const config = conn.config as { defaultTemplateId?: string; taxLabel?: string | null; taxAmount?: string | null };
+  const config = conn.config as { defaultTemplateId?: string; taxLabel?: string | null; taxAmount?: string | null; autoCreateCompanies?: string | boolean };
 
   return (
     <>
@@ -93,12 +93,13 @@ export default async function BetterProposalsPage() {
           ) : templateError ? (
             <Alert tone="error">Could not load templates: {templateError}</Alert>
           ) : (
-            <ConfigForm templates={templates} defaultTemplateId={config.defaultTemplateId ?? ""} readOnly={!canManage} />
+            <ConfigForm templates={templates} defaultTemplateId={config.defaultTemplateId ?? ""} autoCreateCompanies={String(config.autoCreateCompanies) === "true"} readOnly={!canManage} />
           )}
           <div className="mt-4 border-t border-slate-100 pt-4 text-xs text-slate-500">
             <p className="mb-1 font-medium text-slate-700">What the API supports (verified against the vendor docs)</p>
             <ul className="list-disc space-y-0.5 pl-4">
               <li>Create a proposal from a template with company, contacts and merge tags.</li>
+              <li>Create a company (name only; the API stores nothing else about it). Contacts have no endpoint of their own and are sent with each proposal.</li>
               <li>Read proposal lists by status (sent, opened, signed, paid) with dates and totals.</li>
               <li>No line-item pricing on create: edit the quote in Better Proposals via the “Open in Better Proposals” link.</li>
               <li>No webhooks: the CRM polls every 15 minutes (and on “Sync now”).</li>

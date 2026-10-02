@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireActionPermission } from "@/lib/session";
 import { runAction, type ActionResult } from "@/lib/action-result";
-import { connectBetterProposals, createProposalForOpportunity, linkProposalToCompany, linkProposalToOpportunity, syncProposals, testBetterProposals } from "@/services/proposals";
+import { connectBetterProposals, createProposalForOpportunity, ensureBpCompanyForCompany, linkProposalToCompany, linkProposalToOpportunity, syncProposals, testBetterProposals } from "@/services/proposals";
 import { disconnect, resolveConflict, setConnectionConfig, removeLink, type Provider } from "@/services/integrations";
 
 const providerSchema = z.enum(["betterproposals", "xero", "ninjaone"]);
@@ -38,6 +38,17 @@ export async function disconnectAction(provider: Provider): Promise<ActionResult
     await disconnect(providerSchema.parse(provider), u.id);
     revalidatePath("/integrations", "layout");
     return undefined;
+  });
+}
+
+/** Company page → Proposals tab: create (or link by name) the Better Proposals company now. Idempotent. */
+export async function pushCompanyToBetterProposalsAction(companyId: string): Promise<ActionResult<{ externalId: string }>> {
+  return runAction(async () => {
+    const u = await requireActionPermission("integration.manage");
+    const externalId = await ensureBpCompanyForCompany(z.uuid().parse(companyId), u.id);
+    revalidatePath("/integrations", "layout");
+    revalidatePath("/companies", "layout");
+    return { externalId };
   });
 }
 
