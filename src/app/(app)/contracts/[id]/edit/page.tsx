@@ -19,7 +19,7 @@ export default async function EditContractPage({ params }: { params: Promise<{ i
   return (
     <>
       <PageHeader title={`Edit ${contract.name}`} breadcrumbs={[{ label: "Contracts", href: "/contracts" }, { label: contract.name, href: `/contracts/${id}` }, { label: "Edit" }]} />
-      <Card className="max-w-5xl">
+      <Card className="max-w-7xl">
         <ContractForm
           action={updateContractAction.bind(null, id)}
           initial={contract}

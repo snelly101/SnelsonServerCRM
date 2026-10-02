@@ -15,7 +15,7 @@ export default async function NewContractPage({ searchParams }: { searchParams: 
   return (
     <>
       <PageHeader title="New contract" breadcrumbs={[{ label: "Contracts", href: "/contracts" }, { label: "New" }]} />
-      <Card className="max-w-5xl">
+      <Card className="max-w-7xl">
         <ContractForm action={createContractAction} initial={{ companyId }} lines={[]} companies={companies} sites={sites} owners={owners} products={products} currency={settings.currency} cancelHref={companyId ? `/companies/${companyId}` : "/contracts"} />
       </Card>
     </>
