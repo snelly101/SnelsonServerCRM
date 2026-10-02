@@ -67,6 +67,15 @@ export function LinesEditor({
   const summary = useMemo(() => summariseLines(lines), [lines]);
 
   const update = (key: string, patch: Partial<EditableLine>) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
+  // Lines whose details panel is open. A custom line with no description opens by itself so it can be named.
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const toggle = (key: string) =>
+    setExpanded((s) => {
+      const n = new Set(s);
+      if (n.has(key)) n.delete(key);
+      else n.add(key);
+      return n;
+    });
   const applyProduct = (key: string, productId: string) => {
     const p = products.find((x) => x.id === productId);
     if (!p) return update(key, { productId: "" });
@@ -83,105 +92,153 @@ export function LinesEditor({
   };
 
   return (
-    <div className="space-y-3">
-      {lines.length === 0 && (
-        <div className="rounded-md border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-500">No line items yet. Add products or services to value this record.</div>
-      )}
-      {lines.map((l, i) => {
-        const perPeriod = l.quantity * l.unitPrice;
-        const periodLabel = l.revenueType === "recurring" ? `/${l.billingFrequency === "annual" ? "yr" : l.billingFrequency === "quarterly" ? "qtr" : "mo"}` : " one-off";
-        const field = (label: string, node: React.ReactNode, className = "") => (
-          <label className={`block min-w-0 ${className}`}>
-            <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</span>
-            {node}
-          </label>
-        );
-        return (
-          <div key={l.key} className="rounded-md border border-slate-200 bg-surface p-3">
-            <input type="hidden" name={`lines[${i}][productId]`} value={l.productId} />
-            {/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(l.key) && <input type="hidden" name={`lines[${i}][id]`} value={l.key} />}
-            {showSite && <input type="hidden" name={`lines[${i}][countsAsManagedDevice]`} value={l.pricingModel === "per_device" && l.countsAsManagedDevice ? "true" : "false"} />}
-            {l.revenueType !== "recurring" && <input type="hidden" name={`lines[${i}][billingFrequency]`} value="one_off" />}
+    <div className="space-y-2">
+      <div className="rounded-md border border-slate-200">
+        <div className="hidden grid-cols-12 gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500 sm:grid">
+          <div className="col-span-5">Product</div>
+          <div className="col-span-2">{quantityLabel}</div>
+          <div className="col-span-2">Unit price</div>
+          <div className="col-span-2 text-right">Total</div>
+          <div className="col-span-1" />
+        </div>
+        {lines.length === 0 && <div className="px-4 py-6 text-center text-sm text-slate-500">No line items yet. Add a product or service to value this record.</div>}
+        {lines.map((l, i) => {
+          const product = products.find((p) => p.id === l.productId) ?? null;
+          const open = expanded.has(l.key);
+          const perPeriod = l.quantity * l.unitPrice;
+          const periodLabel = l.revenueType === "recurring" ? `/${l.billingFrequency === "annual" ? "yr" : l.billingFrequency === "quarterly" ? "qtr" : "mo"}` : "one-off";
+          const siteName = l.siteId ? sites.find((x) => x.id === l.siteId)?.name : null;
+          const summary = [
+            product && l.description && l.description !== product.name ? `“${l.description}”` : null,
+            REVENUE_LABELS[l.revenueType],
+            PRICING_LABELS[l.pricingModel],
+            l.revenueType === "recurring" ? FREQUENCY_LABELS[l.billingFrequency] : null,
+            showSite ? (siteName ?? "all sites") : null,
+            l.unitCost !== null ? `cost ${fmtMoney(l.unitCost, currency)}` : "cost unknown",
+            showSite && l.pricingModel === "per_device" && l.countsAsManagedDevice ? "checked against NinjaOne" : null,
+          ]
+            .filter(Boolean)
+            .join(" · ");
+          const field = (label: string, node: React.ReactNode) => (
+            <label className="block min-w-0">
+              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</span>
+              {node}
+            </label>
+          );
+          return (
+            <div key={l.key} className="border-b border-slate-100 px-3 py-2 last:border-b-0">
+              <input type="hidden" name={`lines[${i}][productId]`} value={l.productId} />
+              {/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(l.key) && <input type="hidden" name={`lines[${i}][id]`} value={l.key} />}
+              {showSite && <input type="hidden" name={`lines[${i}][countsAsManagedDevice]`} value={l.pricingModel === "per_device" && l.countsAsManagedDevice ? "true" : "false"} />}
+              {l.revenueType !== "recurring" && <input type="hidden" name={`lines[${i}][billingFrequency]`} value="one_off" />}
+              {/* Fields that stay in the form even while the details panel is closed. */}
+              {!open && (
+                <>
+                  <input type="hidden" name={`lines[${i}][description]`} value={l.description} />
+                  <input type="hidden" name={`lines[${i}][revenueType]`} value={l.revenueType} />
+                  <input type="hidden" name={`lines[${i}][pricingModel]`} value={l.pricingModel} />
+                  {l.revenueType === "recurring" && <input type="hidden" name={`lines[${i}][billingFrequency]`} value={l.billingFrequency} />}
+                  {showSite && <input type="hidden" name={`lines[${i}][siteId]`} value={l.siteId ?? ""} />}
+                  <input type="hidden" name={`lines[${i}][unitCost]`} value={l.unitCost ?? ""} />
+                </>
+              )}
 
-            <div className="grid gap-3 sm:grid-cols-12">
-              <div className="sm:col-span-4">
-                <ProductPicker products={products} value={l.productId} currency={currency} onSelect={(id) => applyProduct(l.key, id)} />
-              </div>
-              <div className="sm:col-span-7">
-                {field("Description", <Input aria-label="Description" name={`lines[${i}][description]`} value={l.description} onChange={(e) => update(l.key, { description: e.target.value })} required placeholder="What the customer sees on the invoice" />)}
-              </div>
-              <div className="flex items-end justify-end sm:col-span-1">
-                <button type="button" aria-label="Remove line" className="rounded p-2 text-slate-400 hover:bg-red-50 hover:text-red-600" onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))}>
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-
-            <div className={`mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4 ${showSite ? "lg:grid-cols-8" : "lg:grid-cols-7"}`}>
-              {field(
-                "Type",
-                <Select aria-label="Revenue type" name={`lines[${i}][revenueType]`} value={l.revenueType} onChange={(e) => update(l.key, { revenueType: e.target.value as EditableLine["revenueType"], billingFrequency: e.target.value === "recurring" ? (l.billingFrequency === "one_off" ? "monthly" : l.billingFrequency) : "one_off" })}>
-                  {revenueTypeValues.map((v) => (
-                    <option key={v} value={v}>
-                      {REVENUE_LABELS[v]}
-                    </option>
-                  ))}
-                </Select>,
-              )}
-              {field(
-                "Pricing",
-                <Select aria-label="Pricing model" name={`lines[${i}][pricingModel]`} value={l.pricingModel} onChange={(e) => update(l.key, { pricingModel: e.target.value as EditableLine["pricingModel"] })}>
-                  {pricingModelValues.map((v) => (
-                    <option key={v} value={v}>
-                      {PRICING_LABELS[v]}
-                    </option>
-                  ))}
-                </Select>,
-              )}
-              {field(
-                "Billing",
-                <Select aria-label="Billing frequency" name={`lines[${i}][billingFrequency]`} value={l.billingFrequency} disabled={l.revenueType !== "recurring"} onChange={(e) => update(l.key, { billingFrequency: e.target.value as EditableLine["billingFrequency"] })}>
-                  {billingFrequencyValues.map((v) => (
-                    <option key={v} value={v}>
-                      {FREQUENCY_LABELS[v]}
-                    </option>
-                  ))}
-                </Select>,
-              )}
-              {showSite &&
-                field(
-                  "Site",
-                  <Select aria-label="Site" name={`lines[${i}][siteId]`} value={l.siteId ?? ""} onChange={(e) => update(l.key, { siteId: e.target.value })}>
-                    <option value="">All sites</option>
-                    {sites.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </Select>,
-                )}
-              {field(quantityLabel, <Input aria-label="Quantity" name={`lines[${i}][quantity]`} type="number" min={0} step="1" value={l.quantity} onChange={(e) => update(l.key, { quantity: Number(e.target.value) })} />)}
-              {field("Unit price", <Input aria-label="Unit price" name={`lines[${i}][unitPrice]`} type="number" min={0} step="0.01" value={l.unitPrice} onChange={(e) => update(l.key, { unitPrice: Number(e.target.value) })} />)}
-              {field("Unit cost", <Input aria-label="Unit cost" name={`lines[${i}][unitCost]`} type="number" min={0} step="0.01" value={l.unitCost ?? ""} placeholder="unknown" onChange={(e) => update(l.key, { unitCost: e.target.value === "" ? null : Number(e.target.value) })} />)}
-              <div className="min-w-0">
-                <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Total</span>
-                <div className="py-2 text-sm font-medium tabular-nums text-slate-800">
+              <div className="grid grid-cols-2 items-start gap-3 sm:grid-cols-12">
+                <div className="col-span-2 sm:col-span-5">
+                  <ProductPicker products={products} value={l.productId} currency={currency} fallbackLabel={l.description} onSelect={(id) => applyProduct(l.key, id)} />
+                  <button type="button" className="mt-1 max-w-full truncate text-left text-xs text-slate-500 hover:text-brand-700 hover:underline" onClick={() => toggle(l.key)} title="Show or hide the details">
+                    {summary} · {open ? "hide details" : "details"}
+                  </button>
+                </div>
+                <div className="sm:col-span-2">
+                  <Input aria-label="Quantity" name={`lines[${i}][quantity]`} type="number" min={0} step="1" value={l.quantity} onChange={(e) => update(l.key, { quantity: Number(e.target.value) })} />
+                </div>
+                <div className="sm:col-span-2">
+                  <Input aria-label="Unit price" name={`lines[${i}][unitPrice]`} type="number" min={0} step="0.01" value={l.unitPrice} onChange={(e) => update(l.key, { unitPrice: Number(e.target.value) })} />
+                </div>
+                <div className="py-2 text-right text-sm font-medium tabular-nums text-slate-800 sm:col-span-2">
                   {fmtMoney(perPeriod, currency)}
                   <span className="ml-1 text-xs font-normal text-slate-500">{periodLabel}</span>
                 </div>
+                <div className="flex justify-end sm:col-span-1">
+                  <button type="button" aria-label="Remove line" className="rounded p-2 text-slate-400 hover:bg-red-50 hover:text-red-600" onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))}>
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
-            </div>
 
-            {showSite && l.pricingModel === "per_device" && (
-              <label className="mt-2 flex items-center gap-2 text-xs text-slate-600">
-                <input type="checkbox" className="h-3.5 w-3.5 accent-brand-600" checked={Boolean(l.countsAsManagedDevice)} onChange={(e) => update(l.key, { countsAsManagedDevice: e.target.checked })} /> Compare with NinjaOne device count
-              </label>
-            )}
-          </div>
-        );
-      })}
+              {open && (
+                <div className="mt-2 rounded-md bg-slate-50 p-3">
+                  <div className={`grid grid-cols-2 gap-3 sm:grid-cols-3 ${showSite ? "lg:grid-cols-6" : "lg:grid-cols-5"}`}>
+                    <div className="col-span-2 sm:col-span-3 lg:col-span-6">
+                      {field("Description on the invoice", <Input aria-label="Description" name={`lines[${i}][description]`} value={l.description} onChange={(e) => update(l.key, { description: e.target.value })} required placeholder={product ? product.name : "What the customer is paying for"} />)}
+                    </div>
+                    {field(
+                      "Type",
+                      <Select aria-label="Revenue type" name={`lines[${i}][revenueType]`} value={l.revenueType} onChange={(e) => update(l.key, { revenueType: e.target.value as EditableLine["revenueType"], billingFrequency: e.target.value === "recurring" ? (l.billingFrequency === "one_off" ? "monthly" : l.billingFrequency) : "one_off" })}>
+                        {revenueTypeValues.map((v) => (
+                          <option key={v} value={v}>
+                            {REVENUE_LABELS[v]}
+                          </option>
+                        ))}
+                      </Select>,
+                    )}
+                    {field(
+                      "Pricing",
+                      <Select aria-label="Pricing model" name={`lines[${i}][pricingModel]`} value={l.pricingModel} onChange={(e) => update(l.key, { pricingModel: e.target.value as EditableLine["pricingModel"] })}>
+                        {pricingModelValues.map((v) => (
+                          <option key={v} value={v}>
+                            {PRICING_LABELS[v]}
+                          </option>
+                        ))}
+                      </Select>,
+                    )}
+                    {field(
+                      "Billing",
+                      <Select aria-label="Billing frequency" name={`lines[${i}][billingFrequency]`} value={l.billingFrequency} disabled={l.revenueType !== "recurring"} onChange={(e) => update(l.key, { billingFrequency: e.target.value as EditableLine["billingFrequency"] })}>
+                        {billingFrequencyValues.map((v) => (
+                          <option key={v} value={v}>
+                            {FREQUENCY_LABELS[v]}
+                          </option>
+                        ))}
+                      </Select>,
+                    )}
+                    {showSite &&
+                      field(
+                        "Site",
+                        <Select aria-label="Site" name={`lines[${i}][siteId]`} value={l.siteId ?? ""} onChange={(e) => update(l.key, { siteId: e.target.value })}>
+                          <option value="">All sites</option>
+                          {sites.map((x) => (
+                            <option key={x.id} value={x.id}>
+                              {x.name}
+                            </option>
+                          ))}
+                        </Select>,
+                      )}
+                    {field("Unit cost", <Input aria-label="Unit cost" name={`lines[${i}][unitCost]`} type="number" min={0} step="0.01" value={l.unitCost ?? ""} placeholder="unknown" onChange={(e) => update(l.key, { unitCost: e.target.value === "" ? null : Number(e.target.value) })} />)}
+                    {showSite && l.pricingModel === "per_device" && (
+                      <label className="flex items-end gap-2 pb-2 text-xs text-slate-600">
+                        <input type="checkbox" className="h-3.5 w-3.5 accent-brand-600" checked={Boolean(l.countsAsManagedDevice)} onChange={(e) => update(l.key, { countsAsManagedDevice: e.target.checked })} /> Compare with NinjaOne device count
+                      </label>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <Button type="button" variant="secondary" size="sm" onClick={() => setLines((ls) => [...ls, emptyLine()])}>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={() => {
+            const line = emptyLine();
+            setLines((ls) => [...ls, line]);
+            setExpanded((s) => new Set(s).add(line.key));
+          }}
+        >
           <Plus className="h-4 w-4" /> Add line
         </Button>
         <RevenueSummaryBadges summary={summary} currency={currency} />
@@ -195,7 +252,7 @@ export function LinesEditor({
  * category; arrow keys and Enter choose; Escape closes. Choosing a product
  * fills the line; "Custom line" keeps whatever is typed and clears the link.
  */
-export function ProductPicker({ products, value, currency, onSelect }: { products: ProductOption[]; value: string; currency: string; onSelect: (id: string) => void }) {
+export function ProductPicker({ products, value, currency, fallbackLabel, onSelect }: { products: ProductOption[]; value: string; currency: string; fallbackLabel?: string; onSelect: (id: string) => void }) {
   const selected = products.find((p) => p.id === value) ?? null;
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -222,7 +279,6 @@ export function ProductPicker({ products, value, currency, onSelect }: { product
   };
   return (
     <div className="relative">
-      <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Product</span>
       <input
         role="combobox"
         aria-label="Product"
@@ -230,8 +286,8 @@ export function ProductPicker({ products, value, currency, onSelect }: { product
         aria-controls={listId}
         aria-autocomplete="list"
         className="input"
-        placeholder={selected ? selected.name : "Search the catalogue…"}
-        value={open ? query : selected ? selected.name : ""}
+        placeholder={selected ? selected.name : fallbackLabel ? `${fallbackLabel} (custom)` : "Search the catalogue…"}
+        value={open ? query : selected ? selected.name : fallbackLabel ? `${fallbackLabel} (custom)` : ""}
         onFocus={() => {
           setOpen(true);
           setCursor(0);
