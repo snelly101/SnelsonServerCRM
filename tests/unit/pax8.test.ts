@@ -10,7 +10,7 @@ import {
   pax8Subscriptions,
   products,
 } from "@/db/schema";
-import { createCompany } from "@/services/companies";
+import { createCompany, updateCompany } from "@/services/companies";
 import { companySchema } from "@/lib/validation";
 import { createContract } from "@/services/contracts";
 import { contractSchema } from "@/lib/validation-sales";
@@ -21,6 +21,7 @@ import {
   applyPax8Cost,
   autoLinkPax8Companies,
   companySubscriptionOverview,
+  createPax8CompanyForCompany,
   linkPax8Company,
   matchLine,
   monthlyUnitCost,
@@ -33,6 +34,7 @@ import {
   unlinkPax8Company,
   type MatchableLine,
 } from "@/services/pax8";
+import { listOpenConflicts, setConnectionConfig } from "@/services/integrations";
 import { listDiscrepancies, reviewDiscrepancy } from "@/services/ninjaone";
 import { ActionError } from "@/lib/action-result";
 import { makeUser } from "./helpers";
@@ -112,8 +114,8 @@ describe("Pax8 helpers", () => {
   });
 });
 
-describe("Pax8 live client (read-only)", () => {
-  it("exchanges the client credentials for a token with the Pax8 audience, walks pages, only ever GETs, and exposes no write method", async () => {
+describe("Pax8 live client", () => {
+  it("exchanges the client credentials for a token with the Pax8 audience, walks pages, and only ever GETs for reads", async () => {
     const calls: { method: string; url: string; body?: string }[] = [];
     const json = (data: unknown) =>
       new Response(JSON.stringify(data), {
@@ -190,11 +192,47 @@ describe("Pax8 live client (read-only)", () => {
             c.method === "GET" && c.url.startsWith("https://api.pax8.com/v1/"),
         ),
     ).toBe(true);
+    // The only write is createCompany.
     expect(
-      Object.keys(LivePax8Client.prototype).filter((k) =>
+      Object.getOwnPropertyNames(LivePax8Client.prototype).filter((k) =>
         /create|update|delete|order|cancel|set|change/i.test(k),
       ),
-    ).toEqual([]);
+    ).toEqual(["createCompany"]);
+  });
+
+  it("creates a company with one POST carrying the full address, phone, website and external id", async () => {
+    const posted: { url: string; body: unknown }[] = [];
+    const json = (data: unknown) =>
+      new Response(JSON.stringify(data), {
+        headers: { "content-type": "application/json" },
+      });
+    const fetchImpl = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      const u = new URL(String(url));
+      if (u.hostname === "login.pax8.com")
+        return json({ access_token: "tok", expires_in: 3600 });
+      expect(init?.method).toBe("POST");
+      posted.push({ url: u.href, body: JSON.parse(String(init?.body)) });
+      return json({ id: "new-1", name: "New Co Ltd", status: "Active" });
+    });
+    const client = new LivePax8Client(
+      { clientId: "id", clientSecret: "secret" },
+      null,
+      async () => {},
+      fetchImpl as unknown as typeof fetch,
+    );
+    const body = {
+      name: "New Co Ltd",
+      address: { street: "1 High Street", city: "Leeds", stateOrProvince: "West Yorkshire", postalCode: "LS1 1AA", country: "GB" },
+      phone: "0113 000 0000",
+      website: "https://newco.example",
+      externalId: "crm-1",
+      billOnBehalfOfEnabled: false,
+      selfServiceAllowed: false,
+      orderApprovalRequired: false,
+    };
+    const created = await client.createCompany(body);
+    expect(created.id).toBe("new-1");
+    expect(posted).toEqual([{ url: "https://api.pax8.com/v1/companies", body }]);
   });
 });
 
@@ -534,5 +572,57 @@ describe("Pax8 sync, matching, licence check and costs (demo adapter)", () => {
           .where(eq(billingDiscrepancies.id, disc.id))
       )[0].status,
     ).toBe("resolved");
+  });
+  it("auto-create on customer status: off by default, creates/mirrors/links when enabled, skips with a timeline note when Pax8's required fields are missing, raises a review item for a look-alike, and fires on a prospect turning customer", async () => {
+    const full = {
+      addressLine1: "2 Mill Lane",
+      city: "Leeds",
+      region: "West Yorkshire",
+      postcode: "LS2 2BB",
+      country: "GB",
+      phone: "0113 496 0999",
+    };
+    const off = await createCompany(
+      companySchema.parse({ name: "Quiet Pax8 Default Ltd", status: "customer", website: "quietpax8.example", ...full }),
+      admin.id,
+    );
+    expect(await companySubscriptionOverview(off)).toBeNull();
+
+    await setConnectionConfig("pax8", { autoCreateCompanies: true }, admin.id);
+    try {
+      // Full record: created at Pax8 with the CRM id as external id, mirrored and linked.
+      const fresh = await createCompany(
+        companySchema.parse({ name: "Auto Pax8 Customer Ltd", status: "customer", website: "autopax8.example", ...full }),
+        admin.id,
+      );
+      const [row] = await db.select().from(pax8Companies).where(eq(pax8Companies.companyId, fresh));
+      expect(row).toMatchObject({ name: "Auto Pax8 Customer Ltd", matchDomain: "autopax8.example", externalRef: fresh, city: "Leeds", matchSource: "manual", externalStatus: "active" });
+      expect(row.raw?.address).toMatchObject({ street: "2 Mill Lane", stateOrProvince: "West Yorkshire", postalCode: "LS2 2BB", country: "GB" });
+      // Idempotent: a retry returns the same Pax8 id, and a sync keeps the row.
+      expect(await createPax8CompanyForCompany(fresh, admin.id)).toBe(row.pax8Id);
+      await syncPax8("manual", admin.id);
+      expect((await db.select().from(pax8Companies).where(eq(pax8Companies.companyId, fresh))).length).toBe(1);
+
+      // Missing required fields: nothing created, the timeline explains, and the manual path refuses with the same list.
+      const bare = await createCompany(companySchema.parse({ name: "Bare Pax8 Customer Ltd", status: "customer" }), admin.id);
+      expect((await db.select().from(pax8Companies).where(eq(pax8Companies.companyId, bare))).length).toBe(0);
+      const notes = await db.select({ title: activities.title }).from(activities).where(eq(activities.companyId, bare));
+      expect(notes.some((n) => /Pax8 needs address line 1, city, postcode, phone, website/.test(n.title))).toBe(true);
+      await expect(createPax8CompanyForCompany(bare, admin.id)).rejects.toThrow(/Missing: address line 1, city, postcode, phone, website/);
+
+      // A prospect is left alone until it becomes a customer.
+      const prospect = await createCompany(companySchema.parse({ name: "Soon A Pax8 Customer Ltd", website: "soonpax8.example", ...full }), admin.id);
+      expect((await db.select().from(pax8Companies).where(eq(pax8Companies.companyId, prospect))).length).toBe(0);
+      await updateCompany(prospect, companySchema.parse({ name: "Soon A Pax8 Customer Ltd", website: "soonpax8.example", status: "customer", ...full }), admin.id);
+      expect((await db.select().from(pax8Companies).where(eq(pax8Companies.companyId, prospect))).length).toBe(1);
+
+      // Pax8 already has a similar company (unlinked demo row): review item, nothing created.
+      const dupe = await createCompany(companySchema.parse({ name: "Moorland Outdoor Supplies Ltd", status: "customer", website: "moorland-outdoor.example", ...full }), admin.id);
+      expect((await db.select().from(pax8Companies).where(eq(pax8Companies.companyId, dupe))).length).toBe(0);
+      const review = (await listOpenConflicts("pax8")).find((c) => c.entityType === "company" && c.localId === dupe);
+      expect(review).toMatchObject({ kind: "ambiguous_match", externalId: DEMO_PAX8_COMPANY_IDS["Moorland Outdoor Supplies"] });
+    } finally {
+      await setConnectionConfig("pax8", { autoCreateCompanies: false }, admin.id);
+    }
   });
 });

@@ -268,7 +268,7 @@ export async function createCompany(input: CompanyInput, actorUserId: string | n
 
 /**
  * Post-commit hook for "this company is now a customer": the optional
- * automatic Xero contact and NinjaOne organisation (each switched on under its
+ * automatic Xero contact, NinjaOne organisation and Pax8 company (each switched on under its
  * Integrations page). Dynamic imports avoid module cycles; neither call throws.
  */
 export async function afterBecameCustomer(companyId: string, actorUserId: string | null, reason: string) {
@@ -276,6 +276,8 @@ export async function afterBecameCustomer(companyId: string, actorUserId: string
   await ensureXeroContactForCustomer(companyId, actorUserId, reason);
   const { ensureNinjaOrganizationForCustomer } = await import("./ninjaone");
   await ensureNinjaOrganizationForCustomer(companyId, actorUserId, reason);
+  const { ensurePax8CompanyForCustomer } = await import("./pax8");
+  await ensurePax8CompanyForCustomer(companyId, actorUserId, reason);
 }
 
 export async function updateCompany(id: string, input: CompanyInput, actorUserId: string) {

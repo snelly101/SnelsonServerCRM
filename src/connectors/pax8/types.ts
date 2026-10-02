@@ -110,6 +110,21 @@ export type Pax8InvoiceItemRaw = {
   [k: string]: unknown;
 };
 
+/**
+ * Body for `POST /companies`. Pax8 requires every field here except
+ * `street2` and `externalId`; `country` is an ISO 3166-1 alpha-2 code.
+ */
+export type Pax8CompanyCreate = {
+  name: string;
+  address: { street: string; street2?: string; city: string; stateOrProvince: string; postalCode: string; country: string };
+  phone: string;
+  website: string;
+  externalId?: string;
+  billOnBehalfOfEnabled: boolean;
+  selfServiceAllowed: boolean;
+  orderApprovalRequired: boolean;
+};
+
 export interface Pax8Client {
   readonly mode: "live" | "demo";
   testConnection(): Promise<
@@ -122,6 +137,12 @@ export interface Pax8Client {
   /** Partner invoices from Pax8, newest first. */
   listInvoices(limit: number): Promise<Pax8InvoiceRaw[]>;
   listInvoiceItems(invoiceId: string): Promise<Pax8InvoiceItemRaw[]>;
+  /**
+   * The one write: create a customer company. Used only by the opt-in
+   * "create when a company becomes a customer" setting and its manual button.
+   * Never orders, changes or cancels subscriptions.
+   */
+  createCompany(input: Pax8CompanyCreate): Promise<Pax8CompanyRaw>;
   /** Deep link into the Pax8 partner portal. */
   consoleUrl(kind: "company" | "subscription", id: string): string;
 }

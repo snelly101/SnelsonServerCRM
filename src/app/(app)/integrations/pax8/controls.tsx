@@ -157,9 +157,10 @@ export function Pax8ConnectForm({ keyPresent }: { keyPresent: boolean }) {
         In the Pax8 partner portal:{" "}
         <strong>Settings → Integrations → Pax8 API</strong> → create an API
         client and copy its id and secret. The CRM exchanges them for a token at{" "}
-        <code>login.pax8.com</code> and only ever reads: companies,
-        subscriptions, products and invoices. It never orders, changes
-        quantities or cancels anything.
+        <code>login.pax8.com</code> and reads companies, subscriptions,
+        products and invoices. Its only write is creating a company for a new
+        customer, and only when that setting is switched on. It never orders,
+        changes quantities or cancels anything.
       </p>
       <SubmitButton size="sm">
         {keyPresent ? "Replace credentials" : "Verify and connect"}
@@ -171,10 +172,12 @@ export function Pax8ConnectForm({ keyPresent }: { keyPresent: boolean }) {
 export function Pax8ConfigForm({
   autoLink,
   invoiceCount,
+  autoCreateCompanies,
   readOnly,
 }: {
   autoLink: boolean;
   invoiceCount: number;
+  autoCreateCompanies: boolean;
   readOnly: boolean;
 }) {
   const [result, formAction] = useActionState(savePax8ConfigAction, null);
@@ -203,6 +206,22 @@ export function Pax8ConfigForm({
             className="w-28"
           />
         </Field>
+        <div className="space-y-1">
+          <Checkbox
+            name="autoCreateCompanies"
+            value="true"
+            defaultChecked={autoCreateCompanies}
+            label="Create a Pax8 company automatically when a company becomes a customer"
+          />
+          <p className="text-xs text-slate-500">
+            Runs when a company is created as, or changed to, <em>customer</em>,
+            including when an opportunity is won. Pax8 requires a full billing
+            address, phone and website; if any is missing the company timeline
+            says so and <em>Create in Pax8</em> on its Subscriptions tab runs it
+            later. A Pax8 company with the same domain or a similar name raises
+            a review item instead. Bill-on-behalf and self-service are left off.
+          </p>
+        </div>
       </fieldset>
       {!readOnly && <SubmitButton size="sm">Save</SubmitButton>}
     </form>
