@@ -3,6 +3,8 @@ import {
   type Pax8Client,
   type Pax8CompanyCreate,
   type Pax8CompanyRaw,
+  type Pax8ContactCreate,
+  type Pax8ContactRaw,
   type Pax8InvoiceItemRaw,
   type Pax8InvoiceRaw,
   type Pax8ProductRaw,
@@ -291,10 +293,27 @@ export class DemoPax8Client implements Pax8Client {
       billOnBehalfEnabled: input.billOnBehalfOfEnabled,
       selfServiceAllowed: input.selfServiceAllowed,
       orderApprovalRequired: input.orderApprovalRequired,
-      status: "Active",
+      // Like Pax8: no contacts, no activation.
+      status: "Inactive",
     };
     companies.push(company);
-    return { ...company };
+    demoContacts.set(company.id, []);
+    for (const c of input.contacts ?? []) await this.createContact(company.id, c);
+    return { ...companies.find((c) => c.id === company.id)! };
+  }
+  async listContacts(companyId: string) {
+    return (demoContacts.get(companyId) ?? []).map((c) => ({ ...c }));
+  }
+  async createContact(companyId: string, input: Pax8ContactCreate) {
+    const company = companies.find((c) => c.id === companyId);
+    if (!company) throw new Error("Company not found");
+    const list = demoContacts.get(companyId) ?? [];
+    const contact: Pax8ContactRaw = { ...input, id: `ct-${companyId}-${list.length + 1}`, createdDate: new Date().toISOString() };
+    list.push(contact);
+    demoContacts.set(companyId, list);
+    const primaries = new Set(list.flatMap((c) => (c.types ?? []).filter((t) => t.primary).map((t) => t.type)));
+    if (["Admin", "Billing", "Technical"].every((t) => primaries.has(t as "Admin"))) company.status = "Active";
+    return { ...contact };
   }
   consoleUrl(kind: "company" | "subscription", id: string) {
     return kind === "company"
@@ -305,10 +324,12 @@ export class DemoPax8Client implements Pax8Client {
 
 const BASE_COMPANY_COUNT = companies.length;
 let createdSeq = 0;
-/** Drops companies created through the demo client. */
+const demoContacts = new Map<string, Pax8ContactRaw[]>();
+/** Drops companies and contacts created through the demo client. */
 export function demoPax8Reset() {
   companies.splice(BASE_COMPANY_COUNT);
   createdSeq = 0;
+  demoContacts.clear();
 }
 
 /** Test hooks. */

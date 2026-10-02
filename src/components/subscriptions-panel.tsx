@@ -4,7 +4,7 @@ import { Card, EmptyState } from "@/components/ui/page";
 import { Badge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
 import { ConfirmButton } from "@/components/ui/confirm-button";
-import { createPax8CompanyAction } from "@/actions/pax8";
+import { createPax8CompanyAction, pushPax8ContactsAction } from "@/actions/pax8";
 import { fmtDate, fmtMoney, fmtRelative } from "@/lib/format";
 import type { DisplaySettings } from "@/lib/format";
 import type { companySubscriptionOverview } from "@/services/pax8";
@@ -46,7 +46,7 @@ export function SubscriptionsPanel({
     return (
       <EmptyState
         title="Not linked to a Pax8 company"
-        description="Licences bought through Pax8 appear here once this company is linked to its Pax8 account. Exact domain and name matches link automatically at sync time. A brand-new customer can be created at Pax8 from the CRM record (full billing address, phone and website required)."
+        description="Licences bought through Pax8 appear here once this company is linked to its Pax8 account. Exact domain and name matches link automatically at sync time. A brand-new customer can be created at Pax8 from the CRM record (full billing address, phone, website and at least one contact with an e-mail address required)."
         action={
           canManageIntegrations ? (
             <span className="inline-flex flex-wrap items-center justify-center gap-2">
@@ -57,7 +57,7 @@ export function SubscriptionsPanel({
                 variant="secondary"
                 action={createPax8CompanyAction.bind(null, companyId)}
                 title="Create this company at Pax8?"
-                description="A new Pax8 customer company is created from the CRM name, billing address, phone and website, with bill-on-behalf and self-service off, then linked here. Refused if Pax8 already has a company that looks like this one."
+                description="A new Pax8 customer company is created from the CRM name, billing address, phone and website, with the CRM contacts as its Admin, Billing and Technical contacts and bill-on-behalf and self-service off, then linked here. Refused if Pax8 already has a company that looks like this one."
                 confirmLabel="Create in Pax8"
               >
                 Create in Pax8
@@ -79,8 +79,28 @@ export function SubscriptionsPanel({
     contractName: l.contractName,
     contractStatus: l.contractStatus,
   }));
+  const inactive = Boolean(pax8Company.status) && pax8Company.status!.toLowerCase() !== "active";
   return (
     <div className="space-y-4">
+      {inactive && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          <span>
+            Pax8 shows this company as <strong>{pax8Company.status}</strong>. Pax8 hides it in the portal until it has a primary Admin, Billing and Technical contact; the CRM contacts (with an e-mail and a phone) can be pushed to fill those roles.
+          </span>
+          {canManageIntegrations && (
+            <ConfirmButton
+              size="sm"
+              variant="secondary"
+              action={pushPax8ContactsAction.bind(null, companyId)}
+              title="Push contacts to Pax8?"
+              description="Every CRM contact with an e-mail address is added to the Pax8 company. Billing-role contacts become the Billing contact, technical ones the Technical contact, the primary or decision maker the Admin contact; gaps are filled by the primary contact. Contacts Pax8 already has (same e-mail) are skipped."
+              confirmLabel="Push contacts"
+            >
+              Push contacts to Pax8
+            </ConfirmButton>
+          )}
+        </div>
+      )}
       {(totals.unbilled > 0 || totals.costStale > 0) && (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
           {totals.unbilled > 0 && (

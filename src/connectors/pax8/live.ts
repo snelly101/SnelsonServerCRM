@@ -7,6 +7,8 @@ import {
   type Pax8Client,
   type Pax8CompanyCreate,
   type Pax8CompanyRaw,
+  type Pax8ContactCreate,
+  type Pax8ContactRaw,
   type Pax8InvoiceItemRaw,
   type Pax8InvoiceRaw,
   type Pax8Page,
@@ -19,8 +21,9 @@ export type Pax8Token = { accessToken: string; expiresAt: number };
 /**
  * Live Pax8 Partner API connector.
  * Auth: OAuth 2.0 client_credentials with the client id/secret issued in the
- * Pax8 partner portal (audience api://p8p.client). The only write is
- * `createCompany` (POST /companies), used by the opt-in auto-create setting:
+ * Pax8 partner portal (audience api://p8p.client). The only writes are
+ * `createCompany` (POST /companies) and `createContact`
+ * (POST /companies/{id}/contacts), used by the opt-in auto-create setting:
  * nothing in the CRM can order, change quantities or cancel subscriptions.
  */
 export class LivePax8Client implements Pax8Client {
@@ -179,6 +182,22 @@ export class LivePax8Client implements Pax8Client {
     const res = await this.http.post<Pax8CompanyRaw>("/companies", input);
     if (!res.data || typeof res.data.id !== "string" || !res.data.id)
       throw new Error("Pax8 did not return the created company.");
+    return res.data;
+  }
+
+  listContacts(companyId: string) {
+    return this.paged<Pax8ContactRaw>(
+      `/companies/${encodeURIComponent(companyId)}/contacts`,
+    );
+  }
+
+  async createContact(companyId: string, input: Pax8ContactCreate) {
+    const res = await this.http.post<Pax8ContactRaw>(
+      `/companies/${encodeURIComponent(companyId)}/contacts`,
+      input,
+    );
+    if (!res.data || typeof res.data.id !== "string" || !res.data.id)
+      throw new Error("Pax8 did not return the created contact.");
     return res.data;
   }
 

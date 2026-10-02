@@ -11,6 +11,9 @@ import {
   products,
 } from "@/db/schema";
 import { createCompany, updateCompany } from "@/services/companies";
+import { createContact } from "@/services/contacts";
+import { contactSchema } from "@/lib/validation";
+import { DemoPax8Client } from "@/connectors/pax8/demo";
 import { companySchema } from "@/lib/validation";
 import { createContract } from "@/services/contracts";
 import { contractSchema } from "@/lib/validation-sales";
@@ -23,6 +26,7 @@ import {
   companySubscriptionOverview,
   createPax8CompanyForCompany,
   linkPax8Company,
+  pushPax8Contacts,
   matchLine,
   monthlyUnitCost,
   pax8ConnectionSummary,
@@ -192,15 +196,15 @@ describe("Pax8 live client", () => {
             c.method === "GET" && c.url.startsWith("https://api.pax8.com/v1/"),
         ),
     ).toBe(true);
-    // The only write is createCompany.
+    // The only writes are createCompany and createContact.
     expect(
       Object.getOwnPropertyNames(LivePax8Client.prototype).filter((k) =>
         /create|update|delete|order|cancel|set|change/i.test(k),
-      ),
-    ).toEqual(["createCompany"]);
+      ).sort(),
+    ).toEqual(["createCompany", "createContact"]);
   });
 
-  it("creates a company with one POST carrying the full address, phone, website and external id", async () => {
+  it("creates a company with one POST carrying the full address, phone, website, external id and contacts, and adds a contact with a POST under the company", async () => {
     const posted: { url: string; body: unknown }[] = [];
     const json = (data: unknown) =>
       new Response(JSON.stringify(data), {
@@ -212,6 +216,7 @@ describe("Pax8 live client", () => {
         return json({ access_token: "tok", expires_in: 3600 });
       expect(init?.method).toBe("POST");
       posted.push({ url: u.href, body: JSON.parse(String(init?.body)) });
+      if (u.pathname.endsWith("/contacts")) return json({ id: "ct-1", firstName: "Pat", lastName: "Lee", email: "pat@newco.example", phone: "0113 000 0001", types: [{ type: "Admin", primary: true }] });
       return json({ id: "new-1", name: "New Co Ltd", status: "Active" });
     });
     const client = new LivePax8Client(
@@ -229,10 +234,14 @@ describe("Pax8 live client", () => {
       billOnBehalfOfEnabled: false,
       selfServiceAllowed: false,
       orderApprovalRequired: false,
+      contacts: [{ firstName: "Pat", lastName: "Lee", email: "pat@newco.example", phone: "0113 000 0001", types: [{ type: "Admin" as const, primary: true }, { type: "Billing" as const, primary: true }, { type: "Technical" as const, primary: true }] }],
     };
     const created = await client.createCompany(body);
     expect(created.id).toBe("new-1");
     expect(posted).toEqual([{ url: "https://api.pax8.com/v1/companies", body }]);
+    const contact = { firstName: "Pat", lastName: "Lee", email: "pat@newco.example", phone: "0113 000 0001", types: [{ type: "Admin" as const, primary: true }] };
+    expect((await client.createContact("new-1", contact)).id).toBe("ct-1");
+    expect(posted[1]).toEqual({ url: "https://api.pax8.com/v1/companies/new-1/contacts", body: contact });
   });
 });
 
@@ -573,7 +582,7 @@ describe("Pax8 sync, matching, licence check and costs (demo adapter)", () => {
       )[0].status,
     ).toBe("resolved");
   });
-  it("auto-create on customer status: off by default, creates/mirrors/links when enabled, skips with a timeline note when Pax8's required fields are missing, raises a review item for a look-alike, and fires on a prospect turning customer", async () => {
+  it("auto-create on customer status: off by default; waits for a contact (Pax8 needs one to activate) then creates Active with role-mapped contacts; skips with a timeline note when fields are missing; raises a review item for a look-alike; fires on a prospect turning customer; pushes contacts to an Inactive company", async () => {
     const full = {
       addressLine1: "2 Mill Lane",
       city: "Leeds",
@@ -590,14 +599,25 @@ describe("Pax8 sync, matching, licence check and costs (demo adapter)", () => {
 
     await setConnectionConfig("pax8", { autoCreateCompanies: true }, admin.id);
     try {
-      // Full record: created at Pax8 with the CRM id as external id, mirrored and linked.
+      // Full company record but no contact yet: Pax8 would leave it Inactive, so the CRM waits and says so.
       const fresh = await createCompany(
         companySchema.parse({ name: "Auto Pax8 Customer Ltd", status: "customer", website: "autopax8.example", ...full }),
         admin.id,
       );
+      expect((await db.select().from(pax8Companies).where(eq(pax8Companies.companyId, fresh))).length).toBe(0);
+      expect((await db.select({ title: activities.title }).from(activities).where(eq(activities.companyId, fresh))).some((n) => /Pax8 needs a contact with an e-mail address/.test(n.title))).toBe(true);
+      // Saving contacts triggers the creation: billing role → Billing, technical → Technical, primary → Admin, all primaries filled.
+      await createContact(contactSchema.parse({ companyId: fresh, firstName: "Billie", lastName: "Books", email: "billie@autopax8.example", roles: ["billing"] }), admin.id);
+      expect((await db.select().from(pax8Companies).where(eq(pax8Companies.companyId, fresh))).length).toBe(1);
       const [row] = await db.select().from(pax8Companies).where(eq(pax8Companies.companyId, fresh));
-      expect(row).toMatchObject({ name: "Auto Pax8 Customer Ltd", matchDomain: "autopax8.example", externalRef: fresh, city: "Leeds", matchSource: "manual", externalStatus: "active" });
+      expect(row).toMatchObject({ name: "Auto Pax8 Customer Ltd", matchDomain: "autopax8.example", externalRef: fresh, city: "Leeds", matchSource: "manual", externalStatus: "active", status: "Active" });
       expect(row.raw?.address).toMatchObject({ street: "2 Mill Lane", stateOrProvince: "West Yorkshire", postalCode: "LS2 2BB", country: "GB" });
+      const demo = new DemoPax8Client();
+      const pushed = await demo.listContacts(row.pax8Id);
+      expect(pushed).toHaveLength(1);
+      expect(pushed[0]).toMatchObject({ firstName: "Billie", lastName: "Books", email: "billie@autopax8.example", phone: "0113 496 0999" });
+      expect(pushed[0].types!.map((t) => t.type).sort()).toEqual(["Admin", "Billing", "Technical"]);
+      expect(pushed[0].types!.every((t) => t.primary)).toBe(true);
       // Idempotent: a retry returns the same Pax8 id, and a sync keeps the row.
       expect(await createPax8CompanyForCompany(fresh, admin.id)).toBe(row.pax8Id);
       await syncPax8("manual", admin.id);
@@ -607,14 +627,35 @@ describe("Pax8 sync, matching, licence check and costs (demo adapter)", () => {
       const bare = await createCompany(companySchema.parse({ name: "Bare Pax8 Customer Ltd", status: "customer" }), admin.id);
       expect((await db.select().from(pax8Companies).where(eq(pax8Companies.companyId, bare))).length).toBe(0);
       const notes = await db.select({ title: activities.title }).from(activities).where(eq(activities.companyId, bare));
-      expect(notes.some((n) => /Pax8 needs address line 1, city, postcode, phone, website/.test(n.title))).toBe(true);
-      await expect(createPax8CompanyForCompany(bare, admin.id)).rejects.toThrow(/Missing: address line 1, city, postcode, phone, website/);
+      expect(notes.some((n) => /Pax8 needs address line 1, city, postcode, phone, website, a contact with an e-mail address/.test(n.title))).toBe(true);
+      await expect(createPax8CompanyForCompany(bare, admin.id)).rejects.toThrow(/Missing: address line 1, city, postcode, phone, website, a contact with an e-mail address/);
 
-      // A prospect is left alone until it becomes a customer.
+      // A prospect (with a contact) is left alone until it becomes a customer; two contacts split the roles.
       const prospect = await createCompany(companySchema.parse({ name: "Soon A Pax8 Customer Ltd", website: "soonpax8.example", ...full }), admin.id);
+      await createContact(contactSchema.parse({ companyId: prospect, firstName: "Sam", lastName: "Boss", email: "sam@soonpax8.example", phone: "07700 900001", roles: ["decision_maker"], isPrimary: true }), admin.id);
+      await createContact(contactSchema.parse({ companyId: prospect, firstName: "Tess", lastName: "Tech", email: "tess@soonpax8.example", roles: ["technical"] }), admin.id);
       expect((await db.select().from(pax8Companies).where(eq(pax8Companies.companyId, prospect))).length).toBe(0);
       await updateCompany(prospect, companySchema.parse({ name: "Soon A Pax8 Customer Ltd", website: "soonpax8.example", status: "customer", ...full }), admin.id);
-      expect((await db.select().from(pax8Companies).where(eq(pax8Companies.companyId, prospect))).length).toBe(1);
+      const [prow] = await db.select().from(pax8Companies).where(eq(pax8Companies.companyId, prospect));
+      expect(prow.status).toBe("Active");
+      const pc = await demo.listContacts(prow.pax8Id);
+      const sam = pc.find((c) => c.email === "sam@soonpax8.example")!;
+      const tess = pc.find((c) => c.email === "tess@soonpax8.example")!;
+      expect(sam.phone).toBe("07700 900001");
+      expect(sam.types).toEqual(expect.arrayContaining([{ type: "Admin", primary: true }, { type: "Billing", primary: true }]));
+      expect(sam.types!.some((t) => t.type === "Technical")).toBe(false);
+      expect(tess.types).toEqual([{ type: "Technical", primary: true }]);
+
+      // A company created at Pax8 without contacts is Inactive; pushing the CRM contacts activates it (and a second push adds nothing).
+      const inactiveCo = await createCompany(companySchema.parse({ name: "Inactive At Pax8 Ltd", status: "customer", website: "inactivepax8.example", ...full }), admin.id);
+      const raw = await demo.createCompany({ name: "Inactive At Pax8 Ltd", address: { street: "1 Road", city: "Leeds", stateOrProvince: "WY", postalCode: "LS1 1AA", country: "GB" }, phone: "0113 000 0000", website: "https://inactivepax8.example", billOnBehalfOfEnabled: false, selfServiceAllowed: false, orderApprovalRequired: false });
+      expect(raw.status).toBe("Inactive");
+      await db.insert(pax8Companies).values({ pax8Id: raw.id, name: raw.name, normalizedName: "inactive at pax8", website: raw.website, matchDomain: "inactivepax8.example", status: raw.status, companyId: inactiveCo, matchSource: "manual", externalStatus: "active", raw: raw as Record<string, unknown>, fetchedAt: new Date() });
+      // Saving a contact runs the hook, which notices the Inactive link and pushes.
+      await createContact(contactSchema.parse({ companyId: inactiveCo, firstName: "Ivy", lastName: "Owner", email: "ivy@inactivepax8.example", roles: ["billing", "technical", "decision_maker"] }), admin.id);
+      expect((await db.select().from(pax8Companies).where(eq(pax8Companies.companyId, inactiveCo)))[0].status).toBe("Active");
+      expect(await pushPax8Contacts(inactiveCo, admin.id)).toMatchObject({ added: 0, status: "Active" });
+      expect(await demo.listContacts(raw.id)).toHaveLength(1);
 
       // Pax8 already has a similar company (unlinked demo row): review item, nothing created.
       const dupe = await createCompany(companySchema.parse({ name: "Moorland Outdoor Supplies Ltd", status: "customer", website: "moorland-outdoor.example", ...full }), admin.id);
