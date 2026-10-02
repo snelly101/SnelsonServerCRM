@@ -83,19 +83,20 @@ export function LinesEditor({
   return (
     <div className="space-y-3">
       <div className="overflow-x-auto rounded-md border border-slate-200">
-        <table className="tbl min-w-[900px]">
+        {/* Fixed layout: column widths come from the header cells, so number inputs cannot squeeze the dropdowns. */}
+        <table className={`tbl table-fixed ${showSite ? "min-w-[1230px]" : "min-w-[1100px]"}`}>
           <thead>
             <tr>
-              <th className="w-48">Product</th>
+              <th className="w-36">Product</th>
               <th>Description</th>
               <th className="w-32">Type</th>
               <th className="w-28">Pricing</th>
               <th className="w-28">Billing</th>
               {showSite && <th className="w-32">Site</th>}
-              <th className="w-20">{quantityLabel}</th>
-              <th className="w-28">Unit price</th>
-              <th className="w-28">Unit cost</th>
-              <th className="w-28 text-right">Total</th>
+              <th className="w-20 whitespace-normal leading-tight">{quantityLabel}</th>
+              <th className="w-24">Unit price</th>
+              <th className="w-24">Unit cost</th>
+              <th className="w-24 text-right">Total</th>
               <th className="w-10" />
             </tr>
           </thead>
@@ -123,7 +124,7 @@ export function LinesEditor({
                   {showSite && <input type="hidden" name={`lines[${i}][countsAsManagedDevice]`} value={l.pricingModel === "per_device" && l.countsAsManagedDevice ? "true" : "false"} />}
                 </td>
                 <td>
-                  <Input aria-label="Description" name={`lines[${i}][description]`} value={l.description} onChange={(e) => update(l.key, { description: e.target.value })} required className="text-xs" />
+                  <Input aria-label="Description" name={`lines[${i}][description]`} value={l.description} onChange={(e) => update(l.key, { description: e.target.value })} required className="px-2 text-xs" />
                   {showSite && l.pricingModel === "per_device" && (
                     <label className="mt-1 flex items-center gap-1 text-[11px] text-slate-600">
                       <input type="checkbox" checked={Boolean(l.countsAsManagedDevice)} onChange={(e) => update(l.key, { countsAsManagedDevice: e.target.checked })} /> Compare with NinjaOne device count
@@ -131,7 +132,7 @@ export function LinesEditor({
                   )}
                 </td>
                 <td>
-                  <Select aria-label="Revenue type" name={`lines[${i}][revenueType]`} value={l.revenueType} onChange={(e) => update(l.key, { revenueType: e.target.value as EditableLine["revenueType"], billingFrequency: e.target.value === "recurring" ? (l.billingFrequency === "one_off" ? "monthly" : l.billingFrequency) : "one_off" })} className="text-xs">
+                  <Select aria-label="Revenue type" name={`lines[${i}][revenueType]`} value={l.revenueType} onChange={(e) => update(l.key, { revenueType: e.target.value as EditableLine["revenueType"], billingFrequency: e.target.value === "recurring" ? (l.billingFrequency === "one_off" ? "monthly" : l.billingFrequency) : "one_off" })} className="px-2 text-xs">
                     {revenueTypeValues.map((v) => (
                       <option key={v} value={v}>
                         {REVENUE_LABELS[v]}
@@ -140,7 +141,7 @@ export function LinesEditor({
                   </Select>
                 </td>
                 <td>
-                  <Select aria-label="Pricing model" name={`lines[${i}][pricingModel]`} value={l.pricingModel} onChange={(e) => update(l.key, { pricingModel: e.target.value as EditableLine["pricingModel"] })} className="text-xs">
+                  <Select aria-label="Pricing model" name={`lines[${i}][pricingModel]`} value={l.pricingModel} onChange={(e) => update(l.key, { pricingModel: e.target.value as EditableLine["pricingModel"] })} className="px-2 text-xs">
                     {pricingModelValues.map((v) => (
                       <option key={v} value={v}>
                         {PRICING_LABELS[v]}
@@ -149,7 +150,7 @@ export function LinesEditor({
                   </Select>
                 </td>
                 <td>
-                  <Select aria-label="Billing frequency" name={`lines[${i}][billingFrequency]`} value={l.billingFrequency} disabled={l.revenueType !== "recurring"} onChange={(e) => update(l.key, { billingFrequency: e.target.value as EditableLine["billingFrequency"] })} className="text-xs">
+                  <Select aria-label="Billing frequency" name={`lines[${i}][billingFrequency]`} value={l.billingFrequency} disabled={l.revenueType !== "recurring"} onChange={(e) => update(l.key, { billingFrequency: e.target.value as EditableLine["billingFrequency"] })} className="px-2 text-xs">
                     {billingFrequencyValues.map((v) => (
                       <option key={v} value={v}>
                         {FREQUENCY_LABELS[v]}
@@ -160,7 +161,7 @@ export function LinesEditor({
                 </td>
                 {showSite && (
                   <td>
-                    <Select aria-label="Site" name={`lines[${i}][siteId]`} value={l.siteId ?? ""} onChange={(e) => update(l.key, { siteId: e.target.value })} className="text-xs">
+                    <Select aria-label="Site" name={`lines[${i}][siteId]`} value={l.siteId ?? ""} onChange={(e) => update(l.key, { siteId: e.target.value })} className="px-2 text-xs">
                       <option value="">All sites</option>
                       {sites.map((s) => (
                         <option key={s.id} value={s.id}>
@@ -171,13 +172,13 @@ export function LinesEditor({
                   </td>
                 )}
                 <td>
-                  <Input aria-label="Quantity" name={`lines[${i}][quantity]`} type="number" min={0} step="1" value={l.quantity} onChange={(e) => update(l.key, { quantity: Number(e.target.value) })} className="text-xs" />
+                  <Input aria-label="Quantity" name={`lines[${i}][quantity]`} type="number" min={0} step="1" value={l.quantity} onChange={(e) => update(l.key, { quantity: Number(e.target.value) })} className="px-2 text-xs" />
                 </td>
                 <td>
-                  <Input aria-label="Unit price" name={`lines[${i}][unitPrice]`} type="number" min={0} step="0.01" value={l.unitPrice} onChange={(e) => update(l.key, { unitPrice: Number(e.target.value) })} className="text-xs" />
+                  <Input aria-label="Unit price" name={`lines[${i}][unitPrice]`} type="number" min={0} step="0.01" value={l.unitPrice} onChange={(e) => update(l.key, { unitPrice: Number(e.target.value) })} className="px-2 text-xs" />
                 </td>
                 <td>
-                  <Input aria-label="Unit cost" name={`lines[${i}][unitCost]`} type="number" min={0} step="0.01" value={l.unitCost ?? ""} placeholder="unknown" onChange={(e) => update(l.key, { unitCost: e.target.value === "" ? null : Number(e.target.value) })} className="text-xs" />
+                  <Input aria-label="Unit cost" name={`lines[${i}][unitCost]`} type="number" min={0} step="0.01" value={l.unitCost ?? ""} placeholder="unknown" onChange={(e) => update(l.key, { unitCost: e.target.value === "" ? null : Number(e.target.value) })} className="px-2 text-xs" />
                 </td>
                 <td className="text-right text-sm tabular-nums">
                   {fmtMoney(l.quantity * l.unitPrice, currency)}
