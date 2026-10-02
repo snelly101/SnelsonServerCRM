@@ -12,8 +12,9 @@ import { archiveContract, createContract, generateReminders, updateContract } fr
 function readContractForm(fd: FormData) {
   const obj = formToObject(fd);
   const input = contractSchema.parse({ ...obj, autoRenew: obj.autoRenew === "true" });
-  const lines = z.array(contractLineSchema).parse(linesFromForm(obj).map((l) => ({ ...l, countsAsManagedDevice: l.countsAsManagedDevice === "true" })));
-  return { input, lines };
+  const lines = z.array(contractLineSchema).parse(linesFromForm(obj).map((l) => ({ ...l, id: l.id || undefined, countsAsManagedDevice: l.countsAsManagedDevice === "true" })));
+  const quantityEffectiveFrom = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().parse(typeof obj.quantityEffectiveFrom === "string" && obj.quantityEffectiveFrom ? obj.quantityEffectiveFrom : undefined) ?? null;
+  return { input, lines, quantityEffectiveFrom };
 }
 
 export async function createContractAction(_prev: ActionResult<unknown> | null, fd: FormData): Promise<ActionResult<string>> {
@@ -32,8 +33,8 @@ export async function createContractAction(_prev: ActionResult<unknown> | null, 
 export async function updateContractAction(id: string, _prev: ActionResult<unknown> | null, fd: FormData): Promise<ActionResult<undefined>> {
   const res = await runAction(async () => {
     const u = await requireActionPermission("contract.write");
-    const { input, lines } = readContractForm(fd);
-    await updateContract(z.uuid().parse(id), input, lines, u.id);
+    const { input, lines, quantityEffectiveFrom } = readContractForm(fd);
+    await updateContract(z.uuid().parse(id), input, lines, u.id, { quantityEffectiveFrom });
     revalidatePath("/contracts");
     revalidatePath(`/contracts/${id}`);
     return undefined;

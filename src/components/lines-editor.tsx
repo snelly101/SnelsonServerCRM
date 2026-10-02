@@ -119,6 +119,7 @@ export function LinesEditor({
                     ))}
                   </Select>
                   <input type="hidden" name={`lines[${i}][productId]`} value={l.productId} />
+                  {/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(l.key) && <input type="hidden" name={`lines[${i}][id]`} value={l.key} />}
                   {showSite && <input type="hidden" name={`lines[${i}][countsAsManagedDevice]`} value={l.pricingModel === "per_device" && l.countsAsManagedDevice ? "true" : "false"} />}
                 </td>
                 <td>

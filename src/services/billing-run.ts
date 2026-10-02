@@ -1,46 +1,29 @@
 import { and, eq, inArray, isNull, ne } from "drizzle-orm";
-import { addMonths, format, parseISO, subDays } from "date-fns";
+import { differenceInCalendarDays, parseISO, subDays } from "date-fns";
 import { db } from "@/db";
 import { companies, contractLines, contracts, invoiceDrafts } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { ActionError } from "@/lib/action-result";
-import { monthlyValue } from "@/lib/money";
+import { billingPeriodFor, buildContractInvoiceLines, PERIOD_MONTHS, type BillingPeriod, type PreviousInvoice } from "@/lib/billing";
 import { getLink } from "./integrations";
 import { prepareInvoiceDraft } from "./xero";
 
 /**
  * Billing run: one draft invoice per active contract for the **current**
- * billing period, in advance. Periods are anchored to the contract start date
- * (a contract starting on the 15th bills 15th to 14th); monthly, quarterly and
- * annual contracts are included, one-off ones are not. Only the period that
- * contains the run date is proposed: older gaps are history and stay a manual
- * *Prepare invoice* on the contract, so a contract imported mid-life is never
- * back-billed by accident. A period that already has a draft (any status but
- * cancelled) is skipped, which makes the run safe to repeat.
+ * billing period, in advance. Periods are anchored to the contract start date,
+ * or to its billing day of the month when set (see `@/lib/billing`); monthly,
+ * quarterly and annual contracts are included, one-off ones are not. Only the
+ * period that contains the run date is proposed: older gaps are history and
+ * stay a manual *Prepare invoice* on the contract, so a contract imported
+ * mid-life is never back-billed by accident. A period that already has a draft
+ * (any status but cancelled) is skipped, which makes the run safe to repeat.
  */
-export type BillingPeriod = { periodStart: string; periodEnd: string };
+export type { BillingPeriod };
 
-const MONTHS: Record<string, number | undefined> = { monthly: 1, quarterly: 3, annual: 12 };
-const iso = (d: Date) => format(d, "yyyy-MM-dd");
-
-/** The billing period of `frequency` anchored to `startDate` that contains `asOf`, or null when the contract has not started or has ended. */
-export function currentBillingPeriod(startDate: string, frequency: string, asOf: string, endDate?: string | null): BillingPeriod | null {
-  const months = MONTHS[frequency];
-  if (!months) return null;
-  const start = parseISO(startDate);
-  const on = parseISO(asOf);
-  if (on < start) return null;
-  if (endDate && parseISO(endDate) < on) return null;
-  // Count whole periods from the anchor, adding months to the anchor itself so a 31st keeps clamping correctly.
-  for (let n = 0; n < 1200; n++) {
-    const ps = addMonths(start, n * months);
-    const next = addMonths(start, (n + 1) * months);
-    if (on >= ps && on < next) {
-      const pe = subDays(next, 1);
-      return { periodStart: iso(ps), periodEnd: endDate && parseISO(endDate) < pe ? endDate : iso(pe) };
-    }
-  }
-  return null;
+/** Period anchored to the start date (no billing day). Kept for callers and tests that predate billing days. */
+export function currentBillingPeriod(startDate: string, frequency: string, asOf: string, endDate?: string | null): { periodStart: string; periodEnd: string } | null {
+  const p = billingPeriodFor(startDate, frequency, asOf, endDate, null);
+  return p ? { periodStart: p.periodStart, periodEnd: p.periodEnd } : null;
 }
 
 export type BillingRunRow = {
@@ -72,19 +55,26 @@ export async function previewBillingRun(asOf: string): Promise<BillingRunRow[]> 
   const ids = rows.map((r) => r.contract.id);
   const lines = await db.select().from(contractLines).where(inArray(contractLines.contractId, ids));
   const drafts = await db
-    .select({ id: invoiceDrafts.id, contractId: invoiceDrafts.contractId, periodStart: invoiceDrafts.periodStart, reference: invoiceDrafts.reference, status: invoiceDrafts.status })
+    .select({ id: invoiceDrafts.id, contractId: invoiceDrafts.contractId, periodStart: invoiceDrafts.periodStart, periodEnd: invoiceDrafts.periodEnd, lines: invoiceDrafts.lines, reference: invoiceDrafts.reference, status: invoiceDrafts.status, createdAt: invoiceDrafts.createdAt })
     .from(invoiceDrafts)
     .where(and(inArray(invoiceDrafts.contractId, ids), ne(invoiceDrafts.status, "cancelled")));
   const out: BillingRunRow[] = [];
   for (const r of rows) {
     const c = r.contract;
     const recurring = lines.filter((l) => l.contractId === c.id && l.revenueType === "recurring" && l.billingFrequency !== "one_off");
-    const period = currentBillingPeriod(c.startDate, c.billingFrequency, asOf, c.endDate);
-    const months = MONTHS[c.billingFrequency] ?? 0;
-    const net = Math.round(recurring.reduce((a, l) => a + monthlyValue({ quantity: l.quantity, unitPrice: l.unitPrice, revenueType: l.revenueType, billingFrequency: l.billingFrequency }), 0) * months * 100) / 100;
+    const period = billingPeriodFor(c.startDate, c.billingFrequency, asOf, c.endDate, c.billingDay);
+    const months = PERIOD_MONTHS[c.billingFrequency] ?? 0;
+    // Same maths as the draft itself, so the preview shows pro-rated amounts and catch-up lines.
+    let previous: PreviousInvoice | null = null;
+    if (period) {
+      const dayBefore = subDays(parseISO(period.periodStart), 1).toISOString().slice(0, 10);
+      const prev = drafts.filter((d) => d.contractId === c.id && d.periodEnd === dayBefore && d.periodStart).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+      if (prev?.periodStart && prev.periodEnd) previous = { period: { periodStart: prev.periodStart, periodEnd: prev.periodEnd, fullDays: Math.max(1, differenceInCalendarDays(parseISO(prev.periodEnd), parseISO(prev.periodStart)) + 1) }, lines: prev.lines };
+    }
+    const net = period ? Math.round(buildContractInvoiceLines({ lines: recurring, period, months, previous, accountCode: "", taxType: "" }).reduce((a, l) => a + l.quantity * l.unitAmount, 0) * 100) / 100 : 0;
     const existing = period ? drafts.find((d) => d.contractId === c.id && d.periodStart === period.periodStart) ?? null : null;
     const xeroLinked = Boolean(await getLink("xero", "company", c.companyId));
-    const skipReason = !MONTHS[c.billingFrequency]
+    const skipReason = !PERIOD_MONTHS[c.billingFrequency]
       ? "one-off contract: nothing recurs"
       : !period
         ? parseISO(c.startDate) > parseISO(asOf)
