@@ -110,9 +110,17 @@ export type Pax8InvoiceItemRaw = {
   [k: string]: unknown;
 };
 
+/** Pax8 contact roles. A company is Active only once each type has a primary contact. */
+export type Pax8ContactType = { type: "Admin" | "Billing" | "Technical"; primary: boolean };
+/** Body for `POST /companies/{id}/contacts` and the `contacts` array on company creation. All four text fields are required by Pax8. */
+export type Pax8ContactCreate = { firstName: string; lastName: string; email: string; phone: string; types?: Pax8ContactType[] };
+export type Pax8ContactRaw = Pax8ContactCreate & { id: string; createdDate?: string | null; [k: string]: unknown };
+
 /**
  * Body for `POST /companies`. Pax8 requires every field here except
- * `street2` and `externalId`; `country` is an ISO 3166-1 alpha-2 code.
+ * `street2`, `externalId` and `contacts`; `country` is an ISO 3166-1 alpha-2
+ * code. Without `contacts` the company is created **Inactive** and hidden in
+ * the partner portal until primary Admin, Billing and Technical contacts exist.
  */
 export type Pax8CompanyCreate = {
   name: string;
@@ -123,6 +131,7 @@ export type Pax8CompanyCreate = {
   billOnBehalfOfEnabled: boolean;
   selfServiceAllowed: boolean;
   orderApprovalRequired: boolean;
+  contacts?: Pax8ContactCreate[];
 };
 
 export interface Pax8Client {
@@ -143,6 +152,10 @@ export interface Pax8Client {
    * Never orders, changes or cancels subscriptions.
    */
   createCompany(input: Pax8CompanyCreate): Promise<Pax8CompanyRaw>;
+  /** Contacts of a Pax8 company. */
+  listContacts(companyId: string): Promise<Pax8ContactRaw[]>;
+  /** Adds a contact; once Admin, Billing and Technical each have a primary the company becomes Active. */
+  createContact(companyId: string, input: Pax8ContactCreate): Promise<Pax8ContactRaw>;
   /** Deep link into the Pax8 partner portal. */
   consoleUrl(kind: "company" | "subscription", id: string): string;
 }

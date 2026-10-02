@@ -127,7 +127,7 @@ export async function createContact(input: ContactInput, actorUserId: string | n
       );
     }
   }
-  return db.transaction(async (tx) => {
+  const id = await db.transaction(async (tx) => {
     if (input.isPrimary) {
       await tx.update(contacts).set({ isPrimary: false }).where(eq(contacts.companyId, input.companyId));
     }
@@ -136,6 +136,19 @@ export async function createContact(input: ContactInput, actorUserId: string | n
     await logActivity({ type: "system", companyId: input.companyId, contactId: row.id, title: `Contact added: ${fullName(input)}`, actorUserId }, tx);
     return row.id;
   });
+  await afterContactSaved(input.companyId, actorUserId);
+  return id;
+}
+
+/**
+ * Post-commit hook: Pax8 needs contacts before it treats a company as Active,
+ * so a saved contact re-runs the optional Pax8 auto-create (creates the Pax8
+ * company for a customer that was waiting on one, or adds contacts to an
+ * Inactive one). Dynamic import avoids a module cycle; never throws.
+ */
+async function afterContactSaved(companyId: string, actorUserId: string | null) {
+  const { ensurePax8CompanyForCustomer } = await import("./pax8");
+  await ensurePax8CompanyForCustomer(companyId, actorUserId, "contact saved");
 }
 
 export async function updateContact(id: string, input: ContactInput, actorUserId: string) {
@@ -152,6 +165,7 @@ export async function updateContact(id: string, input: ContactInput, actorUserId
     await tx.update(contacts).set({ ...next, updatedAt: new Date() }).where(eq(contacts.id, id));
     await audit({ actorUserId, action: "contact.update", entityType: "contact", entityId: id, details: { changes } }, tx);
   });
+  await afterContactSaved(input.companyId, actorUserId);
 }
 
 export async function archiveContact(id: string, actorUserId: string) {

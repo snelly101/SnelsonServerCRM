@@ -9,6 +9,7 @@ import {
   connectPax8,
   createPax8CompanyForCompany,
   linkPax8Company,
+  pushPax8Contacts,
   runLicenceCheck,
   savePax8Config,
   setSubscriptionBillingLine,
@@ -155,6 +156,17 @@ export async function createPax8CompanyAction(
     const pax8Id = await createPax8CompanyForCompany(z.uuid().parse(companyId), u.id);
     revalidate();
     return { pax8Id };
+  });
+}
+
+export async function pushPax8ContactsAction(
+  companyId: string,
+): Promise<ActionResult<{ added: number; status: string | null }>> {
+  return runAction(async () => {
+    const u = await requireActionPermission("integration.manage");
+    const r = await pushPax8Contacts(z.uuid().parse(companyId), u.id);
+    revalidate();
+    return r;
   });
 }
 

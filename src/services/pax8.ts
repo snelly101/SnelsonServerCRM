@@ -39,6 +39,8 @@ import {
   pax8Number,
   pax8Time,
   termMonths,
+  type Pax8ContactCreate,
+  type Pax8ContactType,
   type Pax8InvoiceItemRaw,
 } from "@/connectors/pax8/types";
 import { registrableDomain } from "@/connectors/twentyi/types";
@@ -787,8 +789,50 @@ export function pax8MissingFields(co: {
 }
 
 /**
+ * CRM contacts shaped for Pax8. Pax8 needs a first name, last name, e-mail and
+ * phone on every contact (the company phone fills a missing one) and a
+ * **primary** contact for each of Admin, Billing and Technical before it
+ * treats the company as Active. CRM roles map onto those types; whatever is
+ * still missing falls back to the primary (or first) contact.
+ */
+export async function pax8ContactsFor(companyId: string, companyPhone: string | null): Promise<Pax8ContactCreate[]> {
+  const rows = await db
+    .select()
+    .from(contacts)
+    .where(and(eq(contacts.companyId, companyId), isNull(contacts.archivedAt), sql`${contacts.email} is not null and ${contacts.email} <> ''`))
+    .orderBy(desc(contacts.isPrimary), asc(contacts.createdAt));
+  const eligible = rows.filter((c) => (c.phone ?? c.mobile ?? companyPhone)?.trim());
+  if (!eligible.length) return [];
+  const assigned: Record<Pax8ContactType["type"], string | null> = { Admin: null, Billing: null, Technical: null };
+  const typesOf = new Map<string, Pax8ContactType["type"][]>();
+  for (const c of eligible) {
+    const t: Pax8ContactType["type"][] = [];
+    if (c.roles.includes("billing")) t.push("Billing");
+    if (c.roles.includes("technical")) t.push("Technical");
+    if (c.roles.includes("decision_maker") || c.roles.includes("primary") || c.isPrimary) t.push("Admin");
+    typesOf.set(c.id, t);
+    for (const type of t) assigned[type] ??= c.id;
+  }
+  // Every type needs a primary: unfilled ones go to the first eligible contact (primary contacts sort first).
+  for (const type of Object.keys(assigned) as Pax8ContactType["type"][]) {
+    if (!assigned[type]) {
+      assigned[type] = eligible[0].id;
+      typesOf.get(eligible[0].id)!.push(type);
+    }
+  }
+  return eligible.map((c) => ({
+    firstName: c.firstName.trim(),
+    lastName: (c.lastName || c.firstName).trim(),
+    email: c.email!.trim(),
+    phone: (c.phone ?? c.mobile ?? companyPhone)!.trim(),
+    types: [...new Set(typesOf.get(c.id))].map((type) => ({ type, primary: assigned[type] === c.id })),
+  }));
+}
+
+/**
  * Creates the company at Pax8 from the CRM record (billing address, phone,
- * website; the CRM id as Pax8's external id), mirrors it and links it.
+ * website; the CRM id as Pax8's external id) together with its contacts, so it
+ * is Active straight away, then mirrors and links it.
  * Idempotent per company through the outbound ledger; after a timeout a retry
  * reconciles by external id or exact name. Refuses when the company is already
  * linked, a Pax8 company looks like it, or required fields are missing.
@@ -817,9 +861,11 @@ export async function createPax8CompanyForCompany(
       `Pax8 already has "${matches[0].name}", which looks like this company (${matches[0].reason}). Link it from the Pax8 mapping table instead.`,
     );
   const missing = pax8MissingFields(co);
+  const pax8Contacts = await pax8ContactsFor(companyId, co.phone);
+  if (!pax8Contacts.length) missing.push("a contact with an e-mail address");
   if (missing.length)
     throw new ActionError(
-      `Pax8 needs a full address, phone and website. Missing: ${missing.join(", ")}. Fill them in on the company, then try again.`,
+      `Pax8 needs a full address, phone, website and at least one contact with an e-mail address. Missing: ${missing.join(", ")}. Fill them in on the company, then try again.`,
     );
   const website = /^https?:\/\//i.test(co.website!.trim())
     ? co.website!.trim()
@@ -840,6 +886,7 @@ export async function createPax8CompanyForCompany(
     billOnBehalfOfEnabled: false,
     selfServiceAllowed: false,
     orderApprovalRequired: false,
+    contacts: pax8Contacts,
   };
   const { result } = await runOutbound(
     "pax8",
@@ -908,11 +955,51 @@ export async function createPax8CompanyForCompany(
   await logActivity({
     type: "sync",
     companyId,
-    title: `Created Pax8 company "${raw.name}"`,
+    title: `Created Pax8 company "${raw.name}" with ${pax8Contacts.length} contact${pax8Contacts.length === 1 ? "" : "s"}`,
     actorUserId,
     source: "pax8",
   });
   return raw.id;
+}
+
+/**
+ * Adds the CRM contacts to an already-linked Pax8 company (one that was
+ * created without contacts and is therefore Inactive and hidden in the Pax8
+ * portal). Contacts Pax8 already holds (same e-mail) are skipped; each new one
+ * goes through the outbound ledger. The mirror's status is refreshed from Pax8.
+ */
+export async function pushPax8Contacts(companyId: string, actorUserId: string) {
+  const resolved = await getPax8Client();
+  if (!resolved) throw new ActionError("Pax8 is not configured.");
+  const [pc] = await db.select().from(pax8Companies).where(eq(pax8Companies.companyId, companyId)).limit(1);
+  if (!pc) throw new ActionError("This company is not linked to a Pax8 company.");
+  const [co] = await db.select({ phone: companies.phone }).from(companies).where(eq(companies.id, companyId)).limit(1);
+  const wanted = await pax8ContactsFor(companyId, co?.phone ?? null);
+  if (!wanted.length) throw new ActionError("Pax8 needs at least one contact with an e-mail address (and a phone, or a company phone). Add one, then try again.");
+  const existing = new Set((await resolved.client.listContacts(pc.pax8Id)).map((c) => c.email.trim().toLowerCase()));
+  let added = 0;
+  for (const c of wanted) {
+    if (existing.has(c.email.toLowerCase())) continue;
+    await runOutbound("pax8", `pax8:contact:${pc.pax8Id}:${c.email.toLowerCase()}`, "contact.create", actorUserId, {
+      requestSummary: { company: pc.name, email: c.email, types: c.types },
+      perform: async () => {
+        const created = await resolved.client.createContact(pc.pax8Id, c);
+        return { externalId: created.id, summary: { email: created.email } };
+      },
+      reconcile: async () => {
+        const hit = (await resolved.client.listContacts(pc.pax8Id)).find((x) => x.email.trim().toLowerCase() === c.email.toLowerCase());
+        return hit ? { externalId: hit.id, summary: { email: hit.email } } : null;
+      },
+    });
+    added++;
+  }
+  // Pax8 flips the company to Active once every type has a primary; read it back.
+  const now = new Date();
+  const fresh = (await resolved.client.listCompanies()).find((c) => c.id === pc.pax8Id);
+  if (fresh) await db.update(pax8Companies).set({ status: fresh.status ?? pc.status, raw: fresh as Record<string, unknown>, fetchedAt: now, updatedAt: now }).where(eq(pax8Companies.id, pc.id));
+  await audit({ actorUserId, action: "pax8.contacts.push", entityType: "company", entityId: companyId, details: { pax8Id: pc.pax8Id, added, status: fresh?.status ?? null } });
+  await logActivity({ type: "sync", companyId, title: `Pushed ${added} contact${added === 1 ? "" : "s"} to Pax8 company "${pc.name}"${fresh?.status ? ` (now ${fresh.status})` : ""}`, actorUserId, source: "pax8" });
+  return { added, status: fresh?.status ?? null };
 }
 
 /**
@@ -938,11 +1025,20 @@ export async function ensurePax8CompanyForCustomer(
     if (!co || co.archivedAt || co.status !== "customer")
       return { action: "skipped", detail: "not an active customer" };
     const [linked] = await db
-      .select({ id: pax8Companies.id })
+      .select({ id: pax8Companies.id, status: pax8Companies.status })
       .from(pax8Companies)
       .where(eq(pax8Companies.companyId, companyId))
       .limit(1);
-    if (linked) return { action: "skipped", detail: "already linked" };
+    if (linked) {
+      // Created earlier without contacts (Inactive at Pax8): add them as soon as the CRM has one.
+      if (linked.status && linked.status.toLowerCase() !== "active" && (await pax8ContactsFor(companyId, co.phone)).length) {
+        const actor = actorUserId ?? (await db.select({ id: user.id }).from(user).where(eq(user.role, "admin")).limit(1))[0]?.id ?? null;
+        if (!actor) return { action: "skipped", detail: "no actor" };
+        await pushPax8Contacts(companyId, actor);
+        return { action: "created", detail: "contacts added" };
+      }
+      return { action: "skipped", detail: "already linked" };
+    }
     const matches = await likelyPax8Matches(co);
     if (matches.length) {
       const m = matches[0];
@@ -965,11 +1061,12 @@ export async function ensurePax8CompanyForCustomer(
       return { action: "review", detail: m.name };
     }
     const missing = pax8MissingFields(co);
+    if (!(await pax8ContactsFor(companyId, co.phone)).length) missing.push("a contact with an e-mail address");
     if (missing.length) {
       await logActivity({
         type: "sync",
         companyId,
-        title: `Pax8 company not created automatically: Pax8 needs ${missing.join(", ")}. Fill them in, then use "Create in Pax8" on the Subscriptions tab.`,
+        title: `Pax8 company not created automatically: Pax8 needs ${missing.join(", ")}. Fill them in (it runs again when a contact is saved), or use "Create in Pax8" on the Subscriptions tab.`,
         actorUserId,
         source: "pax8",
       });
