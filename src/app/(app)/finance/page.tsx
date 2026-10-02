@@ -43,6 +43,11 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
         actions={
           <>
             {conn.configured && can(me.role, "integration.sync") && <XeroSyncButton label="Refresh from Xero" />}
+            {can(me.role, "invoice.prepare") && (
+              <ButtonLink href="/finance/billing-run">
+                <FileCheck2 className="h-4 w-4" /> Billing run
+              </ButtonLink>
+            )}
             <ButtonLink href="/integrations/xero" variant="secondary">
               Connection
             </ButtonLink>
