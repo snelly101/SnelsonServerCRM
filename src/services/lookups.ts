@@ -24,5 +24,5 @@ export async function siteOptions(companyId: string) {
 
 export async function productOptions(): Promise<ProductOption[]> {
   const rows = await listProducts();
-  return rows.map((p) => ({ id: p.id, name: p.name, pricingModel: p.pricingModel, revenueType: p.revenueType, billingFrequency: p.billingFrequency, unitPrice: p.unitPrice, unitCost: p.unitCost, countsAsManagedDevice: p.countsAsManagedDevice }));
+  return rows.map((p) => ({ id: p.id, name: p.name, sku: p.sku ?? null, category: p.category, pricingModel: p.pricingModel, revenueType: p.revenueType, billingFrequency: p.billingFrequency, unitPrice: p.unitPrice, unitCost: p.unitCost, countsAsManagedDevice: p.countsAsManagedDevice }));
 }
