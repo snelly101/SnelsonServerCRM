@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Field, Input, Select, SubmitButton, FormMessage, fieldErrors } from "@/components/ui/form";
+import { Checkbox, Field, Input, Select, SubmitButton, FormMessage, fieldErrors } from "@/components/ui/form";
 import { connectBetterProposalsAction, saveIntegrationConfigAction } from "@/actions/integrations";
 
 export function ConnectForm() {
@@ -32,7 +32,7 @@ export function ConnectForm() {
   );
 }
 
-export function ConfigForm({ templates, defaultTemplateId, readOnly }: { templates: { id: string; name: string; isDefault: boolean }[]; defaultTemplateId: string; readOnly: boolean }) {
+export function ConfigForm({ templates, defaultTemplateId, autoCreateCompanies, readOnly }: { templates: { id: string; name: string; isDefault: boolean }[]; defaultTemplateId: string; autoCreateCompanies: boolean; readOnly: boolean }) {
   const [result, formAction] = useActionState(saveIntegrationConfigAction.bind(null, "betterproposals"), null);
   return (
     <form action={formAction} className="space-y-3">
@@ -48,6 +48,14 @@ export function ConfigForm({ templates, defaultTemplateId, readOnly }: { templat
           ))}
         </Select>
       </Field>
+      <fieldset disabled={readOnly} className="space-y-1">
+        {/* The hidden field comes first so a ticked box's "true" wins when both are posted. */}
+        <input type="hidden" name="autoCreateCompanies" value="false" />
+        <Checkbox name="autoCreateCompanies" value="true" defaultChecked={autoCreateCompanies} label="Create a Better Proposals company automatically for every new CRM company" />
+        <p className="text-xs text-slate-500">
+          Runs when a company is created (any status, since prospects receive proposals) and again when an older company becomes a customer. A Better Proposals company with the same name is linked instead of duplicated. Contacts cannot be pushed on their own: the API has no contact endpoint, so they are sent as recipients when a proposal is created.
+        </p>
+      </fieldset>
       {!readOnly && <SubmitButton size="sm">Save defaults</SubmitButton>}
     </form>
   );

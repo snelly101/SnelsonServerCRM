@@ -4,7 +4,8 @@ import { LiveBetterProposalsClient } from "./live";
 import type { BetterProposalsClient } from "./types";
 
 export type BpCredentials = { apiToken: string };
-export type BpConfig = { defaultTemplateId?: string; defaultDocumentType?: string; pollMinutes?: number };
+/** `autoCreateCompanies` arrives as the form string "true"/"false". */
+export type BpConfig = { defaultTemplateId?: string; defaultDocumentType?: string; pollMinutes?: number; autoCreateCompanies?: string | boolean };
 
 /**
  * Resolves the adapter to use. A live token always wins; the demo adapter is

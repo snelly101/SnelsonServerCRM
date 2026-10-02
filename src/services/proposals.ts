@@ -1,10 +1,11 @@
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { bpProposals, companies, contacts, contracts, opportunities } from "@/db/schema";
+import { bpProposals, companies, contacts, contracts, opportunities, user } from "@/db/schema";
+import { logger } from "@/lib/logger";
 import { audit, logActivity } from "@/lib/audit";
 import { ActionError } from "@/lib/action-result";
 import { getAppSettings } from "@/lib/settings";
-import { getBetterProposalsClient } from "@/connectors/betterproposals";
+import { getBetterProposalsClient, type BpConfig } from "@/connectors/betterproposals";
 import type { BpProposal } from "@/connectors/betterproposals/types";
 import { createLink, getLink, getLinkByExternal, raiseConflict, recordInboundEvent, runOutbound, runSync, setConnectionConfig, setCredentials, updateConnection, getConnection, markEventProcessed } from "./integrations";
 import { markWon } from "./opportunities";
@@ -105,29 +106,7 @@ export async function createProposalForOpportunity(
   const settings = await getAppSettings();
 
   // Resolve the Better Proposals company: existing link, else create there and link.
-  const companyLink = await getLink("betterproposals", "company", opp.company.id);
-  let bpCompanyRef = companyLink?.externalId;
-  if (!bpCompanyRef) {
-    const { result } = await runOutbound("betterproposals", `bp:company:${opp.company.id}`, "company.create", actorUserId, {
-      requestSummary: { name: opp.company.name },
-      perform: async () => {
-        const created = await resolved.client.createCompany(opp.company.name);
-        return { externalId: created.id, summary: { name: created.name } };
-      },
-      reconcile: async () => {
-        // Look for an existing BP company with the same normalised name before creating a second one.
-        for (let page = 1; page <= 10; page++) {
-          const list = await resolved.client.listCompanies(page, 50);
-          const hit = list.find((c) => normalizeCompanyName(c.name) === normalizeCompanyName(opp.company.name));
-          if (hit) return { externalId: hit.id, summary: { name: hit.name, reconciled: true } };
-          if (list.length < 50) break;
-        }
-        return null;
-      },
-    });
-    bpCompanyRef = result.externalId;
-    await createLink({ provider: "betterproposals", entityType: "company", localId: opp.company.id, externalId: bpCompanyRef, externalName: opp.company.name, source: "created_by_crm" }, actorUserId);
-  }
+  const bpCompanyRef = await ensureBpCompanyForCompany(opp.company.id, actorUserId);
 
   const version = input.version ?? 1;
   const key = `bp:proposal:${input.opportunityId}:${version}`;
@@ -176,6 +155,90 @@ export async function createProposalForOpportunity(
     await logActivity({ type: "proposal", companyId: opp.company.id, entityType: "opportunity", entityId: input.opportunityId, title: `Proposal created in Better Proposals${resolved.mode === "demo" ? " (DEMO)" : ""}: ${fetched?.subjectLine ?? opp.opp.title}`, actorUserId, source: "betterproposals" });
   }
   return { externalId: result.externalId, viewUrl: fetched?.viewUrl ?? null, reused, mode: resolved.mode };
+}
+
+// ---------------------------------------------------------------------------
+// Companies: the CRM pushes a company (name only; that is all the API takes).
+// Contacts have no endpoint of their own and travel as proposal recipients.
+// ---------------------------------------------------------------------------
+async function findBpCompanyByName(client: NonNullable<Awaited<ReturnType<typeof getBetterProposalsClient>>>["client"], name: string) {
+  const norm = normalizeCompanyName(name);
+  for (let page = 1; page <= 20; page++) {
+    const list = await client.listCompanies(page, 50);
+    const hit = list.find((c) => normalizeCompanyName(c.name) === norm);
+    if (hit) return hit;
+    if (list.length < 50) break;
+  }
+  return null;
+}
+
+/**
+ * Returns the Better Proposals company id for a CRM company, creating and
+ * linking one when needed. An existing Better Proposals company with the same
+ * normalised name is linked rather than duplicated; if that one already
+ * belongs to another CRM company, a review item is raised and an error thrown.
+ * Idempotent per company through the outbound ledger.
+ */
+export async function ensureBpCompanyForCompany(companyId: string, actorUserId: string): Promise<string> {
+  const resolved = await getBetterProposalsClient();
+  if (!resolved) throw new ActionError("Better Proposals is not configured. Connect it on the Integrations page.");
+  const existing = await getLink("betterproposals", "company", companyId);
+  if (existing) return existing.externalId;
+  const [co] = await db.select({ id: companies.id, name: companies.name }).from(companies).where(eq(companies.id, companyId)).limit(1);
+  if (!co) throw new ActionError("Company not found.");
+  const match = await findBpCompanyByName(resolved.client, co.name);
+  if (match) {
+    const taken = await getLinkByExternal("betterproposals", "company", match.id);
+    if (taken && taken.localId !== companyId) {
+      await raiseConflict({ provider: "betterproposals", entityType: "company", localId: companyId, externalId: match.id, kind: "ambiguous_match", message: `Better Proposals already has "${match.name}", which is linked to another CRM company. Decide which record is right before creating a second company there.`, details: { match } });
+      throw new ActionError(`Better Proposals already has "${match.name}", linked to another CRM company. A review item was raised; nothing was created.`);
+    }
+    await createLink({ provider: "betterproposals", entityType: "company", localId: companyId, externalId: match.id, externalName: match.name, source: "auto_confirmed" }, actorUserId);
+    await logActivity({ type: "sync", companyId, title: `Linked to existing Better Proposals company "${match.name}"`, actorUserId, source: "betterproposals" });
+    return match.id;
+  }
+  const { result, reused } = await runOutbound("betterproposals", `bp:company:${companyId}`, "company.create", actorUserId, {
+    requestSummary: { name: co.name },
+    perform: async () => {
+      const created = await resolved.client.createCompany(co.name);
+      return { externalId: created.id, summary: { name: created.name } };
+    },
+    reconcile: async () => {
+      const hit = await findBpCompanyByName(resolved.client, co.name);
+      return hit ? { externalId: hit.id, summary: { name: hit.name, reconciled: true } } : null;
+    },
+  });
+  await createLink({ provider: "betterproposals", entityType: "company", localId: companyId, externalId: result.externalId, externalName: co.name, source: "created_by_crm" }, actorUserId);
+  if (!reused) {
+    await audit({ actorUserId, action: "betterproposals.company.create", entityType: "company", entityId: companyId, details: { externalId: result.externalId, name: co.name } });
+    await logActivity({ type: "sync", companyId, title: `Created Better Proposals company "${co.name}"${resolved.mode === "demo" ? " (DEMO)" : ""}`, actorUserId, source: "betterproposals" });
+  }
+  return result.externalId;
+}
+
+/**
+ * Post-commit hook for "a company was created" and "a company became a
+ * customer". Never throws. Does nothing unless the Better Proposals setting
+ * "create companies automatically" is on.
+ */
+export async function autoCreateBpCompany(companyId: string, actorUserId: string | null, reason: string): Promise<{ action: "created" | "skipped" | "failed"; detail?: string }> {
+  try {
+    const resolved = await getBetterProposalsClient();
+    if (!resolved) return { action: "skipped", detail: "Better Proposals not configured" };
+    if (String((resolved.config as BpConfig).autoCreateCompanies) !== "true") return { action: "skipped", detail: "auto-create off" };
+    const [co] = await db.select({ archivedAt: companies.archivedAt }).from(companies).where(eq(companies.id, companyId)).limit(1);
+    if (!co || co.archivedAt) return { action: "skipped", detail: "missing or archived" };
+    if (await getLink("betterproposals", "company", companyId)) return { action: "skipped", detail: "already linked" };
+    const actor = actorUserId ?? (await db.select({ id: user.id }).from(user).where(eq(user.role, "admin")).limit(1))[0]?.id ?? null;
+    if (!actor) return { action: "skipped", detail: "no actor" };
+    await ensureBpCompanyForCompany(companyId, actor);
+    return { action: "created" };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.warn({ err: msg, companyId, reason }, "automatic Better Proposals company creation failed");
+    await logActivity({ type: "sync", companyId, title: `Better Proposals company could not be created automatically: ${msg}`, actorUserId, source: "betterproposals" }).catch(() => undefined);
+    return { action: "failed", detail: msg };
+  }
 }
 
 /** Link an existing Better Proposals proposal (already mirrored) to an opportunity. */

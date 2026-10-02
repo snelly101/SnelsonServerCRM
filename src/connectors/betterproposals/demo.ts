@@ -7,7 +7,10 @@ import type { BetterProposalsClient, BpProposal, CreateProposalInput, CreateProp
  * `testConnection` never reports a connected account.
  */
 const store = new Map<string, BpProposal>();
+/** Companies created through the client (id → name); proposals' company names are listed too. */
+const companyStore = new Map<string, string>();
 let counter = 90000;
+let companyCounter = 0;
 
 function seedDemo() {
   if (store.size) return;
@@ -59,6 +62,8 @@ export function demoAdvance(externalId: string, status: BpProposal["status"], si
 
 export function demoReset() {
   store.clear();
+  companyStore.clear();
+  companyCounter = 0;
 }
 
 export class DemoBetterProposalsClient implements BetterProposalsClient {
@@ -82,13 +87,16 @@ export class DemoBetterProposalsClient implements BetterProposalsClient {
       { id: "demo-tpl-2", name: "Project Proposal (demo)", description: null, isDefault: false },
     ];
   }
-  async listCompanies() {
+  async listCompanies(page = 1, perPage = 50) {
     const names = new Map<string, string>();
-    for (const p of store.values()) if (p.companyName) names.set(p.companyName, `demo-co-${names.size + 1}`);
-    return [...names.entries()].map(([name, id]) => ({ id, name }));
+    for (const p of store.values()) if (p.companyName && ![...companyStore.values()].includes(p.companyName)) names.set(p.companyName, `demo-co-${names.size + 1}`);
+    const all = [...[...companyStore.entries()].map(([id, name]) => ({ id, name })), ...[...names.entries()].map(([name, id]) => ({ id, name }))];
+    return all.slice((page - 1) * perPage, page * perPage);
   }
   async createCompany(name: string) {
-    return { id: `demo-co-${Date.now()}`, name };
+    const id = `demo-co-${++companyCounter}`;
+    companyStore.set(id, name);
+    return { id, name };
   }
   async listMergeTags() {
     return [

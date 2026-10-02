@@ -262,8 +262,15 @@ export async function createCompany(input: CompanyInput, actorUserId: string | n
     }
     return row.id;
   });
+  await afterCompanyCreated(id, actorUserId);
   if (input.status === "customer") await afterBecameCustomer(id, actorUserId, "created as customer");
   return id;
+}
+
+/** Post-commit hook for any new company: the optional Better Proposals company (prospects get proposals, so this does not wait for customer status). Never throws. */
+async function afterCompanyCreated(companyId: string, actorUserId: string | null) {
+  const { autoCreateBpCompany } = await import("./proposals");
+  await autoCreateBpCompany(companyId, actorUserId, "company created");
 }
 
 /**
@@ -278,6 +285,9 @@ export async function afterBecameCustomer(companyId: string, actorUserId: string
   await ensureNinjaOrganizationForCustomer(companyId, actorUserId, reason);
   const { ensurePax8CompanyForCustomer } = await import("./pax8");
   await ensurePax8CompanyForCustomer(companyId, actorUserId, reason);
+  // Companies that predate the Better Proposals setting catch up when they become customers.
+  const { autoCreateBpCompany } = await import("./proposals");
+  await autoCreateBpCompany(companyId, actorUserId, reason);
 }
 
 export async function updateCompany(id: string, input: CompanyInput, actorUserId: string) {

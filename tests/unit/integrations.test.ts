@@ -7,8 +7,8 @@ import { companySchema, contactSchema } from "@/lib/validation";
 import { createContact } from "@/services/contacts";
 import { createOpportunity, listStages } from "@/services/opportunities";
 import { opportunitySchema } from "@/lib/validation-sales";
-import { createLink, getCredentials, getLink, recordInboundEvent, runOutbound, runSync, setCredentials, getConnection, OutboundInFlightError, listSyncRuns } from "@/services/integrations";
-import { createProposalForOpportunity, processAcceptance, syncProposals } from "@/services/proposals";
+import { createLink, getCredentials, getLink, listOpenConflicts, recordInboundEvent, runOutbound, runSync, setCredentials, setConnectionConfig, getConnection, OutboundInFlightError, listSyncRuns } from "@/services/integrations";
+import { createProposalForOpportunity, ensureBpCompanyForCompany, processAcceptance, syncProposals } from "@/services/proposals";
 import { demoAdvance, demoReset } from "@/connectors/betterproposals/demo";
 import { LiveBetterProposalsClient, normaliseProposal } from "@/connectors/betterproposals/live";
 import { HttpClient, HttpError, parseRetryAfter } from "@/lib/integrations/http";
@@ -195,6 +195,40 @@ describe("Better Proposals workflow (demo adapter)", () => {
     // A second version creates a new proposal.
     const v2 = await createProposalForOpportunity({ opportunityId: oppId, contactIds: [contactId], mergeTags: {}, version: 2 }, actor.id);
     expect(v2.externalId).not.toBe(first.externalId);
+  });
+
+  it("company push: off by default, creates and links on company creation when enabled, links an existing Better Proposals company by name, and raises a review item when that one belongs to another CRM company", async () => {
+    const off = await createCompany(companySchema.parse({ name: "Quiet BP Default Ltd" }), actor.id);
+    expect(await getLink("betterproposals", "company", off)).toBeNull();
+
+    await setConnectionConfig("betterproposals", { autoCreateCompanies: "true" }, actor.id);
+    try {
+      // Any new company (prospect included) is pushed.
+      const fresh = await createCompany(companySchema.parse({ name: "Auto BP Prospect Ltd" }), actor.id);
+      const link = await getLink("betterproposals", "company", fresh);
+      expect(link?.source).toBe("created_by_crm");
+      // Idempotent: the manual push returns the same id.
+      expect(await ensureBpCompanyForCompany(fresh, actor.id)).toBe(link!.externalId);
+      // The off-by-default company catches up when it becomes a customer.
+      const { updateCompany } = await import("@/services/companies");
+      await updateCompany(off, companySchema.parse({ name: "Quiet BP Default Ltd", status: "customer" }), actor.id);
+      expect(await getLink("betterproposals", "company", off)).not.toBeNull();
+
+      // Same name already in Better Proposals but unlinked (created there directly): linked, not duplicated.
+      const { DemoBetterProposalsClient } = await import("@/connectors/betterproposals/demo");
+      const bp = await new DemoBetterProposalsClient().createCompany("Pre-Existing BP Co Ltd");
+      const pre = await createCompany(companySchema.parse({ name: "Pre-Existing BP Co Limited" }), actor.id);
+      const preLink = await getLink("betterproposals", "company", pre);
+      expect(preLink).toMatchObject({ externalId: bp.id, source: "auto_confirmed" });
+
+      // Same name again, but that Better Proposals company is now taken: review item, no link, creation refused.
+      const clash = await createCompany(companySchema.parse({ name: "Pre-Existing BP Co" }), actor.id, { skipDuplicateCheck: true });
+      expect(await getLink("betterproposals", "company", clash)).toBeNull();
+      expect((await listOpenConflicts("betterproposals")).some((c) => c.entityType === "company" && c.localId === clash && c.kind === "ambiguous_match")).toBe(true);
+      await expect(ensureBpCompanyForCompany(clash, actor.id)).rejects.toThrow(/linked to another CRM company/);
+    } finally {
+      await setConnectionConfig("betterproposals", { autoCreateCompanies: "false" }, actor.id);
+    }
   });
 
   it("refuses contacts without email and closed opportunities", async () => {
