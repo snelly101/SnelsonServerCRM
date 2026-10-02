@@ -29,7 +29,7 @@ export default async function NinjaOnePage() {
             NinjaOne <Badge tone={conn.demo ? "amber" : conn.status === "connected" ? "green" : conn.status === "not_configured" ? "slate" : "red"}>{conn.demo ? "Demo (not connected)" : conn.status.replace("_", " ")}</Badge>
           </span>
         }
-        description="Read-only. Organisations, locations and devices are mirrored hourly and compared with per-device contract lines. The CRM never changes anything in NinjaOne."
+        description="Organisations, locations and devices are mirrored hourly and compared with per-device contract lines. The CRM changes nothing in NinjaOne, except, when switched on below, creating an organisation for a new customer."
         actions={
           <>
             {canManage && conn.configured && <NinjaTestButton />}
@@ -55,7 +55,7 @@ export default async function NinjaOnePage() {
         <Card title="Connection">
           <DescriptionList
             items={[
-              { label: "Mode", value: conn.demo ? "Demo" : live ? "Live (read-only)" : "Not connected" },
+              { label: "Mode", value: conn.demo ? "Demo" : live ? (conn.managementScope ? "Live (can create organisations)" : "Live (read-only)") : "Not connected" },
               { label: "Instance", value: live ? conn.externalAccountName : null },
               { label: "Region", value: live ? conn.region.toUpperCase() : null },
               { label: "Client ID", value: live ? conn.clientIdMasked : null },
@@ -66,7 +66,7 @@ export default async function NinjaOnePage() {
           />
           {canManage && (
             <div className="mt-4 space-y-3 border-t border-slate-100 pt-4">
-              <NinjaConnectForm region={conn.region} clientIdMasked={conn.clientIdMasked} />
+              <NinjaConnectForm region={conn.region} clientIdMasked={conn.clientIdMasked} managementScope={conn.managementScope} />
               {live && (
                 <ConfirmButton variant="danger-outline" size="sm" action={disconnectAction.bind(null, "ninjaone")} title="Disconnect NinjaOne?" description="Stored credentials are deleted. Mirrored devices and mappings are kept but will go stale." confirmLabel="Disconnect">
                   Disconnect
@@ -77,7 +77,7 @@ export default async function NinjaOnePage() {
         </Card>
 
         <Card title="Counting rules">
-          <NinjaConfigForm billableNodeClasses={conn.effectiveConfig?.billableNodeClasses ?? []} approvedOnly={conn.effectiveConfig?.approvedOnly ?? true} readOnly={!canManage} />
+          <NinjaConfigForm billableNodeClasses={conn.effectiveConfig?.billableNodeClasses ?? []} approvedOnly={conn.effectiveConfig?.approvedOnly ?? true} autoCreateOrganizations={conn.effectiveConfig?.autoCreateOrganizations ?? false} managementScope={conn.managementScope} readOnly={!canManage} />
           <div className="mt-4 border-t border-slate-100 pt-4 text-xs text-slate-500">
             <p className="mb-1 font-medium text-slate-700">How observed counts work</p>
             <ul className="list-disc space-y-0.5 pl-4">

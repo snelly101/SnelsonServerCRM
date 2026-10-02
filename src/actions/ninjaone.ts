@@ -16,7 +16,7 @@ const revalidate = () => {
 export async function connectNinjaOneAction(_prev: ActionResult<unknown> | null, fd: FormData): Promise<ActionResult<{ organisationCount: number }>> {
   return runAction(async () => {
     const u = await requireActionPermission("integration.manage");
-    const input = z.object({ clientId: z.string().trim().min(4).max(200), clientSecret: z.string().trim().min(8).max(500), region: z.enum(["us", "us2", "eu", "ca", "oc"]) }).parse({ clientId: fd.get("clientId"), clientSecret: fd.get("clientSecret"), region: fd.get("region") });
+    const input = z.object({ clientId: z.string().trim().min(4).max(200), clientSecret: z.string().trim().min(8).max(500), region: z.enum(["us", "us2", "eu", "ca", "oc"]), management: z.boolean() }).parse({ clientId: fd.get("clientId"), clientSecret: fd.get("clientSecret"), region: fd.get("region"), management: fd.get("management") === "true" });
     const t = await connectNinjaOne(input, u.id);
     revalidate();
     return { organisationCount: t.ok ? t.organisationCount : 0 };
@@ -82,7 +82,7 @@ export async function saveNinjaConfigAction(_prev: ActionResult<unknown> | null,
   return runAction(async () => {
     const u = await requireActionPermission("integration.manage");
     const classes = fd.getAll("billableNodeClasses[]").map(String).filter(Boolean);
-    await saveNinjaConfig({ billableNodeClasses: z.array(z.string().max(60)).min(1, "Choose at least one device class").parse(classes), approvedOnly: fd.get("approvedOnly") === "true" }, u.id);
+    await saveNinjaConfig({ billableNodeClasses: z.array(z.string().max(60)).min(1, "Choose at least one device class").parse(classes), approvedOnly: fd.get("approvedOnly") === "true", autoCreateOrganizations: fd.get("autoCreateOrganizations") === "true" }, u.id);
     revalidate();
     return undefined;
   });

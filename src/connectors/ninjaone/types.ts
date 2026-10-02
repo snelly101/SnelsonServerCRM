@@ -50,6 +50,9 @@ export type NinjaDeviceHealthRaw = {
   [k: string]: unknown;
 };
 
+/** Body for `POST /v2/organizations` (subset). NinjaOne rejects a duplicate name. */
+export type NinjaOrganizationCreate = { name: string; description?: string; locations?: { name: string; address?: string; description?: string }[] };
+
 export type NinjaCursorReport<T> = { cursor?: { name?: string; offset?: number; count?: number; expires?: number }; results: T[] };
 
 export interface NinjaOneClient {
@@ -61,6 +64,12 @@ export interface NinjaOneClient {
   getDevice(deviceId: number): Promise<NinjaDeviceRaw | null>;
   /** Returns a page of health results and the cursor name for the next page. */
   deviceHealth(cursor?: string, pageSize?: number): Promise<{ results: NinjaDeviceHealthRaw[]; nextCursor: string | null }>;
+  /**
+   * The one write: create an organisation (needs the `management` scope on the
+   * API client). Used only by the opt-in "create when a company becomes a
+   * customer" setting. Throws when the credential lacks the scope.
+   */
+  createOrganization(input: NinjaOrganizationCreate): Promise<NinjaOrganizationRaw>;
   /** Deep link to a device or organisation in the NinjaOne console. */
   consoleUrl(kind: "device" | "organization", id: string | number): string;
 }

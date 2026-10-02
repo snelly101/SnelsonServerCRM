@@ -1,9 +1,10 @@
-import type { NinjaDeviceHealthRaw, NinjaDeviceRaw, NinjaLocationRaw, NinjaOneClient, NinjaOrganizationRaw } from "./types";
+import type { NinjaDeviceHealthRaw, NinjaDeviceRaw, NinjaLocationRaw, NinjaOneClient, NinjaOrganizationCreate, NinjaOrganizationRaw } from "./types";
 
 /**
  * DEMO adapter for NinjaOne: a handful of organisations, locations and
- * devices with realistic last-seen times and health. Read-only like the
- * live client. Never reports as connected.
+ * devices with realistic last-seen times and health. Never reports as
+ * connected. Organisations created through the client are kept in memory
+ * until the next reset.
  */
 const now = Math.floor(Date.now() / 1000);
 const days = (n: number) => now - n * 86400;
@@ -73,10 +74,15 @@ function seed() {
   for (let i = 1; i <= 6; i++) add(106, 1061, i === 1 ? "LINUX_SERVER" : "WINDOWS_WORKSTATION", `SS-${i}`, 0);
 }
 
+const BASE_ORG_COUNT = orgs.length;
+let orgSeq = 200;
+
 export function demoNinjaReset() {
   devices.clear();
   health.clear();
   seq = 5000;
+  for (const o of orgs.splice(BASE_ORG_COUNT)) delete locations[o.id];
+  orgSeq = 200;
   seed();
 }
 export function demoNinjaRemoveDevice(deviceId: number) {
@@ -116,6 +122,14 @@ export class DemoNinjaOneClient implements NinjaOneClient {
     const start = cursor ? Number(cursor) : 0;
     const page = all.slice(start, start + pageSize);
     return { results: page, nextCursor: start + pageSize < all.length ? String(start + pageSize) : null };
+  }
+  async createOrganization(input: NinjaOrganizationCreate) {
+    if (orgs.some((o) => o.name.trim().toLowerCase() === input.name.trim().toLowerCase())) throw new Error(`An organization named "${input.name}" already exists.`);
+    const id = ++orgSeq;
+    const org: NinjaOrganizationRaw = { id, name: input.name, description: input.description, nodeApprovalMode: "AUTOMATIC" };
+    orgs.push(org);
+    locations[id] = (input.locations?.length ? input.locations : [{ name: "Main Office" }]).map((l, i) => ({ id: id * 10 + i + 1, name: l.name, address: l.address, description: l.description }));
+    return org;
   }
   consoleUrl(kind: "device" | "organization", id: string | number) {
     return `https://eu.ninjarmm.com/#/${kind === "device" ? "deviceDashboard" : "customerDashboard"}/${id}/overview`;

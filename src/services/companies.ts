@@ -266,10 +266,16 @@ export async function createCompany(input: CompanyInput, actorUserId: string | n
   return id;
 }
 
-/** Post-commit hook: optional automatic Xero contact (Integrations → Xero → defaults). Dynamic import avoids a module cycle; never throws. */
-async function afterBecameCustomer(companyId: string, actorUserId: string | null, reason: string) {
+/**
+ * Post-commit hook for "this company is now a customer": the optional
+ * automatic Xero contact and NinjaOne organisation (each switched on under its
+ * Integrations page). Dynamic imports avoid module cycles; neither call throws.
+ */
+export async function afterBecameCustomer(companyId: string, actorUserId: string | null, reason: string) {
   const { ensureXeroContactForCustomer } = await import("./xero");
   await ensureXeroContactForCustomer(companyId, actorUserId, reason);
+  const { ensureNinjaOrganizationForCustomer } = await import("./ninjaone");
+  await ensureNinjaOrganizationForCustomer(companyId, actorUserId, reason);
 }
 
 export async function updateCompany(id: string, input: CompanyInput, actorUserId: string) {

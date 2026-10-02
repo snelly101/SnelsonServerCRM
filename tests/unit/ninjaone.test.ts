@@ -2,14 +2,14 @@ import { describe, expect, it, beforeAll, vi } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { billingDiscrepancies, companies, ninjaDevices, ninjaOrganizations, sites } from "@/db/schema";
-import { createCompany } from "@/services/companies";
+import { createCompany, updateCompany } from "@/services/companies";
 import { companySchema } from "@/lib/validation";
 import { createContract } from "@/services/contracts";
 import { contractSchema } from "@/lib/validation-sales";
 import { LiveNinjaOneClient, ninjaTime } from "@/connectors/ninjaone/live";
 import { demoNinjaAddDevice, demoNinjaDeviceIds, demoNinjaRemoveDevice, demoNinjaReset } from "@/connectors/ninjaone/demo";
-import { companyDeviceOverview, deviceFreshness, deviceTotals, importAllOrganizations, importOrganizationAsCompany, linkLocation, linkOrganization, listDevices, listDiscrepancies, ninjaConnectionSummary, ninjaMappingOverview, reviewDiscrepancy, runDiscrepancyCheck, saveNinjaConfig, syncNinjaOne, unlinkOrganization } from "@/services/ninjaone";
-import { getLink, listOpenConflicts } from "@/services/integrations";
+import { companyDeviceOverview, createNinjaOrganizationForCompany, deviceFreshness, deviceTotals, importAllOrganizations, importOrganizationAsCompany, linkLocation, linkOrganization, listDevices, listDiscrepancies, ninjaConnectionSummary, ninjaMappingOverview, reviewDiscrepancy, runDiscrepancyCheck, saveNinjaConfig, syncNinjaOne, unlinkOrganization } from "@/services/ninjaone";
+import { getLink, listOpenConflicts, setConnectionConfig } from "@/services/integrations";
 import { ActionError } from "@/lib/action-result";
 import { makeUser } from "./helpers";
 
@@ -21,7 +21,7 @@ beforeAll(async () => {
   demoNinjaReset();
 });
 
-describe("NinjaOne live client (read-only)", () => {
+describe("NinjaOne live client", () => {
   it("fetches a client_credentials token once for concurrent calls, sends it as Bearer, and re-fetches on 401", async () => {
     let tokenCalls = 0;
     let apiCalls = 0;
@@ -59,8 +59,33 @@ describe("NinjaOne live client (read-only)", () => {
     const health = await client.deviceHealth(undefined, 500);
     expect(health.results[0].healthStatus).toBe("HEALTHY");
     expect(health.nextCursor).toBeNull();
-    // No method on the client performs a write.
-    for (const m of Object.getOwnPropertyNames(LiveNinjaOneClient.prototype)) expect(m).not.toMatch(/create|update|delete|reboot|run|set/i);
+    // The only write is createOrganization, and a read-only credential refuses it before any request is made.
+    for (const m of Object.getOwnPropertyNames(LiveNinjaOneClient.prototype)) if (m !== "createOrganization") expect(m).not.toMatch(/create|update|delete|reboot|run|set/i);
+    expect(client.canManage).toBe(false);
+    const before = fetchImpl.mock.calls.length;
+    await expect(client.createOrganization({ name: "X" })).rejects.toThrow(/Management scope/);
+    expect(fetchImpl.mock.calls.length).toBe(before);
+  });
+
+  it("with the Management scope, requests it in the token and creates an organisation with a POST", async () => {
+    const posted: { url: string; body: unknown }[] = [];
+    const fetchImpl = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      const u = String(url);
+      if (u.endsWith("/ws/oauth/token")) {
+        expect(String(init?.body)).toContain("scope=monitoring+management");
+        return new Response(JSON.stringify({ access_token: "tok", expires_in: 3600 }), { headers: { "content-type": "application/json" } });
+      }
+      expect(init?.method).toBe("POST");
+      posted.push({ url: u, body: JSON.parse(String(init?.body)) });
+      return new Response(JSON.stringify({ id: 321, name: "New Co Ltd", nodeApprovalMode: "AUTOMATIC" }), { headers: { "content-type": "application/json" } });
+    });
+    const client = new LiveNinjaOneClient({ clientId: "id", clientSecret: "secret", region: "eu", scopes: "monitoring management" }, null, async () => {}, fetchImpl as unknown as typeof fetch);
+    expect(client.canManage).toBe(true);
+    const org = await client.createOrganization({ name: "New Co Ltd", locations: [{ name: "Main Office", address: "1 High Street, Leeds, LS1 1AA" }] });
+    expect(org.id).toBe(321);
+    expect(posted).toHaveLength(1);
+    expect(posted[0].url).toBe("https://eu.ninjarmm.com/api/v2/organizations");
+    expect(posted[0].body).toEqual({ name: "New Co Ltd", locations: [{ name: "Main Office", address: "1 High Street, Leeds, LS1 1AA" }] });
   });
 
   it("converts epoch-second timestamps and rejects junk", () => {
@@ -214,6 +239,44 @@ describe("NinjaOne sync, mapping and discrepancies (demo adapter)", () => {
     expect((await listOpenConflicts()).length).toBe(before + 1);
     await syncNinjaOne("manual", admin.id);
     expect((await db.select().from(ninjaOrganizations).where(eq(ninjaOrganizations.orgId, "101")))[0].externalStatus).toBe("active");
+  });
+
+  it("auto-create on customer status: off by default, creates and links when enabled, raises a review item when an organisation looks like the company, and fires on a prospect turning customer", async () => {
+    const off = await createCompany(companySchema.parse({ name: "Quiet Ninja Default Ltd", status: "customer" }), admin.id);
+    expect(await getLink("ninjaone", "company", off)).toBeNull();
+
+    await setConnectionConfig("ninjaone", { autoCreateOrganizations: true }, admin.id);
+    try {
+      // Created as a customer: organisation created with a location from the billing address, mirrored and linked.
+      const fresh = await createCompany(companySchema.parse({ name: "Auto Ninja Customer Ltd", status: "customer", addressLine1: "2 Mill Lane", city: "Leeds", postcode: "LS2 2BB" }), admin.id);
+      const link = await getLink("ninjaone", "company", fresh);
+      expect(link).not.toBeNull();
+      expect(link!.source).toBe("created_by_crm");
+      const [org] = await db.select().from(ninjaOrganizations).where(eq(ninjaOrganizations.orgId, link!.externalId));
+      expect(org).toMatchObject({ name: "Auto Ninja Customer Ltd", externalStatus: "active" });
+      const locs = await db.select().from(db._.fullSchema.ninjaLocations).where(eq(db._.fullSchema.ninjaLocations.orgId, link!.externalId));
+      expect(locs.map((l) => l.address)).toEqual(["2 Mill Lane, Leeds, LS2 2BB, GB"]);
+      // Idempotent: a second call (e.g. a retry) returns the same organisation, no duplicate.
+      expect(await createNinjaOrganizationForCompany(fresh, admin.id)).toBe(link!.externalId);
+      // The next sync keeps the created organisation (the demo tenant now has it).
+      await syncNinjaOne("manual", admin.id);
+      expect((await db.select().from(ninjaOrganizations).where(eq(ninjaOrganizations.orgId, link!.externalId)))[0].externalStatus).toBe("active");
+
+      // A prospect is left alone until it becomes a customer.
+      const prospect = await createCompany(companySchema.parse({ name: "Soon A Ninja Customer Ltd" }), admin.id);
+      expect(await getLink("ninjaone", "company", prospect)).toBeNull();
+      await updateCompany(prospect, companySchema.parse({ name: "Soon A Ninja Customer Ltd", status: "customer" }), admin.id);
+      expect(await getLink("ninjaone", "company", prospect)).not.toBeNull();
+
+      // A similar organisation already in NinjaOne: nothing created, review item instead.
+      const dupe = await createCompany(companySchema.parse({ name: "Ridgeway Architects LLP", status: "customer" }), admin.id);
+      expect(await getLink("ninjaone", "company", dupe)).toBeNull();
+      const review = (await listOpenConflicts("ninjaone")).find((c) => c.entityType === "company" && c.localId === dupe);
+      expect(review).toMatchObject({ kind: "ambiguous_match", externalId: "103" });
+      await expect(createNinjaOrganizationForCompany(dupe, admin.id)).rejects.toThrow(/looks like this company/);
+    } finally {
+      await setConnectionConfig("ninjaone", { autoCreateOrganizations: false }, admin.id);
+    }
   });
 
   it("creates companies from organisations, linking an obvious existing company instead of duplicating; idempotent", async () => {
