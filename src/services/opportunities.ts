@@ -366,8 +366,8 @@ export async function markWon(id: string, actorUserId: string | null, opts?: { c
   const result = tx ? await run(tx) : await db.transaction(run);
   // Only once the outer transaction is committed (when we own it): a won deal may make the company a customer.
   if (!tx && !result.alreadyWon) {
-    const { ensureXeroContactForCustomer } = await import("./xero");
-    await ensureXeroContactForCustomer(result.companyId, actorUserId, "opportunity won");
+    const { afterBecameCustomer } = await import("./companies");
+    await afterBecameCustomer(result.companyId, actorUserId, "opportunity won");
   }
   return result;
 }

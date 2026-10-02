@@ -46,7 +46,7 @@ const REGIONS: { value: string; label: string }[] = [
   { value: "oc", label: "Oceania · oc.ninjarmm.com" },
 ];
 
-export function NinjaConnectForm({ region, clientIdMasked }: { region: string; clientIdMasked: string | null }) {
+export function NinjaConnectForm({ region, clientIdMasked, managementScope }: { region: string; clientIdMasked: string | null; managementScope: boolean }) {
   const [result, formAction] = useActionState(connectNinjaOneAction, null);
   return (
     <form action={formAction} className="space-y-3">
@@ -68,8 +68,9 @@ export function NinjaConnectForm({ region, clientIdMasked }: { region: string; c
           <Input id="n-sec" name="clientSecret" type="password" required autoComplete="new-password" />
         </Field>
       </div>
+      <Checkbox name="management" value="true" defaultChecked={managementScope} label="Allow the CRM to create organisations (also requests the Management scope)" />
       <p className="text-xs text-slate-500">
-        In NinjaOne: Administration → Apps → API → Client app IDs → Add. Choose <strong>API Services (machine-to-machine)</strong>, grant only the <strong>Monitoring</strong> scope, and set the redirect URI to anything (unused). The CRM never requests Management or Control scopes.
+        In NinjaOne: Administration → Apps → API → Client app IDs → Add. Choose <strong>API Services (machine-to-machine)</strong>, grant the <strong>Monitoring</strong> scope (plus <strong>Management</strong> only if the box above is ticked), and set the redirect URI to anything (unused). Without the box the CRM is read-only; with it the only write it ever makes is creating an organisation for a new customer. The Control scope is never requested.
       </p>
       <SubmitButton size="sm">{clientIdMasked ? "Replace credentials" : "Verify and connect"}</SubmitButton>
     </form>
@@ -77,7 +78,7 @@ export function NinjaConnectForm({ region, clientIdMasked }: { region: string; c
 }
 
 
-export function NinjaConfigForm({ billableNodeClasses, approvedOnly, readOnly }: { billableNodeClasses: string[]; approvedOnly: boolean; readOnly: boolean }) {
+export function NinjaConfigForm({ billableNodeClasses, approvedOnly, autoCreateOrganizations, managementScope, readOnly }: { billableNodeClasses: string[]; approvedOnly: boolean; autoCreateOrganizations: boolean; managementScope: boolean; readOnly: boolean }) {
   const [result, formAction] = useActionState(saveNinjaConfigAction, null);
   return (
     <form action={formAction} className="space-y-3">
@@ -91,6 +92,13 @@ export function NinjaConfigForm({ billableNodeClasses, approvedOnly, readOnly }:
         </div>
         <div className="mt-3">
           <Checkbox name="approvedOnly" value="true" defaultChecked={approvedOnly} label="Only count devices NinjaOne has approved (ignore pending / rejected)" />
+        </div>
+        <div className="mt-3 space-y-1">
+          <Checkbox name="autoCreateOrganizations" value="true" defaultChecked={autoCreateOrganizations} label="Create a NinjaOne organisation automatically when a company becomes a customer" />
+          <p className="text-xs text-slate-500">
+            Runs when a company is created as, or changed to, <em>customer</em>, including when an opportunity is won. One location (“Main Office”) is created from the billing address. If NinjaOne already has an organisation with a similar name, nothing is created and a review item asks you to link it instead.
+            {!managementScope && <strong className="text-amber-700"> The current credential is read-only: reconnect with “Allow the CRM to create organisations” ticked before this can run.</strong>}
+          </p>
         </div>
       </fieldset>
       {!readOnly && <SubmitButton size="sm">Save and re-check</SubmitButton>}

@@ -1,25 +1,28 @@
 import { and, asc, desc, eq, inArray, isNull, notInArray, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { billingDiscrepancies, companies, contractLines, contracts, ninjaDevices, ninjaLocations, ninjaOrganizations, sites } from "@/db/schema";
+import { billingDiscrepancies, companies, contractLines, contracts, ninjaDevices, ninjaLocations, ninjaOrganizations, sites, user } from "@/db/schema";
 import { audit, logActivity } from "@/lib/audit";
 import { ActionError } from "@/lib/action-result";
+import { logger } from "@/lib/logger";
 import { getAppSettings } from "@/lib/settings";
 import { normalizeCompanyName } from "@/lib/utils";
 import { companySchema } from "@/lib/validation";
 import { createCompany, findDuplicateCompanies } from "./companies";
 import { getNinjaOneClient, type NinjaConfig, type NinjaCredentials } from "@/connectors/ninjaone";
-import { LiveNinjaOneClient, ninjaTime } from "@/connectors/ninjaone/live";
+import { LiveNinjaOneClient, NINJA_SCOPES, ninjaTime } from "@/connectors/ninjaone/live";
 import type { NinjaDeviceRaw, NinjaRegion } from "@/connectors/ninjaone/types";
-import { createLink, getConnection, getLink, listLinks, raiseConflict, removeLink, runSync, setConnectionConfig, setCredentials, updateConnection } from "./integrations";
+import { createLink, getConnection, getLink, listLinks, raiseConflict, removeLink, runOutbound, runSync, setConnectionConfig, setCredentials, updateConnection } from "./integrations";
 
 // ---------------------------------------------------------------------------
 // Connection (credentials entered in the UI, verified before storage)
 // ---------------------------------------------------------------------------
-export async function connectNinjaOne(input: { clientId: string; clientSecret: string; region: NinjaRegion }, actorUserId: string) {
-  const client = new LiveNinjaOneClient(input, null, async () => {});
+export async function connectNinjaOne(input: { clientId: string; clientSecret: string; region: NinjaRegion; management?: boolean }, actorUserId: string) {
+  // The scope set is fixed at connect time: Management is only requested when asked for, and the token request fails if the API client was not granted it.
+  const scopes = input.management ? NINJA_SCOPES.management : NINJA_SCOPES.readOnly;
+  const client = new LiveNinjaOneClient({ ...input, scopes }, null, async () => {});
   const test = await client.testConnection();
-  if (!test.ok) throw new ActionError(`Could not verify the credentials: ${test.error}`);
-  await setCredentials("ninjaone", { clientId: input.clientId, clientSecret: input.clientSecret, region: input.region }, actorUserId, { status: "connected", externalAccountName: `${input.region.toUpperCase()} instance (${test.organisationCount}+ organisations)`, externalAccountId: input.clientId, lastTestedAt: new Date(), lastError: null, consecutiveFailures: 0, pausedUntil: null });
+  if (!test.ok) throw new ActionError(`Could not verify the credentials: ${test.error}${input.management ? " (if the error mentions scope, grant the Management scope to the API client in NinjaOne or untick the option)" : ""}`);
+  await setCredentials("ninjaone", { clientId: input.clientId, clientSecret: input.clientSecret, region: input.region, scopes }, actorUserId, { status: "connected", externalAccountName: `${input.region.toUpperCase()} instance (${test.organisationCount}+ organisations)`, externalAccountId: input.clientId, lastTestedAt: new Date(), lastError: null, consecutiveFailures: 0, pausedUntil: null });
   return test;
 }
 
@@ -36,7 +39,7 @@ export async function ninjaConnectionSummary() {
   const conn = await getConnection("ninjaone");
   const resolved = await getNinjaOneClient();
   const creds = resolved?.mode === "live" ? await (await import("./integrations")).getCredentials<NinjaCredentials>("ninjaone") : null;
-  return { ...conn, credentialsEnc: undefined, config: (conn.config ?? {}) as NinjaConfig, effectiveConfig: resolved?.config ?? null, mode: resolved?.mode ?? null, configured: Boolean(resolved), demo: resolved?.mode === "demo", region: creds?.region ?? "eu", clientIdMasked: creds?.clientId ? `••••${creds.clientId.slice(-4)}` : null };
+  return { ...conn, credentialsEnc: undefined, config: (conn.config ?? {}) as NinjaConfig, effectiveConfig: resolved?.config ?? null, mode: resolved?.mode ?? null, configured: Boolean(resolved), demo: resolved?.mode === "demo", region: creds?.region ?? "eu", managementScope: (creds?.scopes ?? NINJA_SCOPES.readOnly).split(" ").includes("management"), clientIdMasked: creds?.clientId ? `••••${creds.clientId.slice(-4)}` : null };
 }
 
 // ---------------------------------------------------------------------------
@@ -394,7 +397,7 @@ export async function reviewDiscrepancy(id: string, status: "accepted" | "dismis
   await logActivity({ type: licence ? "sync" : "device", companyId: d.companyId, entityType: "contract", entityId: d.contractId, title: `${licence ? "Licence" : "Device"} discrepancy ${status}: ${d.lineDescription} (contracted ${d.contractedQty}, observed ${d.observedQty})`, body: note, actorUserId, source: d.source });
 }
 
-export async function saveNinjaConfig(input: { billableNodeClasses: string[]; approvedOnly: boolean }, actorUserId: string) {
+export async function saveNinjaConfig(input: { billableNodeClasses: string[]; approvedOnly: boolean; autoCreateOrganizations?: boolean }, actorUserId: string) {
   await setConnectionConfig("ninjaone", input, actorUserId);
   await runDiscrepancyCheck(actorUserId);
 }
@@ -430,6 +433,126 @@ export async function importOrganizationAsCompany(orgId: string, actorUserId: st
   await linkOrganization(orgId, companyId, actorUserId);
   await audit({ actorUserId, action: "ninjaone.organization.import", entityType: "company", entityId: companyId, details: { orgId, name: o.name } });
   return { orgId, name: o.name, action: "created", companyId };
+}
+
+// ---------------------------------------------------------------------------
+// Create: a NinjaOne organisation for a CRM company (the integration's one write)
+// ---------------------------------------------------------------------------
+/** Organisations in the mirror that look like this company (exact normalised name, or one name containing the other). */
+async function likelyNinjaMatches(companyName: string) {
+  const norm = normalizeCompanyName(companyName);
+  if (!norm) return [];
+  const rows = await db.select({ orgId: ninjaOrganizations.orgId, name: ninjaOrganizations.name, normalizedName: ninjaOrganizations.normalizedName }).from(ninjaOrganizations).where(eq(ninjaOrganizations.externalStatus, "active"));
+  return rows
+    .map((o) => ({ ...o, score: o.normalizedName === norm ? 2 : o.normalizedName.length >= 6 && norm.length >= 6 && (o.normalizedName.includes(norm) || norm.includes(o.normalizedName)) ? 1 : 0 }))
+    .filter((o) => o.score > 0)
+    .sort((a, b) => b.score - a.score);
+}
+
+/**
+ * Creates the organisation in NinjaOne with one location from the billing
+ * address, mirrors it, and links the company. Idempotent per company through
+ * the outbound ledger; a retry after a timeout reconciles by exact name.
+ * Refuses when the company is already linked or an organisation looks like it.
+ */
+export async function createNinjaOrganizationForCompany(companyId: string, actorUserId: string) {
+  const resolved = await getNinjaOneClient();
+  if (!resolved) throw new ActionError("NinjaOne is not configured.");
+  if (resolved.mode === "live" && !(resolved.client as LiveNinjaOneClient).canManage) throw new ActionError("The NinjaOne credential has no Management scope. Reconnect with \"Allow the CRM to create organisations\" ticked.");
+  const [co] = await db.select().from(companies).where(eq(companies.id, companyId)).limit(1);
+  if (!co) throw new ActionError("Company not found.");
+  const existing = await getLink("ninjaone", "company", companyId);
+  if (existing) return existing.externalId;
+  const matches = await likelyNinjaMatches(co.name);
+  if (matches.length) throw new ActionError(`NinjaOne already has "${matches[0].name}", which looks like this company. Link it from the mapping table instead.`);
+  const address = [co.addressLine1, co.addressLine2, co.city, co.postcode, co.country].filter((v): v is string => Boolean(v && v.trim())).join(", ");
+  const { result } = await runOutbound(
+    "ninjaone",
+    `ninjaone:organization:${companyId}`,
+    "organization.create",
+    actorUserId,
+    {
+      requestSummary: { name: co.name },
+      perform: async () => {
+        const org = await resolved.client.createOrganization({ name: co.name, locations: [{ name: "Main Office", address: address || undefined }] });
+        return { externalId: String(org.id), summary: { id: org.id, name: org.name }, raw: org };
+      },
+      reconcile: async () => {
+        for (let after = 0, page = 0; page < 200; page++) {
+          const batch = await resolved.client.listOrganizations(after, 200);
+          const hit = batch.find((o) => o.name.trim().toLowerCase() === co.name.trim().toLowerCase());
+          if (hit) return { externalId: String(hit.id), summary: { id: hit.id, name: hit.name }, raw: hit };
+          if (batch.length < 200) break;
+          after = batch[batch.length - 1].id;
+        }
+        return null;
+      },
+    },
+  );
+  const orgId = result.externalId;
+  const now = new Date();
+  const raw = result.raw ?? { id: Number(orgId), name: co.name };
+  await db
+    .insert(ninjaOrganizations)
+    .values({ orgId, name: raw.name, normalizedName: normalizeCompanyName(raw.name), description: raw.description ?? null, nodeApprovalMode: raw.nodeApprovalMode ?? null, externalStatus: "active", raw: raw as Record<string, unknown>, fetchedAt: now, updatedAt: now })
+    .onConflictDoNothing();
+  try {
+    for (const l of await resolved.client.listLocations(Number(orgId))) {
+      await db.insert(ninjaLocations).values({ locationId: String(l.id), orgId, name: l.name, address: l.address ?? null, externalStatus: "active", raw: l as Record<string, unknown>, fetchedAt: now }).onConflictDoNothing();
+    }
+  } catch (err) {
+    logger.warn({ err: err instanceof Error ? err.message : String(err), orgId }, "could not mirror locations of the new NinjaOne organisation; the hourly sync will");
+  }
+  if (!(await getLink("ninjaone", "company", companyId))) {
+    await createLink({ provider: "ninjaone", entityType: "company", localId: companyId, externalId: orgId, externalName: raw.name, externalType: "organization", source: "created_by_crm" }, actorUserId);
+  }
+  await logActivity({ type: "device", companyId, title: `Created NinjaOne organisation "${raw.name}"`, actorUserId, source: "ninjaone" });
+  await audit({ actorUserId, action: "ninjaone.organization.create", entityType: "company", entityId: companyId, details: { orgId, name: raw.name } });
+  return orgId;
+}
+
+/**
+ * Post-commit hook for "a company became a customer". Never throws: the
+ * company change that triggered it has already been committed. Does nothing
+ * unless the NinjaOne setting is on.
+ */
+export async function ensureNinjaOrganizationForCustomer(companyId: string, actorUserId: string | null, reason: string): Promise<{ action: "created" | "review" | "skipped" | "failed"; detail?: string }> {
+  try {
+    const resolved = await getNinjaOneClient();
+    if (!resolved) return { action: "skipped", detail: "NinjaOne not configured" };
+    if (!resolved.config.autoCreateOrganizations) return { action: "skipped", detail: "auto-create off" };
+    const [co] = await db.select().from(companies).where(eq(companies.id, companyId)).limit(1);
+    if (!co || co.archivedAt || co.status !== "customer") return { action: "skipped", detail: "not an active customer" };
+    if (await getLink("ninjaone", "company", companyId)) return { action: "skipped", detail: "already linked" };
+    if (resolved.mode === "live" && !(resolved.client as LiveNinjaOneClient).canManage) {
+      await logActivity({ type: "sync", companyId, title: "NinjaOne organisation not created automatically: the credential has no Management scope (reconnect NinjaOne with it ticked)", actorUserId, source: "ninjaone" });
+      return { action: "skipped", detail: "no management scope" };
+    }
+    const matches = await likelyNinjaMatches(co.name);
+    if (matches.length) {
+      const m = matches[0];
+      await raiseConflict({
+        provider: "ninjaone",
+        entityType: "company",
+        localId: companyId,
+        externalId: m.orgId,
+        kind: "ambiguous_match",
+        message: `"${co.name}" became a customer (${reason}) but NinjaOne already has "${m.name}". Link it from the NinjaOne page, or create the organisation there if it really is a different business. Nothing was created automatically.`,
+        details: { reason, match: m },
+      });
+      await logActivity({ type: "sync", companyId, title: `NinjaOne organisation not created automatically: "${m.name}" looks like this company; review item raised`, actorUserId, source: "ninjaone" });
+      return { action: "review", detail: m.name };
+    }
+    const actor = actorUserId ?? (await db.select({ id: user.id }).from(user).where(eq(user.role, "admin")).limit(1))[0]?.id ?? null;
+    if (!actor) return { action: "skipped", detail: "no actor" };
+    await createNinjaOrganizationForCompany(companyId, actor);
+    return { action: "created" };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.warn({ err: msg, companyId }, "automatic NinjaOne organisation creation failed");
+    await logActivity({ type: "sync", companyId, title: `NinjaOne organisation could not be created automatically: ${msg}`, actorUserId, source: "ninjaone" }).catch(() => undefined);
+    return { action: "failed", detail: msg };
+  }
 }
 
 export async function importAllOrganizations(actorUserId: string) {
