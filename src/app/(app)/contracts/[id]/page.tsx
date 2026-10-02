@@ -110,7 +110,14 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
                         {l.revenueType === "recurring" && <span className="text-xs"> · {FREQUENCY_LABELS[l.billingFrequency]}</span>}
                       </td>
                       <td className="text-slate-600">{l.siteName ?? "All"}</td>
-                      <td className="text-right tabular-nums font-medium">{Number(l.quantity)}</td>
+                      <td className="text-right tabular-nums font-medium">
+                        {Number(l.quantity)}
+                        {l.previousQuantity !== null && l.quantityChangedOn && (
+                          <div className="text-[11px] font-normal text-amber-700" title="Pro-rated on the next invoice">
+                            was {Number(l.previousQuantity)} until {fmtDate(l.quantityChangedOn, settings)}
+                          </div>
+                        )}
+                      </td>
                       <td className="text-right tabular-nums">{fmtMoney(l.unitPrice, c)}</td>
                       <td className="text-right tabular-nums">{fmtMoney(Number(l.quantity) * Number(l.unitPrice), c)}</td>
                     </tr>
@@ -170,7 +177,7 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
                 { label: "Renewal", value: fmtDate(contract.renewalDate, settings) },
                 { label: "Notice period", value: `${contract.noticePeriodDays} days (by ${fmtDate(contract.noticeDeadline, settings)})` },
                 { label: "Auto-renew", value: contract.autoRenew ? "Yes" : "No" },
-                { label: "Billing", value: FREQUENCY_LABELS[contract.billingFrequency] },
+                { label: "Billing", value: `${FREQUENCY_LABELS[contract.billingFrequency]}${contract.billingDay ? `, periods from the ${contract.billingDay}${[1, 21].includes(contract.billingDay) ? "st" : [2, 22].includes(contract.billingDay) ? "nd" : [3, 23].includes(contract.billingDay) ? "rd" : "th"}` : ", periods from the start date"}` },
                 { label: "Next review", value: fmtDate(contract.nextReviewDate, settings) },
                 { label: "Review interval", value: `${contract.reviewIntervalMonths} months` },
                 { label: "Owner", value: contract.ownerName },

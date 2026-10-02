@@ -7,11 +7,12 @@ import { logger } from "@/lib/logger";
 import { ActionError } from "@/lib/action-result";
 import { getAppSettings } from "@/lib/settings";
 import { extractDomain, normalizeCompanyName } from "@/lib/utils";
+import { billingPeriodFor, buildContractInvoiceLines, manualPeriod, PERIOD_MONTHS, type PreviousInvoice } from "@/lib/billing";
+import { differenceInCalendarDays, parseISO, subDays } from "date-fns";
 import { getXeroClient, type XeroConfig, type XeroCredentials } from "@/connectors/xero";
 import { buildAuthorizeUrl, exchangeCode, listTenants, xeroAppConfig, xeroDate, xeroDateOnly } from "@/connectors/xero/live";
 import type { XeroContactRaw, XeroInvoiceRaw, XeroItemRaw, XeroPaymentRaw, XeroRepeatingInvoiceRaw } from "@/connectors/xero/types";
 import { createLink, getConnection, getCredentials, getLink, getLinkByExternal, listLinks, markEventProcessed, raiseConflict, recordInboundEvent, runOutbound, runSync, setConnectionConfig, setCredentials, updateConnection } from "./integrations";
-import { monthlyValue } from "@/lib/money";
 import { companySchema, contactSchema } from "@/lib/validation";
 import { createCompany, findDuplicateCompanies } from "./companies";
 import { createContact } from "./contacts";
@@ -519,20 +520,32 @@ export async function prepareInvoiceDraft(input: { companyId: string; contractId
   const settings = await getAppSettings();
   const accountCode = cfg.defaultAccountCode ?? "200";
   const taxType = cfg.defaultTaxType ?? "OUTPUT2";
-  const lines: InvoiceDraftLine[] = [];
+  let lines: InvoiceDraftLine[] = [];
   let description = input.description ?? null;
+  let settledPeriodEnd: string | null = null;
   if (input.contractId) {
     const [c] = await db.select().from(contracts).where(eq(contracts.id, input.contractId)).limit(1);
     if (!c) throw new ActionError("Contract not found.");
     const cl = await db.select().from(contractLines).where(eq(contractLines.contractId, input.contractId)).orderBy(contractLines.sortOrder);
-    const months = c.billingFrequency === "annual" ? 12 : c.billingFrequency === "quarterly" ? 3 : 1;
-    for (const l of cl) {
-      if (l.revenueType !== "recurring") continue;
-      const perMonth = monthlyValue({ quantity: l.quantity, unitPrice: l.unitPrice, revenueType: l.revenueType, billingFrequency: l.billingFrequency });
-      const unit = (perMonth * months) / Number(l.quantity || 1);
-      lines.push({ description: `${l.description}${input.periodStart ? ` (${input.periodStart} to ${input.periodEnd ?? ""})` : ""}`, quantity: Number(l.quantity), unitAmount: round(unit), accountCode, taxType });
-    }
+    const months = PERIOD_MONTHS[c.billingFrequency] ?? 1;
+    // The anchored period (so a mid-period start is pro-rated); a hand-typed period that is not an anchored one is billed whole.
+    const today = new Date().toISOString().slice(0, 10);
+    const anchored = billingPeriodFor(c.startDate, c.billingFrequency, input.periodStart ?? today, c.endDate, c.billingDay);
+    const period = input.periodStart && input.periodEnd ? (anchored && anchored.periodStart === input.periodStart && anchored.periodEnd === input.periodEnd ? anchored : manualPeriod(input.periodStart, input.periodEnd)) : anchored;
+    if (!period) throw new ActionError("This contract has no billing period for today: it has not started, has ended, or does not recur. Enter a period.");
+    // The invoice covering the period just before this one, so a quantity change inside it can be caught up.
+    const dayBefore = subDays(parseISO(period.periodStart), 1).toISOString().slice(0, 10);
+    const [prevDraft] = await db
+      .select({ periodStart: invoiceDrafts.periodStart, periodEnd: invoiceDrafts.periodEnd, lines: invoiceDrafts.lines })
+      .from(invoiceDrafts)
+      .where(and(eq(invoiceDrafts.contractId, input.contractId), eq(invoiceDrafts.periodEnd, dayBefore), sql`${invoiceDrafts.status} <> 'cancelled'`))
+      .orderBy(desc(invoiceDrafts.createdAt))
+      .limit(1);
+    const previous: PreviousInvoice | null = prevDraft?.periodStart && prevDraft.periodEnd ? { period: { periodStart: prevDraft.periodStart, periodEnd: prevDraft.periodEnd, fullDays: Math.max(1, differenceInCalendarDays(parseISO(prevDraft.periodEnd), parseISO(prevDraft.periodStart)) + 1) }, lines: prevDraft.lines } : null;
+    lines = buildContractInvoiceLines({ lines: cl, period, months, previous, accountCode, taxType });
     description ??= `${c.name} — ${c.billingFrequency} billing`;
+    settledPeriodEnd = period.periodEnd;
+    input = { ...input, periodStart: period.periodStart, periodEnd: period.periodEnd };
   } else if (input.opportunityId) {
     const [o] = await db.select().from(opportunities).where(eq(opportunities.id, input.opportunityId)).limit(1);
     if (!o) throw new ActionError("Opportunity not found.");
@@ -550,7 +563,11 @@ export async function prepareInvoiceDraft(input: { companyId: string; contractId
   const id = await db.transaction(async (tx) => {
     const [row] = await tx.insert(invoiceDrafts).values({ companyId: input.companyId, contractId: input.contractId ?? null, opportunityId: input.opportunityId ?? null, reference: "pending", description, currencyCode: settings.currency, invoiceDate: today, dueDate: due, periodStart: input.periodStart ?? null, periodEnd: input.periodEnd ?? null, lines, subTotal: String(round(subTotal)), preparedByUserId: actorUserId }).returning({ id: invoiceDrafts.id });
     await tx.update(invoiceDrafts).set({ reference: draftReference(row.id) }).where(eq(invoiceDrafts.id, row.id));
-    await audit({ actorUserId, action: "invoice.prepare", entityType: "invoice_draft", entityId: row.id, details: { companyId: input.companyId, lines: lines.length, subTotal } }, tx);
+    // Quantity changes dated on or before the end of this period are now invoiced; stop carrying them.
+    if (input.contractId && settledPeriodEnd) {
+      await tx.update(contractLines).set({ previousQuantity: null, quantityChangedOn: null }).where(and(eq(contractLines.contractId, input.contractId), sql`${contractLines.quantityChangedOn} <= ${settledPeriodEnd}`));
+    }
+    await audit({ actorUserId, action: "invoice.prepare", entityType: "invoice_draft", entityId: row.id, details: { companyId: input.companyId, lines: lines.length, subTotal, periodStart: input.periodStart ?? null, periodEnd: input.periodEnd ?? null } }, tx);
     return row.id;
   });
   return id;

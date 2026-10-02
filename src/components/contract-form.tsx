@@ -20,6 +20,7 @@ export type ContractFormValues = {
   noticePeriodDays?: number;
   autoRenew?: boolean;
   billingFrequency?: string;
+  billingDay?: number | null;
   nextReviewDate?: string | null;
   reviewIntervalMonths?: number;
   ownerUserId?: string | null;
@@ -122,6 +123,16 @@ export function ContractForm({
             ))}
           </Select>
         </Field>
+        <Field label="Billing day" htmlFor="billingDay" error={e("billingDay")} help="Periods start on this day of the month; a start part-way through is pro-rated on the first invoice.">
+          <Select id="billingDay" name="billingDay" defaultValue={initial.billingDay ? String(initial.billingDay) : ""}>
+            <option value="">On the start date each period</option>
+            {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
+              <option key={d} value={d}>
+                {d}{d === 1 || d === 21 ? "st" : d === 2 || d === 22 ? "nd" : d === 3 || d === 23 ? "rd" : "th"} of the month
+              </option>
+            ))}
+          </Select>
+        </Field>
         <div className="flex items-end pb-2">
           <Checkbox label="Auto-renews at the renewal date" checked={autoRenew} onChange={(ev) => setAutoRenew(ev.target.checked)} />
         </div>
@@ -137,6 +148,11 @@ export function ContractForm({
         <h2 className="mb-2 text-sm font-semibold text-slate-800">Contracted services</h2>
         <p className="mb-3 text-xs text-slate-500">Quantity is the <strong>contracted</strong> (billable) amount. Per-device lines marked for comparison are checked against NinjaOne device counts (Phase 5) and discrepancies are flagged for review, never billed automatically.</p>
         <LinesEditor initial={lines} products={products} currency={currency} showSite sites={sites} quantityLabel="Contracted qty" />
+        {initial.status === "active" && (
+          <Field label="Quantity changes take effect from" htmlFor="quantityEffectiveFrom" className="mt-3 max-w-xs" help="The next invoice bills the old quantity for the period and the increase pro rata from this day. Decreases apply from the next period.">
+            <Input id="quantityEffectiveFrom" name="quantityEffectiveFrom" type="date" defaultValue={today} />
+          </Field>
+        )}
       </section>
 
       <Field label="Notes" htmlFor="notes" error={e("notes")}>

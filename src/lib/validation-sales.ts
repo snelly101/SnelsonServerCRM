@@ -114,6 +114,8 @@ export const contractSchema = z.object({
   noticePeriodDays: z.coerce.number().int().min(0).max(730).default(90),
   autoRenew: boolish.default(true),
   billingFrequency: z.enum(billingFrequencyValues).default("monthly"),
+  /** 1–28 anchors billing periods to that day of the month; empty anchors them to the start date. */
+  billingDay: z.preprocess((v) => (v === "" || v === undefined || v === null ? null : v), z.coerce.number().int().min(1).max(28).nullable()).default(null),
   nextReviewDate: optionalDate,
   reviewIntervalMonths: z.coerce.number().int().min(1).max(36).default(6),
   ownerUserId: optionalUserId,

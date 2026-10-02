@@ -153,6 +153,8 @@ export const contracts = pgTable(
     noticePeriodDays: integer("notice_period_days").notNull().default(90),
     autoRenew: boolean("auto_renew").notNull().default(true),
     billingFrequency: billingFrequencyEnum("billing_frequency").notNull().default("monthly"),
+    // Day of month (1–28) billing periods are anchored to; null anchors them to the start date. A mid-period start is pro-rated.
+    billingDay: integer("billing_day"),
     nextReviewDate: date("next_review_date"),
     reviewIntervalMonths: integer("review_interval_months").notNull().default(6),
     ownerUserId: text("owner_user_id").references(() => user.id, { onDelete: "set null" }),
@@ -184,6 +186,9 @@ export const contractLines = pgTable(
     billingFrequency: billingFrequencyEnum("billing_frequency").notNull().default("monthly"),
     // The contracted (billable) quantity. Observed device counts live in ninja_devices (Phase 5).
     quantity: numeric("quantity", { precision: 12, scale: 2 }).notNull().default("1"),
+    // Set when the quantity changes mid-period: the quantity before the change and the day it took effect. Cleared once a period covering that day has been invoiced.
+    previousQuantity: numeric("previous_quantity", { precision: 12, scale: 2 }),
+    quantityChangedOn: date("quantity_changed_on"),
     unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull().default("0"),
     unitCost: numeric("unit_cost", { precision: 12, scale: 2 }),
     countsAsManagedDevice: boolean("counts_as_managed_device").notNull().default(false),

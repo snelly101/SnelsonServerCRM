@@ -47,6 +47,7 @@ const selectRow = {
   noticePeriodDays: contracts.noticePeriodDays,
   autoRenew: contracts.autoRenew,
   billingFrequency: contracts.billingFrequency,
+  billingDay: contracts.billingDay,
   nextReviewDate: contracts.nextReviewDate,
   updatedAt: contracts.updatedAt,
   lines: linesJson,
@@ -133,6 +134,7 @@ function toValues(input: ContractInput) {
     noticePeriodDays: input.noticePeriodDays,
     autoRenew: input.autoRenew,
     billingFrequency: input.billingFrequency,
+    billingDay: input.billingDay ?? null,
     nextReviewDate: input.nextReviewDate,
     reviewIntervalMonths: input.reviewIntervalMonths,
     ownerUserId: input.ownerUserId,
@@ -140,45 +142,76 @@ function toValues(input: ContractInput) {
   };
 }
 
-async function replaceLines(tx: Tx, contractId: string, lines: ContractLineInput[]) {
-  await tx.delete(contractLines).where(eq(contractLines.contractId, contractId));
-  if (!lines.length) return;
-  await tx.insert(contractLines).values(
-    lines.map((l, i) => ({
-      contractId,
-      productId: l.productId,
-      siteId: l.siteId,
-      description: l.description,
-      revenueType: l.revenueType,
-      pricingModel: l.pricingModel,
-      billingFrequency: l.revenueType === "recurring" ? l.billingFrequency : ("one_off" as const),
-      quantity: String(l.quantity),
-      unitPrice: String(l.unitPrice),
-      unitCost: l.unitCost === null ? null : String(l.unitCost),
-      countsAsManagedDevice: l.pricingModel === "per_device" && l.countsAsManagedDevice,
-      sortOrder: i,
-    })),
-  );
+function lineValues(contractId: string, l: ContractLineInput, i: number) {
+  return {
+    contractId,
+    productId: l.productId,
+    siteId: l.siteId,
+    description: l.description,
+    revenueType: l.revenueType,
+    pricingModel: l.pricingModel,
+    billingFrequency: l.revenueType === "recurring" ? l.billingFrequency : ("one_off" as const),
+    quantity: String(l.quantity),
+    unitPrice: String(l.unitPrice),
+    unitCost: l.unitCost === null ? null : String(l.unitCost),
+    countsAsManagedDevice: l.pricingModel === "per_device" && l.countsAsManagedDevice,
+    sortOrder: i,
+  };
+}
+
+/**
+ * Brings the stored lines in step with the form. Lines that still carry their
+ * id are updated in place so their id (and the invoice history hanging off it)
+ * survives; lines missing from the form are deleted; the rest are inserted.
+ * When `effectiveFrom` is given, a quantity change on an existing recurring
+ * line (or a brand-new recurring line) is remembered as pending pro-rating:
+ * `previousQuantity` keeps the quantity before the first change, and
+ * `quantityChangedOn` the day it took effect, until an invoice covers that day.
+ */
+async function syncLines(tx: Tx, contractId: string, lines: ContractLineInput[], effectiveFrom: string | null) {
+  const existing = await tx.select().from(contractLines).where(eq(contractLines.contractId, contractId));
+  const byId = new Map(existing.map((l) => [l.id, l]));
+  const keep = new Set<string>();
+  for (const [i, l] of lines.entries()) {
+    const values = lineValues(contractId, l, i);
+    const current = l.id ? byId.get(l.id) : undefined;
+    if (current) {
+      keep.add(current.id);
+      let history: { previousQuantity: string | null; quantityChangedOn: string | null } | null = null;
+      if (effectiveFrom && values.revenueType === "recurring" && Number(current.quantity) !== Number(l.quantity)) {
+        const original = current.previousQuantity ?? current.quantity;
+        // Back to the quantity already invoiced: nothing is pending any more.
+        history = Number(original) === Number(l.quantity) ? { previousQuantity: null, quantityChangedOn: null } : { previousQuantity: String(original), quantityChangedOn: current.quantityChangedOn ?? effectiveFrom };
+      }
+      await tx.update(contractLines).set({ ...values, ...(history ?? {}), updatedAt: new Date() }).where(eq(contractLines.id, current.id));
+    } else {
+      const [row] = await tx.insert(contractLines).values({ ...values, ...(effectiveFrom && values.revenueType === "recurring" ? { previousQuantity: "0", quantityChangedOn: effectiveFrom } : {}) }).returning({ id: contractLines.id });
+      keep.add(row.id);
+    }
+  }
+  const gone = existing.filter((l) => !keep.has(l.id)).map((l) => l.id);
+  if (gone.length) await tx.delete(contractLines).where(inArray(contractLines.id, gone));
 }
 
 export async function createContract(input: ContractInput, lines: ContractLineInput[], actorUserId: string) {
   return db.transaction(async (tx) => {
     const [row] = await tx.insert(contracts).values({ ...toValues(input), ownerUserId: input.ownerUserId ?? actorUserId }).returning({ id: contracts.id });
-    await replaceLines(tx, row.id, lines);
+    await syncLines(tx, row.id, lines, null);
     await audit({ actorUserId, action: "contract.create", entityType: "contract", entityId: row.id, details: { name: input.name, status: input.status } }, tx);
     await logActivity({ type: "contract", companyId: input.companyId, entityType: "contract", entityId: row.id, title: `Contract created: ${input.name}`, actorUserId }, tx);
     return row.id;
   });
 }
 
-export async function updateContract(id: string, input: ContractInput, lines: ContractLineInput[] | null, actorUserId: string) {
+export async function updateContract(id: string, input: ContractInput, lines: ContractLineInput[] | null, actorUserId: string, opts?: { quantityEffectiveFrom?: string | null }) {
   const [before] = await db.select().from(contracts).where(eq(contracts.id, id)).limit(1);
   if (!before) throw new ActionError("Contract not found.");
   const next = toValues(input);
   const changes = diffFields(before as unknown as Record<string, unknown>, next as unknown as Record<string, unknown>);
   await db.transaction(async (tx) => {
     await tx.update(contracts).set({ ...next, updatedAt: new Date() }).where(eq(contracts.id, id));
-    if (lines) await replaceLines(tx, id, lines);
+    // Quantity changes on an active contract are dated so the next invoice can pro-rate them; drafts have never been invoiced, so nothing is pending.
+    if (lines) await syncLines(tx, id, lines, before.status === "active" ? (opts?.quantityEffectiveFrom ?? new Date().toISOString().slice(0, 10)) : null);
     await audit({ actorUserId, action: "contract.update", entityType: "contract", entityId: id, details: { changes, linesReplaced: Boolean(lines) } }, tx);
     if (changes.status) await logActivity({ type: "contract", companyId: before.companyId, entityType: "contract", entityId: id, title: `${before.name}: ${changes.status.from} → ${changes.status.to}`, actorUserId }, tx);
   });

@@ -100,6 +100,8 @@ export type InvoiceDraftLine = {
   description: string;
   quantity: number;
   unitAmount: number;
+  /** Contract line this was built from, so the next run can see what was billed. */
+  contractLineId?: string | null;
   accountCode: string;
   taxType: string;
   itemCode?: string | null;
