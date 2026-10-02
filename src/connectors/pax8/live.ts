@@ -5,6 +5,7 @@ import {
   PAX8_CONSOLE,
   PAX8_TOKEN_URL,
   type Pax8Client,
+  type Pax8CompanyCreate,
   type Pax8CompanyRaw,
   type Pax8InvoiceItemRaw,
   type Pax8InvoiceRaw,
@@ -16,11 +17,11 @@ import {
 export type Pax8Token = { accessToken: string; expiresAt: number };
 
 /**
- * Live Pax8 Partner API connector (READ-ONLY).
+ * Live Pax8 Partner API connector.
  * Auth: OAuth 2.0 client_credentials with the client id/secret issued in the
- * Pax8 partner portal (audience api://p8p.client). The class exposes no write
- * methods by design: nothing in the CRM can order, change quantities or
- * cancel subscriptions at Pax8.
+ * Pax8 partner portal (audience api://p8p.client). The only write is
+ * `createCompany` (POST /companies), used by the opt-in auto-create setting:
+ * nothing in the CRM can order, change quantities or cancel subscriptions.
  */
 export class LivePax8Client implements Pax8Client {
   readonly mode = "live" as const;
@@ -172,6 +173,13 @@ export class LivePax8Client implements Pax8Client {
       if (err instanceof HttpError && err.status === 404) return [];
       throw err;
     }
+  }
+
+  async createCompany(input: Pax8CompanyCreate) {
+    const res = await this.http.post<Pax8CompanyRaw>("/companies", input);
+    if (!res.data || typeof res.data.id !== "string" || !res.data.id)
+      throw new Error("Pax8 did not return the created company.");
+    return res.data;
   }
 
   consoleUrl(kind: "company" | "subscription", id: string) {

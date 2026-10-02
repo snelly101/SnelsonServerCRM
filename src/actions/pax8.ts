@@ -7,6 +7,7 @@ import { runAction, type ActionResult } from "@/lib/action-result";
 import {
   applyPax8Cost,
   connectPax8,
+  createPax8CompanyForCompany,
   linkPax8Company,
   runLicenceCheck,
   savePax8Config,
@@ -146,6 +147,17 @@ export async function recheckLicencesAction(): Promise<
   });
 }
 
+export async function createPax8CompanyAction(
+  companyId: string,
+): Promise<ActionResult<{ pax8Id: string }>> {
+  return runAction(async () => {
+    const u = await requireActionPermission("integration.manage");
+    const pax8Id = await createPax8CompanyForCompany(z.uuid().parse(companyId), u.id);
+    revalidate();
+    return { pax8Id };
+  });
+}
+
 export async function savePax8ConfigAction(
   _prev: ActionResult<unknown> | null,
   fd: FormData,
@@ -156,10 +168,12 @@ export async function savePax8ConfigAction(
       .object({
         autoLink: z.boolean(),
         invoiceCount: z.coerce.number().int().min(0).max(24),
+        autoCreateCompanies: z.boolean(),
       })
       .parse({
         autoLink: fd.get("autoLink") === "true",
         invoiceCount: fd.get("invoiceCount"),
+        autoCreateCompanies: fd.get("autoCreateCompanies") === "true",
       });
     await savePax8Config(input, u.id);
     revalidate();

@@ -20,9 +20,11 @@ import {
   pax8Products,
   pax8Subscriptions,
   products,
+  user,
 } from "@/db/schema";
 import { audit, logActivity } from "@/lib/audit";
 import { ActionError } from "@/lib/action-result";
+import { logger } from "@/lib/logger";
 import { normalizeCompanyName } from "@/lib/utils";
 import {
   DEFAULT_PAX8_CONFIG,
@@ -42,6 +44,8 @@ import {
 import { registrableDomain } from "@/connectors/twentyi/types";
 import {
   getConnection,
+  raiseConflict,
+  runOutbound,
   runSync,
   setConnectionConfig,
   setCredentials,
@@ -724,6 +728,278 @@ export async function linkPax8Company(
     source: "pax8",
   });
   await runLicenceCheck(actorUserId, companyId);
+}
+
+// ---------------------------------------------------------------------------
+// Create: a Pax8 company for a CRM company (the integration's one write)
+// ---------------------------------------------------------------------------
+/** Pax8 companies in the mirror that look like this CRM company: same registrable domain, same normalised name, or a shared name stem. */
+async function likelyPax8Matches(co: { name: string; domain: string | null }) {
+  const norm = normalizeCompanyName(co.name);
+  const domain = registrableDomain(co.domain);
+  const rows = await db
+    .select({
+      id: pax8Companies.id,
+      pax8Id: pax8Companies.pax8Id,
+      name: pax8Companies.name,
+      normalizedName: pax8Companies.normalizedName,
+      matchDomain: pax8Companies.matchDomain,
+      companyId: pax8Companies.companyId,
+    })
+    .from(pax8Companies)
+    .where(eq(pax8Companies.externalStatus, "active"));
+  const stem = norm.replace(/[^a-z0-9]/g, "").slice(0, 12);
+  return rows
+    .map((r) => {
+      const rs = r.normalizedName.replace(/[^a-z0-9]/g, "");
+      const reason: "domain" | "name" | "similar" | null =
+        domain && r.matchDomain === domain
+          ? "domain"
+          : r.normalizedName === norm
+            ? "name"
+            : stem.length >= 6 &&
+                (rs.startsWith(stem) || stem.startsWith(rs.slice(0, 8)))
+              ? "similar"
+              : null;
+      return { ...r, reason };
+    })
+    .filter((r): r is typeof r & { reason: "domain" | "name" | "similar" } => r.reason !== null)
+    .sort((a, b) => ["domain", "name", "similar"].indexOf(a.reason) - ["domain", "name", "similar"].indexOf(b.reason));
+}
+
+/** Pax8 insists on a full address, phone and website. Returns the labels of whatever is missing. */
+export function pax8MissingFields(co: {
+  addressLine1: string | null;
+  city: string | null;
+  postcode: string | null;
+  country: string | null;
+  phone: string | null;
+  website: string | null;
+}) {
+  const missing: string[] = [];
+  if (!co.addressLine1?.trim()) missing.push("address line 1");
+  if (!co.city?.trim()) missing.push("city");
+  if (!co.postcode?.trim()) missing.push("postcode");
+  if (!co.country?.trim()) missing.push("country");
+  if (!co.phone?.trim()) missing.push("phone");
+  if (!co.website?.trim()) missing.push("website");
+  return missing;
+}
+
+/**
+ * Creates the company at Pax8 from the CRM record (billing address, phone,
+ * website; the CRM id as Pax8's external id), mirrors it and links it.
+ * Idempotent per company through the outbound ledger; after a timeout a retry
+ * reconciles by external id or exact name. Refuses when the company is already
+ * linked, a Pax8 company looks like it, or required fields are missing.
+ */
+export async function createPax8CompanyForCompany(
+  companyId: string,
+  actorUserId: string,
+) {
+  const resolved = await getPax8Client();
+  if (!resolved) throw new ActionError("Pax8 is not configured.");
+  const [co] = await db
+    .select()
+    .from(companies)
+    .where(eq(companies.id, companyId))
+    .limit(1);
+  if (!co) throw new ActionError("Company not found.");
+  const [linked] = await db
+    .select({ pax8Id: pax8Companies.pax8Id })
+    .from(pax8Companies)
+    .where(eq(pax8Companies.companyId, companyId))
+    .limit(1);
+  if (linked) return linked.pax8Id;
+  const matches = await likelyPax8Matches(co);
+  if (matches.length)
+    throw new ActionError(
+      `Pax8 already has "${matches[0].name}", which looks like this company (${matches[0].reason}). Link it from the Pax8 mapping table instead.`,
+    );
+  const missing = pax8MissingFields(co);
+  if (missing.length)
+    throw new ActionError(
+      `Pax8 needs a full address, phone and website. Missing: ${missing.join(", ")}. Fill them in on the company, then try again.`,
+    );
+  const website = /^https?:\/\//i.test(co.website!.trim())
+    ? co.website!.trim()
+    : `https://${co.website!.trim()}`;
+  const body = {
+    name: co.name,
+    address: {
+      street: co.addressLine1!.trim(),
+      street2: co.addressLine2?.trim() || undefined,
+      city: co.city!.trim(),
+      stateOrProvince: co.region?.trim() || co.city!.trim(),
+      postalCode: co.postcode!.trim(),
+      country: co.country!.trim().toUpperCase(),
+    },
+    phone: co.phone!.trim(),
+    website,
+    externalId: companyId,
+    billOnBehalfOfEnabled: false,
+    selfServiceAllowed: false,
+    orderApprovalRequired: false,
+  };
+  const { result } = await runOutbound(
+    "pax8",
+    `pax8:company:${companyId}`,
+    "company.create",
+    actorUserId,
+    {
+      requestSummary: { name: co.name },
+      perform: async () => {
+        const c = await resolved.client.createCompany(body);
+        return { externalId: c.id, summary: { id: c.id, name: c.name }, raw: c };
+      },
+      reconcile: async () => {
+        const all = await resolved.client.listCompanies();
+        const hit =
+          all.find((c) => c.externalId === companyId) ??
+          all.find(
+            (c) => c.name.trim().toLowerCase() === co.name.trim().toLowerCase(),
+          );
+        return hit
+          ? { externalId: hit.id, summary: { id: hit.id, name: hit.name }, raw: hit }
+          : null;
+      },
+    },
+  );
+  const now = new Date();
+  const raw = result.raw ?? {
+    id: result.externalId,
+    name: co.name,
+    website,
+    phone: body.phone,
+    address: body.address,
+    externalId: companyId,
+    status: "Active",
+  };
+  await db
+    .insert(pax8Companies)
+    .values({
+      pax8Id: raw.id,
+      name: raw.name,
+      normalizedName: normalizeCompanyName(raw.name),
+      website: raw.website ?? null,
+      matchDomain: registrableDomain(raw.website),
+      phone: raw.phone ?? null,
+      city: raw.address?.city ?? null,
+      country: raw.address?.country ?? null,
+      externalRef: raw.externalId ?? null,
+      status: raw.status ?? "Active",
+      raw: raw as Record<string, unknown>,
+      companyId,
+      matchSource: "manual",
+      externalStatus: "active",
+      fetchedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: pax8Companies.pax8Id,
+      set: { companyId, matchSource: "manual", externalStatus: "active", fetchedAt: now, updatedAt: now },
+    });
+  await audit({
+    actorUserId,
+    action: "pax8.company.create",
+    entityType: "company",
+    entityId: companyId,
+    details: { pax8Id: raw.id, name: raw.name },
+  });
+  await logActivity({
+    type: "sync",
+    companyId,
+    title: `Created Pax8 company "${raw.name}"`,
+    actorUserId,
+    source: "pax8",
+  });
+  return raw.id;
+}
+
+/**
+ * Post-commit hook for "a company became a customer". Never throws: the
+ * company change that triggered it has already been committed. Does nothing
+ * unless the Pax8 setting is on.
+ */
+export async function ensurePax8CompanyForCustomer(
+  companyId: string,
+  actorUserId: string | null,
+  reason: string,
+): Promise<{ action: "created" | "review" | "skipped" | "failed"; detail?: string }> {
+  try {
+    const resolved = await getPax8Client();
+    if (!resolved) return { action: "skipped", detail: "Pax8 not configured" };
+    if (!resolved.config.autoCreateCompanies)
+      return { action: "skipped", detail: "auto-create off" };
+    const [co] = await db
+      .select()
+      .from(companies)
+      .where(eq(companies.id, companyId))
+      .limit(1);
+    if (!co || co.archivedAt || co.status !== "customer")
+      return { action: "skipped", detail: "not an active customer" };
+    const [linked] = await db
+      .select({ id: pax8Companies.id })
+      .from(pax8Companies)
+      .where(eq(pax8Companies.companyId, companyId))
+      .limit(1);
+    if (linked) return { action: "skipped", detail: "already linked" };
+    const matches = await likelyPax8Matches(co);
+    if (matches.length) {
+      const m = matches[0];
+      await raiseConflict({
+        provider: "pax8",
+        entityType: "company",
+        localId: companyId,
+        externalId: m.pax8Id,
+        kind: "ambiguous_match",
+        message: `"${co.name}" became a customer (${reason}) but Pax8 already has "${m.name}" (matched by ${m.reason}). Link it from the Pax8 page, or create the company there if it really is a different business. Nothing was created automatically.`,
+        details: { reason, match: m },
+      });
+      await logActivity({
+        type: "sync",
+        companyId,
+        title: `Pax8 company not created automatically: "${m.name}" looks like this company; review item raised`,
+        actorUserId,
+        source: "pax8",
+      });
+      return { action: "review", detail: m.name };
+    }
+    const missing = pax8MissingFields(co);
+    if (missing.length) {
+      await logActivity({
+        type: "sync",
+        companyId,
+        title: `Pax8 company not created automatically: Pax8 needs ${missing.join(", ")}. Fill them in, then use "Create in Pax8" on the Subscriptions tab.`,
+        actorUserId,
+        source: "pax8",
+      });
+      return { action: "skipped", detail: `missing ${missing.join(", ")}` };
+    }
+    const actor =
+      actorUserId ??
+      (
+        await db
+          .select({ id: user.id })
+          .from(user)
+          .where(eq(user.role, "admin"))
+          .limit(1)
+      )[0]?.id ??
+      null;
+    if (!actor) return { action: "skipped", detail: "no actor" };
+    await createPax8CompanyForCompany(companyId, actor);
+    return { action: "created" };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.warn({ err: msg, companyId }, "automatic Pax8 company creation failed");
+    await logActivity({
+      type: "sync",
+      companyId,
+      title: `Pax8 company could not be created automatically: ${msg}`,
+      actorUserId,
+      source: "pax8",
+    }).catch(() => undefined);
+    return { action: "failed", detail: msg };
+  }
 }
 
 export async function unlinkPax8Company(

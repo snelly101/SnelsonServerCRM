@@ -3,6 +3,8 @@ import { ExternalLink } from "lucide-react";
 import { Card, EmptyState } from "@/components/ui/page";
 import { Badge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
+import { ConfirmButton } from "@/components/ui/confirm-button";
+import { createPax8CompanyAction } from "@/actions/pax8";
 import { fmtDate, fmtMoney, fmtRelative } from "@/lib/format";
 import type { DisplaySettings } from "@/lib/format";
 import type { companySubscriptionOverview } from "@/services/pax8";
@@ -44,12 +46,23 @@ export function SubscriptionsPanel({
     return (
       <EmptyState
         title="Not linked to a Pax8 company"
-        description="Licences bought through Pax8 appear here once this company is linked to its Pax8 account. Exact domain and name matches link automatically at sync time."
+        description="Licences bought through Pax8 appear here once this company is linked to its Pax8 account. Exact domain and name matches link automatically at sync time. A brand-new customer can be created at Pax8 from the CRM record (full billing address, phone and website required)."
         action={
           canManageIntegrations ? (
-            <ButtonLink href="/integrations/pax8" variant="secondary">
-              Open Pax8 mapping
-            </ButtonLink>
+            <span className="inline-flex flex-wrap items-center justify-center gap-2">
+              <ButtonLink href="/integrations/pax8" variant="secondary">
+                Open Pax8 mapping
+              </ButtonLink>
+              <ConfirmButton
+                variant="secondary"
+                action={createPax8CompanyAction.bind(null, companyId)}
+                title="Create this company at Pax8?"
+                description="A new Pax8 customer company is created from the CRM name, billing address, phone and website, with bill-on-behalf and self-service off, then linked here. Refused if Pax8 already has a company that looks like this one."
+                confirmLabel="Create in Pax8"
+              >
+                Create in Pax8
+              </ConfirmButton>
+            </span>
           ) : undefined
         }
       />

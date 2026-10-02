@@ -18,11 +18,14 @@ export type Pax8Config = {
   autoLink?: boolean;
   /** How many recent partner invoices to mirror for the per-customer cost view (default 3). */
   invoiceCount?: number;
+  /** Create a Pax8 company when a CRM company becomes a customer (default false). */
+  autoCreateCompanies?: boolean;
 };
 
 export const DEFAULT_PAX8_CONFIG: Required<Pax8Config> = {
   autoLink: true,
   invoiceCount: 3,
+  autoCreateCompanies: false,
 };
 
 export async function getPax8Client(): Promise<{
@@ -35,6 +38,8 @@ export async function getPax8Client(): Promise<{
   const config: Required<Pax8Config> = {
     autoLink: raw.autoLink ?? DEFAULT_PAX8_CONFIG.autoLink,
     invoiceCount: raw.invoiceCount ?? DEFAULT_PAX8_CONFIG.invoiceCount,
+    autoCreateCompanies:
+      raw.autoCreateCompanies ?? DEFAULT_PAX8_CONFIG.autoCreateCompanies,
   };
   const creds = await getCredentials<Pax8Credentials>("pax8");
   if (creds?.clientId && creds.clientSecret) {

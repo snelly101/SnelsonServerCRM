@@ -79,7 +79,7 @@ export default async function Pax8Page() {
             </Badge>
           </span>
         }
-        description="Read-only. Customer companies, their subscriptions (Microsoft 365 and other cloud licences), the partner cost per licence and recent Pax8 invoices are mirrored hourly, linked to customers, and compared with the contract line that bills them. The CRM never orders or changes anything at Pax8."
+        description="Customer companies, their subscriptions (Microsoft 365 and other cloud licences), the partner cost per licence and recent Pax8 invoices are mirrored hourly, linked to customers, and compared with the contract line that bills them. The CRM never orders or changes anything at Pax8; when switched on below it only creates a company for a new customer."
         actions={
           <>
             {canManage && conn.configured && <Pax8TestButton />}
@@ -149,7 +149,9 @@ export default async function Pax8Page() {
                 value: conn.demo
                   ? "Demo"
                   : live
-                    ? "Live (read-only)"
+                    ? conn.effectiveConfig.autoCreateCompanies
+                      ? "Live (creates companies for new customers)"
+                      : "Live (read-only)"
                     : "Not connected",
               },
               {
@@ -198,6 +200,7 @@ export default async function Pax8Page() {
           <Pax8ConfigForm
             autoLink={conn.effectiveConfig.autoLink}
             invoiceCount={conn.effectiveConfig.invoiceCount}
+            autoCreateCompanies={conn.effectiveConfig.autoCreateCompanies}
             readOnly={!canManage}
           />
           <div className="mt-4 border-t border-slate-100 pt-4 text-xs text-slate-500">

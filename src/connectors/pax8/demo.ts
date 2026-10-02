@@ -1,6 +1,7 @@
 import {
   PAX8_CONSOLE,
   type Pax8Client,
+  type Pax8CompanyCreate,
   type Pax8CompanyRaw,
   type Pax8InvoiceItemRaw,
   type Pax8InvoiceRaw,
@@ -11,7 +12,8 @@ import {
 /**
  * DEMO adapter for Pax8: a partner account with a handful of customer
  * companies, the licences they hold and the last three partner invoices.
- * Read-only like the live client. Never reports as connected. Names and
+ * Companies created through the client are kept in memory until the next
+ * reset. Never reports as connected. Names and
  * quantities line up with the seed companies and contracts so the matcher
  * and the licence check have something to show: two counts differ from the
  * contract on purpose, two subscriptions have no contract line, and two
@@ -271,11 +273,42 @@ export class DemoPax8Client implements Pax8Client {
     const inv = invoices.find((i) => i.id === invoiceId);
     return inv ? itemsFor(inv) : [];
   }
+  async createCompany(input: Pax8CompanyCreate) {
+    if (
+      companies.some(
+        (c) => c.name.trim().toLowerCase() === input.name.trim().toLowerCase(),
+      )
+    )
+      throw new Error(`A company named "${input.name}" already exists.`);
+    const n = ++createdSeq;
+    const company: Pax8CompanyRaw = {
+      id: `c1a7e2d0-0002-4d8e-9a10-${String(n).padStart(12, "0")}`,
+      name: input.name,
+      website: input.website,
+      phone: input.phone,
+      address: { ...input.address },
+      externalId: input.externalId ?? null,
+      billOnBehalfEnabled: input.billOnBehalfOfEnabled,
+      selfServiceAllowed: input.selfServiceAllowed,
+      orderApprovalRequired: input.orderApprovalRequired,
+      status: "Active",
+    };
+    companies.push(company);
+    return { ...company };
+  }
   consoleUrl(kind: "company" | "subscription", id: string) {
     return kind === "company"
       ? `${PAX8_CONSOLE}/companies/${id}`
       : `${PAX8_CONSOLE}/subscriptions/${id}`;
   }
+}
+
+const BASE_COMPANY_COUNT = companies.length;
+let createdSeq = 0;
+/** Drops companies created through the demo client. */
+export function demoPax8Reset() {
+  companies.splice(BASE_COMPANY_COUNT);
+  createdSeq = 0;
 }
 
 /** Test hooks. */
