@@ -261,6 +261,22 @@ describe("Xero workflow (demo adapter)", () => {
     expect(evs).toHaveLength(1);
   });
 
+  it("the Finance invoice list defaults to newest date first and sorts by any column with nulls last", async () => {
+    const { listXeroInvoices } = await import("@/services/xero");
+    const byDate = await listXeroInvoices({ pageSize: 50 });
+    const dates = byDate.rows.map((r) => r.date).filter((d): d is string => Boolean(d));
+    expect(dates.length).toBeGreaterThan(2);
+    expect([...dates].sort().reverse()).toEqual(dates);
+    const byTotal = await listXeroInvoices({ pageSize: 50, sort: "total", dir: "desc" });
+    const totals = byTotal.rows.map((r) => Number(r.total));
+    expect([...totals].sort((a, b) => b - a)).toEqual(totals);
+    const byCustomer = await listXeroInvoices({ pageSize: 50, sort: "customer", dir: "asc" });
+    const names = byCustomer.rows.map((r) => r.companyName ?? r.contactName ?? "");
+    expect([...names].sort((a, b) => a.localeCompare(b))).toEqual(names);
+    // Unknown sort keys fall back to the default rather than failing.
+    expect((await listXeroInvoices({ pageSize: 5, sort: "nonsense" })).rows.length).toBeGreaterThan(0);
+  });
+
   it("the circuit breaker paused state does not block manual syncs", async () => {
     await updateConnection("xero", { pausedUntil: new Date(Date.now() + 3600_000) });
     expect(await syncXero("schedule")).toBeNull();

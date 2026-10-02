@@ -624,9 +624,26 @@ export async function approveAndCreateInvoice(id: string, actorUserId: string) {
 // ---------------------------------------------------------------------------
 // Queries for Finance and company pages
 // ---------------------------------------------------------------------------
-export async function listXeroInvoices(p: { q?: string; status?: string; companyId?: string; overdueOnly?: boolean; page?: number; pageSize?: number }) {
+const INVOICE_SORT = {
+  date: xeroInvoices.date,
+  due: xeroInvoices.dueDate,
+  number: xeroInvoices.invoiceNumber,
+  customer: sql`coalesce(${companies.name}, ${xeroContacts.name})`,
+  status: xeroInvoices.status,
+  total: xeroInvoices.total,
+  paid: xeroInvoices.amountPaid,
+  outstanding: xeroInvoices.amountDue,
+} as const;
+export type InvoiceSortKey = keyof typeof INVOICE_SORT;
+
+export async function listXeroInvoices(p: { q?: string; status?: string; companyId?: string; overdueOnly?: boolean; page?: number; pageSize?: number; sort?: string; dir?: string }) {
   const page = p.page ?? 1;
   const pageSize = Math.min(p.pageSize ?? 25, 200);
+  // Default: newest invoice date first. Nulls (drafts without a date) always sink to the bottom.
+  const sortKey: InvoiceSortKey = p.sort && p.sort in INVOICE_SORT ? (p.sort as InvoiceSortKey) : "date";
+  const sortCol = INVOICE_SORT[sortKey];
+  const dir = p.dir === "asc" || p.dir === "desc" ? p.dir : "desc";
+  const primary = dir === "desc" ? sql`${sortCol} desc nulls last` : sql`${sortCol} asc nulls last`;
   const conds = [
     eq(xeroInvoices.type, "ACCREC"),
     p.q ? or(sql`${xeroInvoices.invoiceNumber} ilike ${"%" + p.q + "%"}`, sql`${xeroInvoices.reference} ilike ${"%" + p.q + "%"}`, sql`${companies.name} ilike ${"%" + p.q + "%"}`, sql`${xeroContacts.name} ilike ${"%" + p.q + "%"}`) : undefined,
@@ -637,7 +654,7 @@ export async function listXeroInvoices(p: { q?: string; status?: string; company
   const where = and(...(conds as [ReturnType<typeof eq>]));
   const base = () => db.select({ inv: xeroInvoices, companyName: companies.name, contactName: xeroContacts.name }).from(xeroInvoices).leftJoin(companies, eq(companies.id, xeroInvoices.companyId)).leftJoin(xeroContacts, eq(xeroContacts.contactId, xeroInvoices.contactId));
   const [rows, [{ total }]] = await Promise.all([
-    base().where(where).orderBy(desc(xeroInvoices.date), desc(xeroInvoices.invoiceNumber)).limit(pageSize).offset((page - 1) * pageSize),
+    base().where(where).orderBy(primary, desc(xeroInvoices.date), desc(xeroInvoices.invoiceNumber)).limit(pageSize).offset((page - 1) * pageSize),
     db.select({ total: sql<number>`count(*)`.mapWith(Number) }).from(xeroInvoices).leftJoin(companies, eq(companies.id, xeroInvoices.companyId)).leftJoin(xeroContacts, eq(xeroContacts.contactId, xeroInvoices.contactId)).where(where),
   ]);
   return { rows: rows.map((r) => ({ ...r.inv, companyName: r.companyName, contactName: r.contactName })), total, page, pageSize, pageCount: Math.max(1, Math.ceil(total / pageSize)) };
