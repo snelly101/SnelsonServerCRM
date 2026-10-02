@@ -47,11 +47,11 @@ export function Pagination({ page, pageCount, total, pageSize }: { page: number;
   );
 }
 
-export function SortLink({ column, label }: { column: string; label: string }) {
+export function SortLink({ column, label, defaultColumn = "name", defaultDir = "asc" }: { column: string; label: string; defaultColumn?: string; defaultDir?: "asc" | "desc" }) {
   const pathname = usePathname();
   const sp = useSearchParams();
-  const current = sp.get("sort") ?? "name";
-  const dir = sp.get("dir") ?? "asc";
+  const current = sp.get("sort") ?? defaultColumn;
+  const dir = sp.get("dir") ?? defaultDir;
   const next = new URLSearchParams(sp.toString());
   next.set("sort", column);
   next.set("dir", current === column && dir === "asc" ? "desc" : "asc");

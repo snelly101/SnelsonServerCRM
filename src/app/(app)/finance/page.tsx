@@ -8,7 +8,7 @@ import { listSavedViews } from "@/services/settings";
 import { PageHeader, Card, EmptyState, Stat } from "@/components/ui/page";
 import { Badge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
-import { Pagination } from "@/components/ui/pagination";
+import { Pagination, SortLink } from "@/components/ui/pagination";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { ButtonLink } from "@/components/ui/button";
 import { XeroSyncButton } from "../integrations/xero/controls";
@@ -23,7 +23,7 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
   const me = await requirePermission("finance.read");
   const sp = await searchParams;
   const [data, totals, conn, drafts, views, settings] = await Promise.all([
-    listXeroInvoices({ q: param(sp, "q"), status: param(sp, "status"), overdueOnly: param(sp, "overdue") === "1", page: toInt(param(sp, "page"), 1) }),
+    listXeroInvoices({ q: param(sp, "q"), status: param(sp, "status"), overdueOnly: param(sp, "overdue") === "1", page: toInt(param(sp, "page"), 1), sort: param(sp, "sort"), dir: param(sp, "dir") }),
     financeTotals(),
     xeroConnectionSummary(),
     listInvoiceDrafts("all"),
@@ -132,14 +132,14 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
             <table className="tbl">
               <thead>
                 <tr>
-                  <th>Invoice</th>
-                  <th>Customer</th>
-                  <th>Status</th>
-                  <th>Date</th>
-                  <th>Due</th>
-                  <th className="text-right">Total</th>
-                  <th className="text-right">Paid</th>
-                  <th className="text-right">Due</th>
+                  <th><SortLink column="number" label="Invoice" defaultColumn="date" defaultDir="desc" /></th>
+                  <th><SortLink column="customer" label="Customer" defaultColumn="date" defaultDir="desc" /></th>
+                  <th><SortLink column="status" label="Status" defaultColumn="date" defaultDir="desc" /></th>
+                  <th><SortLink column="date" label="Date" defaultColumn="date" defaultDir="desc" /></th>
+                  <th><SortLink column="due" label="Due" defaultColumn="date" defaultDir="desc" /></th>
+                  <th className="text-right"><SortLink column="total" label="Total" defaultColumn="date" defaultDir="desc" /></th>
+                  <th className="text-right"><SortLink column="paid" label="Paid" defaultColumn="date" defaultDir="desc" /></th>
+                  <th className="text-right"><SortLink column="outstanding" label="Due" defaultColumn="date" defaultDir="desc" /></th>
                   <th>Fetched</th>
                 </tr>
               </thead>
