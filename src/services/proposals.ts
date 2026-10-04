@@ -1,6 +1,6 @@
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { bpProposals, companies, contacts, contracts, opportunities, user } from "@/db/schema";
+import { bpProposals, companies, contacts, contracts, opportunities, user, opportunityLines } from "@/db/schema";
 import { logger } from "@/lib/logger";
 import { audit, logActivity } from "@/lib/audit";
 import { ActionError } from "@/lib/action-result";
@@ -426,6 +426,13 @@ export async function processAcceptance(externalId: string, actorUserId: string 
     const { onboardingId, alreadyWon } = await markWon(p.opportunityId, actorUserId, { createOnboarding: true, onboardingSourceKey: `proposal:${externalId}`, source: "betterproposals" }, tx);
     const contractId = await draftContractFromOpportunity(p.opportunityId, actorUserId, tx);
     await tx.update(contracts).set({ externalProposalId: externalId, updatedAt: new Date() }).where(and(eq(contracts.id, contractId), isNull(contracts.externalProposalId)));
+    // Capture the commercial terms the agreement was activated from, and say so if the opportunity was edited after the signature.
+    const [opp] = await tx.select({ updatedAt: opportunities.updatedAt }).from(opportunities).where(eq(opportunities.id, p.opportunityId)).limit(1);
+    const oppLines = await tx.select().from(opportunityLines).where(eq(opportunityLines.opportunityId, p.opportunityId)).orderBy(opportunityLines.sortOrder);
+    const latestEdit = Math.max(opp?.updatedAt?.getTime() ?? 0, ...oppLines.map((l) => l.updatedAt?.getTime() ?? 0));
+    const termsChangedAfterSignature = Boolean(p.signedAt && latestEdit > p.signedAt.getTime() + 60_000);
+    await tx.update(bpProposals).set({ acceptedTerms: { capturedAt: new Date().toISOString(), contractId, lines: oppLines.map((l) => ({ description: l.description, quantity: String(l.quantity), unitPrice: String(l.unitPrice), unitCost: l.unitCost === null ? null : String(l.unitCost), billingFrequency: l.billingFrequency, pricingModel: l.pricingModel, revenueType: l.revenueType })) }, termsChangedAfterSignature }).where(eq(bpProposals.id, p.id));
+    if (termsChangedAfterSignature) await raiseConflict({ provider: "betterproposals", entityType: "opportunity", localId: p.opportunityId, externalId, kind: "terms_changed_after_signature", message: `The opportunity behind "${p.subjectLine ?? externalId}" was edited after it was signed; check the drafted contract against the signed proposal.`, details: { signedAt: p.signedAt?.toISOString() ?? null, latestEdit: new Date(latestEdit).toISOString(), contractId } });
     await tx.update(bpProposals).set({ acceptanceProcessedAt: new Date(), updatedAt: new Date() }).where(eq(bpProposals.id, p.id));
     await audit({ actorUserId, actorType: actorUserId ? "user" : "system", action: "proposal.accepted", entityType: "opportunity", entityId: p.opportunityId, details: { externalId, onboardingId, contractId, alreadyWon } }, tx);
     await logActivity({ type: "proposal", companyId: p.companyId, entityType: "opportunity", entityId: p.opportunityId, title: `Proposal accepted${p.signedBy ? ` by ${p.signedBy}` : ""} — opportunity won, onboarding started, contract drafted`, source: "betterproposals" }, tx);
@@ -438,4 +445,10 @@ export async function bpConnectionSummary() {
   const conn = await getConnection("betterproposals");
   const resolved = await getBetterProposalsClient();
   return { ...conn, credentialsEnc: undefined, mode: resolved?.mode ?? (conn.mode as "live" | "demo"), configured: Boolean(resolved), demo: resolved?.mode === "demo" };
+}
+
+/** The proposal a contract was activated from: signature, captured terms and whether the opportunity changed after signing. */
+export async function proposalForContract(externalProposalId: string) {
+  const [p] = await db.select({ subjectLine: bpProposals.subjectLine, viewUrl: bpProposals.viewUrl, signedAt: bpProposals.signedAt, signedBy: bpProposals.signedBy, acceptedTerms: bpProposals.acceptedTerms, termsChangedAfterSignature: bpProposals.termsChangedAfterSignature }).from(bpProposals).where(eq(bpProposals.externalId, externalProposalId)).limit(1);
+  return p ?? null;
 }

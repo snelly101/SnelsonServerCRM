@@ -118,6 +118,8 @@ export const contractSchema = z.object({
   billingDay: z.preprocess((v) => (v === "" || v === undefined || v === null ? null : v), z.coerce.number().int().min(1).max(28).nullable()).default(null),
   /** Billing commencement in the CRM: uninvoiced periods from this date are proposed as missed. Empty = only the current period. */
   billingFrom: optionalDate,
+  /** Agreement constraint: prices fixed until the renewal date. */
+  priceLockedUntilRenewal: boolish.default(false),
   nextReviewDate: optionalDate,
   reviewIntervalMonths: z.coerce.number().int().min(1).max(36).default(6),
   ownerUserId: optionalUserId,

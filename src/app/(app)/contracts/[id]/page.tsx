@@ -22,6 +22,7 @@ import { FREQUENCY_LABELS, PRICING_LABELS, REVENUE_LABELS } from "@/lib/validati
 import { companyDeviceOverview } from "@/services/ninjaone";
 import { DiscrepancyTable } from "@/app/(app)/devices/discrepancies";
 import { renewalQueue, DECISION_LABELS } from "@/services/renewals";
+import { proposalForContract } from "@/services/proposals";
 import { RenewalDecisionButton, ClearRenewalDecisionButton } from "@/components/renewal-decision";
 
 const STATUS_TONE: Record<string, string> = { draft: "slate", active: "green", expired: "amber", cancelled: "red" };
@@ -33,6 +34,7 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
   if (!contract) notFound();
   const [settings, tasks, owners, devices, renewalRows] = await Promise.all([getAppSettings(), listTasks({ contractId: id, status: "all", pageSize: 100 }), listOwners(), can(me.role, "device.read") ? companyDeviceOverview(contract.companyId) : Promise.resolve(null), contract.status === "active" && contract.renewalDate ? renewalQueue(undefined, { contractId: id }) : Promise.resolve([])]);
   const renewal = renewalRows[0] ?? null;
+  const proposal = contract.externalProposalId ? await proposalForContract(contract.externalProposalId) : null;
   const contractDiscrepancies = devices?.discrepancies.filter((d) => d.contractId === id) ?? [];
   const c = settings.currency;
   const today = new Date().toISOString().slice(0, 10);
@@ -268,12 +270,22 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
                 { label: "Renewal", value: fmtDate(contract.renewalDate, settings) },
                 { label: "Notice period", value: `${contract.noticePeriodDays} days (by ${fmtDate(contract.noticeDeadline, settings)})` },
                 { label: "Auto-renew", value: contract.autoRenew ? "Yes" : "No" },
+                { label: "Prices", value: contract.priceLockedUntilRenewal ? `Fixed until renewal (${fmtDate(contract.renewalDate, settings)})` : "May be reviewed at any time" },
                 { label: "Billing", value: `${FREQUENCY_LABELS[contract.billingFrequency]}${contract.billingDay ? `, periods from the ${contract.billingDay}${[1, 21].includes(contract.billingDay) ? "st" : [2, 22].includes(contract.billingDay) ? "nd" : [3, 23].includes(contract.billingDay) ? "rd" : "th"}` : ", periods from the start date"}` },
                 { label: "Next review", value: fmtDate(contract.nextReviewDate, settings) },
                 { label: "Review interval", value: `${contract.reviewIntervalMonths} months` },
                 { label: "Owner", value: contract.ownerName },
                 { label: "Linked opportunity", value: contract.opportunityId ? <Link href={`/pipeline/${contract.opportunityId}`} className="text-brand-700 hover:underline">Open</Link> : null },
-                { label: "Proposal", value: contract.externalProposalId ?? "Not linked (Phase 3)" },
+                {
+                  label: "Proposal",
+                  value: proposal ? (
+                    <span>
+                      {proposal.viewUrl ? <a href={proposal.viewUrl} target="_blank" rel="noreferrer" className="text-brand-700 hover:underline">{proposal.subjectLine ?? contract.externalProposalId}</a> : (proposal.subjectLine ?? contract.externalProposalId)}
+                      {proposal.signedAt && <span className="text-xs text-slate-500"> · signed {fmtDate(proposal.signedAt, settings)}{proposal.signedBy ? ` by ${proposal.signedBy}` : ""}</span>}
+                      {proposal.termsChangedAfterSignature ? <Badge className="ml-1" tone="red" title="The opportunity's lines were edited after the signature and before the contract was drafted; check the contract against the signed proposal">terms changed after signature</Badge> : proposal.acceptedTerms ? <Badge className="ml-1" tone="green" title="The contract was drafted from the lines captured at acceptance">signed terms captured</Badge> : null}
+                    </span>
+                  ) : (contract.externalProposalId ?? "Not linked"),
+                },
               ]}
             />
             {contract.notes && <p className="mt-4 whitespace-pre-wrap border-t border-slate-100 pt-4 text-sm text-slate-800">{contract.notes}</p>}

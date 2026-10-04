@@ -4,7 +4,7 @@ import { companies, contractLineChanges, contractLines, contracts, invoiceDrafts
 import { audit, diffFields, logActivity } from "@/lib/audit";
 import { ActionError } from "@/lib/action-result";
 import { summariseLines, type RevenueSummary } from "@/lib/money";
-import type { ContractInput, ContractLineInput } from "@/lib/validation-sales";
+import { contractSchema, type ContractInput, type ContractLineInput } from "@/lib/validation-sales";
 import { createTask } from "./tasks";
 
 export type ContractListParams = {
@@ -49,6 +49,7 @@ const selectRow = {
   billingFrequency: contracts.billingFrequency,
   billingDay: contracts.billingDay,
   billingFrom: contracts.billingFrom,
+  priceLockedUntilRenewal: contracts.priceLockedUntilRenewal,
   nextReviewDate: contracts.nextReviewDate,
   updatedAt: contracts.updatedAt,
   lines: linesJson,
@@ -165,6 +166,7 @@ function toValues(input: ContractInput) {
     billingFrequency: input.billingFrequency,
     billingDay: input.billingDay ?? null,
     billingFrom: input.billingFrom ?? null,
+    priceLockedUntilRenewal: input.priceLockedUntilRenewal ?? false,
     nextReviewDate: input.nextReviewDate,
     reviewIntervalMonths: input.reviewIntervalMonths,
     ownerUserId: input.ownerUserId,
@@ -342,3 +344,13 @@ export async function listCompanyContracts(companyId: string) {
 }
 
 export { desc, inArray, tasks };
+
+/** The contract's current terms in the shape the form sends (optional fields as empty strings), so code can update one aspect without touching the rest. */
+export function contractAsInput(c: NonNullable<Awaited<ReturnType<typeof getContract>>>): ContractInput {
+  const s = (v: string | null | undefined) => v ?? "";
+  return contractSchema.parse({ companyId: c.companyId, opportunityId: s(c.opportunityId), name: c.name, reference: s(c.reference), status: c.status, startDate: c.startDate, endDate: s(c.endDate), renewalDate: s(c.renewalDate), noticePeriodDays: c.noticePeriodDays, autoRenew: c.autoRenew, billingFrequency: c.billingFrequency, billingDay: c.billingDay, billingFrom: s(c.billingFrom), priceLockedUntilRenewal: c.priceLockedUntilRenewal, nextReviewDate: s(c.nextReviewDate), reviewIntervalMonths: c.reviewIntervalMonths, ownerUserId: s(c.ownerUserId), notes: s(c.notes) });
+}
+
+export function contractLinesAsInput(c: NonNullable<Awaited<ReturnType<typeof getContract>>>): ContractLineInput[] {
+  return c.lines.map((l) => ({ id: l.id, productId: l.productId, siteId: l.siteId, description: l.description, revenueType: l.revenueType, pricingModel: l.pricingModel, billingFrequency: l.billingFrequency, quantity: Number(l.quantity), unitPrice: Number(l.unitPrice), unitCost: l.unitCost === null ? null : Number(l.unitCost), countsAsManagedDevice: l.countsAsManagedDevice, invoiceSchedule: l.invoiceSchedule as "contract", reductionPolicy: l.reductionPolicy as "next_period" }));
+}

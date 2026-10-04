@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid, jsonb, pgEnum, index, uniqueIndex, integer, numeric } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, uuid, jsonb, pgEnum, index, uniqueIndex, integer, numeric, boolean } from "drizzle-orm/pg-core";
 import { user } from "./auth";
 import { companies, contacts, timestamps } from "./core";
 import { opportunities } from "./sales";
@@ -210,6 +210,10 @@ export const bpProposals = pgTable(
     paidAt: timestamp("paid_at", { withTimezone: true }),
     /** Set once the acceptance workflow (won + onboarding) has run for this proposal. */
     acceptanceProcessedAt: timestamp("acceptance_processed_at", { withTimezone: true }),
+    /** The opportunity's commercial terms as captured when the signature was processed: the version the agreement was activated from. */
+    acceptedTerms: jsonb("accepted_terms").$type<{ capturedAt: string; contractId: string | null; lines: { description: string; quantity: string; unitPrice: string; unitCost: string | null; billingFrequency: string; pricingModel: string; revenueType: string }[] }>(),
+    /** True when the opportunity's lines were edited between the signature and the capture, so the activated terms may not be what was signed. */
+    termsChangedAfterSignature: boolean("terms_changed_after_signature").notNull().default(false),
     raw: jsonb("raw").$type<Record<string, unknown>>(),
     fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
     ...timestamps,
