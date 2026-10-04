@@ -36,19 +36,23 @@ const netOf = (lines: InvoiceDraftLine[]) => round2(lines.reduce((a, l) => a + l
 const UNCHANGED = "Same lines and quantities as the previous invoice";
 
 /** The previous comparable draft for each contract-sourced draft: the one ending the day before its period, else the latest earlier one. */
-async function previousDrafts(rows: { id: string; contractId: string | null; periodStart: string | null }[]) {
-  const contractIds = [...new Set(rows.map((r) => r.contractId).filter((x): x is string => Boolean(x)))];
-  if (!contractIds.length) return new Map<string, { draftId: string; reference: string; periodStart: string; periodEnd: string; lines: InvoiceDraftLine[] }>();
+/** The agreements a draft was built from: one contract, or the set behind a consolidated customer draft. */
+const sourceKey = (d: { contractId: string | null; contractIds: string[] | null }) => (d.contractId ? d.contractId : d.contractIds?.length ? [...d.contractIds].sort().join("+") : null);
+
+async function previousDrafts(rows: { id: string; companyId: string; contractId: string | null; contractIds: string[] | null; periodStart: string | null }[]) {
+  const companyIds = [...new Set(rows.filter((r) => sourceKey(r)).map((r) => r.companyId))];
+  if (!companyIds.length) return new Map<string, { draftId: string; reference: string; periodStart: string; periodEnd: string; lines: InvoiceDraftLine[] }>();
   const all = await db
-    .select({ id: invoiceDrafts.id, contractId: invoiceDrafts.contractId, reference: invoiceDrafts.reference, periodStart: invoiceDrafts.periodStart, periodEnd: invoiceDrafts.periodEnd, lines: invoiceDrafts.lines })
+    .select({ id: invoiceDrafts.id, contractId: invoiceDrafts.contractId, contractIds: invoiceDrafts.contractIds, reference: invoiceDrafts.reference, periodStart: invoiceDrafts.periodStart, periodEnd: invoiceDrafts.periodEnd, lines: invoiceDrafts.lines })
     .from(invoiceDrafts)
-    .where(and(inArray(invoiceDrafts.contractId, contractIds), ne(invoiceDrafts.status, "cancelled")));
+    .where(and(inArray(invoiceDrafts.companyId, companyIds), ne(invoiceDrafts.status, "cancelled")));
   const out = new Map<string, { draftId: string; reference: string; periodStart: string; periodEnd: string; lines: InvoiceDraftLine[] }>();
   for (const r of rows) {
-    if (!r.contractId || !r.periodStart) continue;
+    const key = sourceKey(r);
+    if (!key || !r.periodStart) continue;
     const dayBefore = new Date(Date.parse(r.periodStart) - 86400000).toISOString().slice(0, 10);
     const candidates = all
-      .filter((d) => d.contractId === r.contractId && d.id !== r.id && d.periodStart && d.periodEnd && d.periodStart < r.periodStart!)
+      .filter((d) => sourceKey(d) === key && d.id !== r.id && d.periodStart && d.periodEnd && d.periodStart < r.periodStart!)
       .sort((a, b) => b.periodStart!.localeCompare(a.periodStart!));
     const pick = candidates.find((d) => d.periodEnd === dayBefore) ?? candidates[0];
     if (pick) out.set(r.id, { draftId: pick.id, reference: pick.reference, periodStart: pick.periodStart!, periodEnd: pick.periodEnd!, lines: pick.lines });
@@ -65,14 +69,15 @@ export async function reviewPendingDrafts(currency: string): Promise<DraftReview
     const flags: string[] = [];
     const xeroLinked = linked.get(d.companyId) ?? false;
     const prev = previous.get(d.id) ?? null;
-    if (!d.contractId) flags.push(d.opportunityId ? "Prepared from a proposal, not a contract" : "Hand-prepared draft");
+    const fromContracts = Boolean(d.contractId || d.contractIds?.length);
+    if (!fromContracts) flags.push(d.opportunityId ? "Prepared from a proposal, not a contract" : "Hand-prepared draft");
     if (!xeroLinked) flags.push("Company not linked to a Xero contact");
     if (d.status === "failed") flags.push(`Last approval failed${d.lastError ? `: ${d.lastError}` : ""}`);
     if (d.status === "approved") flags.push("Approval in progress");
     if (d.stale) flags.push("Contract changed after this draft was prepared");
     if (!d.lines.length) flags.push("No lines");
-    const reasons = d.contractId ? explainDifference(d.lines, prev?.lines ?? null, currency, { missed: 0, ownCycleDue: [] }) : [];
-    if (d.contractId && !prev) flags.push("First invoice from the CRM for this contract");
+    const reasons = fromContracts ? explainDifference(d.lines, prev?.lines ?? null, currency, { missed: 0, ownCycleDue: [] }) : [];
+    if (fromContracts && !prev) flags.push(d.contractIds?.length ? "First consolidated invoice for these agreements" : "First invoice from the CRM for this contract");
     const prevNet = prev ? netOf(prev.lines) : null;
     const delta = prevNet === null ? null : round2(Number(d.subTotal) - prevNet);
     const differs = Boolean(prev) && (reasons.some((r) => r !== UNCHANGED) || (delta !== null && Math.abs(delta) >= 0.01));

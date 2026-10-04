@@ -13,6 +13,7 @@ export type ContractFormValues = {
   opportunityId?: string | null;
   name?: string;
   reference?: string | null;
+  purchaseOrderRef?: string | null;
   status?: string;
   startDate?: string;
   endDate?: string | null;
@@ -90,6 +91,9 @@ export function ContractForm({
         </Field>
         <Field label="Reference" htmlFor="reference" error={e("reference")}>
           <Input id="reference" name="reference" defaultValue={initial.reference ?? ""} placeholder="MSA-0042" />
+        </Field>
+        <Field label="Customer PO reference" htmlFor="purchaseOrderRef" error={e("purchaseOrderRef")} help="Carried onto every invoice drafted from this agreement (first line and the customer schedule).">
+          <Input id="purchaseOrderRef" name="purchaseOrderRef" defaultValue={initial.purchaseOrderRef ?? ""} placeholder="PO-2026-118" />
         </Field>
         <Field label="Status" htmlFor="status" error={e("status")}>
           <Select id="status" name="status" defaultValue={initial.status ?? "draft"}>

@@ -47,6 +47,7 @@ export function BillingRunForm({ asOf, rows, currency, settings }: { asOf: strin
                   <td>{c.companyName}</td>
                   <td>
                     {c.contractName}
+                    {c.consolidated > 0 && <Badge className="ml-1" tone="blue">one invoice, {c.consolidated} agreements</Badge>}
                     {c.missed > 0 && <Badge className="ml-1" tone="amber">{c.missed} missed period{c.missed === 1 ? "" : "s"}</Badge>}
                   </td>
                   <td className="text-right tabular-nums">{fmtMoney(c.net, currency)}</td>
@@ -83,6 +84,10 @@ export function BillingRunForm({ asOf, rows, currency, settings }: { asOf: strin
     <form action={formAction} className="space-y-3">
       <FormMessage result={result} />
       <input type="hidden" name="asOf" value={asOf} />
+      <label className="flex items-center gap-2 text-sm text-slate-700">
+        <input type="checkbox" name="consolidate" value="true" defaultChecked className="h-4 w-4 rounded border-slate-300 text-brand-600" />
+        One draft per customer where several agreements are due (lines grouped by agreement; one invoice for the customer)
+      </label>
       {rows.length === 0 ? (
         <p className="text-sm text-slate-500">No active contracts.</p>
       ) : (

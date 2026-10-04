@@ -133,6 +133,10 @@ export const invoiceDrafts = pgTable(
       .notNull()
       .references(() => companies.id, { onDelete: "cascade" }),
     contractId: uuid("contract_id").references(() => contracts.id, { onDelete: "set null" }),
+    /** A consolidated customer draft carries lines from several agreements; `contract_id` is null and these are the agreements it covers. */
+    contractIds: jsonb("contract_ids").$type<string[]>(),
+    /** Customer purchase order reference shown on the invoice (first line) and the customer schedule. */
+    purchaseOrderRef: text("purchase_order_ref"),
     opportunityId: uuid("opportunity_id").references(() => opportunities.id, { onDelete: "set null" }),
     status: invoiceDraftStatusEnum("status").notNull().default("draft"),
     /** CRM reference sent to Xero as `Reference`; used to reconcile after a failed create. */

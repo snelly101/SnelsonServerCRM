@@ -270,6 +270,7 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
                 { label: "Renewal", value: fmtDate(contract.renewalDate, settings) },
                 { label: "Notice period", value: `${contract.noticePeriodDays} days (by ${fmtDate(contract.noticeDeadline, settings)})` },
                 { label: "Auto-renew", value: contract.autoRenew ? "Yes" : "No" },
+                { label: "Customer PO", value: contract.purchaseOrderRef },
                 { label: "Prices", value: contract.priceLockedUntilRenewal ? `Fixed until renewal (${fmtDate(contract.renewalDate, settings)})` : "May be reviewed at any time" },
                 { label: "Billing", value: `${FREQUENCY_LABELS[contract.billingFrequency]}${contract.billingDay ? `, periods from the ${contract.billingDay}${[1, 21].includes(contract.billingDay) ? "st" : [2, 22].includes(contract.billingDay) ? "nd" : [3, 23].includes(contract.billingDay) ? "rd" : "th"}` : ", periods from the start date"}` },
                 { label: "Next review", value: fmtDate(contract.nextReviewDate, settings) },
