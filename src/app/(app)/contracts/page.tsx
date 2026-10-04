@@ -72,19 +72,17 @@ export default async function ContractsPage({ searchParams }: { searchParams: Pr
           { key: "owner", label: "Owner", options: owners.map((o) => ({ value: o.id, label: o.name })) },
           { key: "renewing", label: "Renewing", options: [{ value: "30", label: "within 30 days" }, { value: "60", label: "within 60 days" }, { value: "90", label: "within 90 days" }, { value: "180", label: "within 6 months" }] },
         ]}
+        trailing={
+          <Link href={archived ? "/contracts" : "/contracts?archived=1"} className="text-brand-700 hover:underline">
+            {archived ? "Back to current contracts" : "Show archived"}
+          </Link>
+        }
       />
-      <div className="mb-3 flex items-center justify-between gap-3 text-sm">
-        {archived ? (
-          <span className="text-slate-600">
-            Showing <span className="font-medium text-slate-900">archived</span> contracts. They are excluded from MRR and billing; open one to restore it.
-          </span>
-        ) : (
-          <span />
-        )}
-        <Link href={archived ? "/contracts" : "/contracts?archived=1"} className="text-brand-700 hover:underline">
-          {archived ? "Back to current contracts" : "Show archived"}
-        </Link>
-      </div>
+      {archived && (
+        <p className="mb-3 text-sm text-slate-600">
+          Showing <span className="font-medium text-slate-900">archived</span> contracts. They are excluded from MRR and billing; open one to restore it.
+        </p>
+      )}
       {data.total === 0 ? (
         <EmptyState icon={<BellRing className="h-6 w-6" />} title={archived ? "No archived contracts" : "No contracts match"} description={archived ? "Archived contracts appear here and can be restored from their page." : "Contracts are created from won opportunities or manually."} />
       ) : (
