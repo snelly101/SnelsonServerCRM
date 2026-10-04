@@ -173,7 +173,9 @@ Pax8 is the distributor the MSP buys Microsoft 365 and other cloud subscriptions
 
 **What Pax8 charged for this customer**: a per-customer table of the mirrored partner invoice lines (invoice date, invoice, lines, cost), so partner cost can be compared with what the customer was invoiced.
 
-**Pax8 invoices vs Xero bills** (Pax8 page): an admin picks the Xero supplier contact that is Pax8. Each sync mirrors the recent Pax8 partner invoices and that supplier's Xero purchase bills and matches them, first by a bill reference or number carrying the Pax8 invoice id, then by a unique identical total within ten days. The card lists each Pax8 invoice with its bill, the difference and a state (matched, amount differs, no bill in Xero), plus any supplier bill that no Pax8 invoice explains. Finance can match or unmatch by hand and that decision sticks. Nothing is written to Xero or Pax8; entering and paying bills stays in Xero.
+**Pax8 invoices vs Xero bills** (Pax8 page): an admin picks the Xero supplier contact that is Pax8. Each sync mirrors the recent Pax8 partner invoices and that supplier's Xero purchase bills and matches them, first by a bill reference or number carrying the whole Pax8 invoice id (*by reference*), then by a unique identical total within ten days (*by amount and date*, weaker and shown as such). The card lists each Pax8 invoice with its bill, the difference and a state (total matched, amount differs, no bill in Xero), plus any supplier bill that no Pax8 invoice explains, and states the imported history (bills older than it are outside imported history, not a finding). Finance can match or unmatch by hand and that decision sticks. An admin can import older invoices from a date without duplicating anything.
+
+**Charge-level allocation**: every Pax8 charge line is tied to the customer and the subscription it belongs to, with findings for lines that have no customer (Pax8 company not linked), no matching subscription, or a unit price that differs from the subscription. A Xero bill with line detail is compared line by line by amount; a one-line bill is only ever "total matched". Nothing is written to Xero or Pax8; entering and paying bills stays in Xero.
 
 **Quantity changes from the CRM** (opt-in, admin setting "Allow licence quantity changes at Pax8"): when on, people with `contract.write` get a **Change** button next to each Active subscription's quantity. The dialog shows licences added or removed and the monthly partner-cost impact, requires a reason, and sends the new count to Pax8. The mirror, audit log (`pax8.subscription.quantity`, from/to/reason) and company timeline are updated and the licence check re-runs, so a gap against the contract shows until someone updates the contract line (which then pro-rates per section 4.3). Cancelling and ordering stay in the Pax8 portal; the CRM never does either.
 
@@ -207,7 +209,7 @@ Proposals are built and signed in Better Proposals. The CRM creates the proposal
 
 ## 12. Known gaps and open decisions
 
-- Pax8 reconciliation is invoice-level only: it compares totals, not the individual charge lines of a bill, and only covers the last N Pax8 invoices the mirror holds.
+- Pax8 credits and replacement invoices appear as their own lines or invoices; they are not yet netted against the original charge.
 - Xero's "invoiced vs contracted" comparison still uses normalised MRR rather than the billed-per-frequency figure.
 - 20i hosting counts are not yet compared with contract quantities the way devices and licences are.
 - Decreases in quantity are never credited mid-period (by design; they apply from the next period). Credit notes are not produced by the CRM.

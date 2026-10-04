@@ -7,6 +7,7 @@ import { runAction, type ActionResult } from "@/lib/action-result";
 import {
   applyPax8Cost,
   changePax8SubscriptionQuantity,
+  importPax8InvoicesSince,
   matchPax8Invoice,
   setPax8Supplier,
   connectPax8,
@@ -193,6 +194,19 @@ export async function pushPax8ContactsAction(
   return runAction(async () => {
     const u = await requireActionPermission("integration.manage");
     const r = await pushPax8Contacts(z.uuid().parse(companyId), u.id);
+    revalidate();
+    return r;
+  });
+}
+
+export async function importPax8InvoicesAction(
+  _prev: ActionResult<unknown> | null,
+  fd: FormData,
+): Promise<ActionResult<Awaited<ReturnType<typeof importPax8InvoicesSince>>>> {
+  return runAction(async () => {
+    const u = await requireActionPermission("integration.manage");
+    const fromDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Enter the date as YYYY-MM-DD").parse(fd.get("fromDate"));
+    const r = await importPax8InvoicesSince(fromDate, u.id);
     revalidate();
     return r;
   });

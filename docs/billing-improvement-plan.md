@@ -46,7 +46,14 @@ Still open from this section: dated mappings (a service moving from one line to 
 
 ## Brief section 4: supplier cost through to customer billing
 
-Pax8 reconciliation exists at invoice level. Charge-level allocation, historical import by date range, "outside imported history" versus "no bill", and the finding table (supplier charge without customer, covered service without expected charge, expected charge missing from Xero…) are release 2.
+**Built in 2B** on top of the invoice-level reconciliation:
+
+- **Matching basis in plain language.** Each match is stored as *by reference* (strong), *by amount and date* (weaker, shown in amber) or *by hand*; a hand decision is never replaced. Identifier matching requires the whole id as a token, so a longer number that merely contains it cannot match.
+- **Charge-level allocation.** Every Pax8 invoice line is tied to the customer (through the Pax8 company link) and the subscription (through the Pax8 product), with the findings *no customer*, *no matching subscription*, *price differs from subscription* and *quantity differs* (informational). The reconciliation table shows lines, unallocated money and price findings per invoice; a detail page per invoice lists the charges by customer. A Xero bill with line detail is compared line by line by amount; a one-line bill is reported as total-matched only, never as reconciled line by line.
+- **Imported history.** The card states the stretch of Pax8 invoices held and when they were last fetched. Supplier bills older than the imported history are listed as *outside imported history*, not as a finding. **Import invoices from a date** (admin) brings older invoices and their charge lines in through the same upsert as the sync, so nothing is duplicated and existing hand matches survive; once imported, invoices stay even though the routine sync only refreshes the last N.
+- Older unresolved rows stay visible because mirror rows are never deleted.
+
+Still open: the cross-source finding table (service without coverage, covered service without expected charge, expected charge missing from Xero, actual customer invoice differing from expectation) is release 2C, where the register, the coverage planner and the Xero mirror are read together. Credits and replacement Pax8 invoices are shown as negative or extra lines but not yet netted against the original.
 
 ## Brief section 5: exception-focused workspace
 

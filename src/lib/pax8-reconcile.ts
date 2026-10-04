@@ -34,16 +34,22 @@ const dayDiff = (a: string | null, b: string | null) => {
 };
 const sameMoney = (a: number | null, b: number | null) =>
   a !== null && b !== null && Math.abs(a - b) < 0.005;
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/** The key must appear as a whole token (not inside a longer number), so "inv-2026-10-01" never matches "inv-2026-10-011". */
 const mentions = (hay: string | null, needle: string) =>
-  Boolean(hay && needle && hay.toLowerCase().includes(needle.toLowerCase()));
+  Boolean(hay && needle && new RegExp(`(^|[^A-Za-z0-9])${escapeRe(needle)}([^A-Za-z0-9]|$)`, "i").test(hay));
 
-/** Returns pax8 invoice row id → matched bill id. Each bill is used at most once. */
+/** How a match was made: a bill reference or number carrying the Pax8 id is strong; the same total near the same date is weaker. */
+export type MatchBasis = "reference" | "amount";
+export type BillMatch = { billId: string; basis: MatchBasis };
+
+/** Returns pax8 invoice row id → matched bill and the basis. Each bill is used at most once. */
 export function matchPax8Bills(
   invoices: ReconcilablePax8Invoice[],
   bills: ReconcilableBill[],
   dateWindowDays = PAX8_MATCH_DATE_WINDOW_DAYS,
-): Map<string, string> {
-  const out = new Map<string, string>();
+): Map<string, BillMatch> {
+  const out = new Map<string, BillMatch>();
   const used = new Set<string>();
   const free = () => bills.filter((b) => !used.has(b.invoiceId));
   // Pass 1: explicit references.
@@ -51,7 +57,7 @@ export function matchPax8Bills(
     const keys = [inv.pax8InvoiceId, inv.externalId].filter((k): k is string => Boolean(k && k.length >= 4));
     const hit = free().find((b) => keys.some((k) => mentions(b.reference, k) || mentions(b.invoiceNumber, k)));
     if (hit) {
-      out.set(inv.id, hit.invoiceId);
+      out.set(inv.id, { billId: hit.invoiceId, basis: "reference" });
       used.add(hit.invoiceId);
     }
   }
@@ -60,12 +66,14 @@ export function matchPax8Bills(
     if (out.has(inv.id)) continue;
     const hits = free().filter((b) => sameMoney(b.total, inv.total) && dayDiff(b.date, inv.invoiceDate) <= dateWindowDays);
     if (hits.length === 1) {
-      out.set(inv.id, hits[0].invoiceId);
+      out.set(inv.id, { billId: hits[0].invoiceId, basis: "amount" });
       used.add(hits[0].invoiceId);
     }
   }
   return out;
 }
+
+export const MATCH_BASIS_LABELS: Record<string, string> = { reference: "by reference", amount: "by amount and date", auto: "automatically", manual: "by hand" };
 
 export type ReconcileState = "matched" | "amount_differs" | "no_bill" | "no_pax8_invoice";
 
