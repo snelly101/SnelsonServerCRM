@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Pencil, Archive } from "lucide-react";
+import { Pencil, Archive, ArchiveRestore } from "lucide-react";
 import { requirePermission } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { getAppSettings } from "@/lib/settings";
@@ -68,15 +68,34 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
                   <ButtonLink href={`/contracts/${id}/edit`} variant="secondary">
                     <Pencil className="h-4 w-4" /> Edit
                   </ButtonLink>
-                  <ConfirmButton variant="danger-outline" action={archiveContractAction.bind(null, id)} title="Archive this contract?" description="It will be hidden from lists and excluded from MRR. Nothing is deleted." confirmLabel="Archive">
-                    <Archive className="h-4 w-4" /> Archive
-                  </ConfirmButton>
+                  {contract.archivedAt ? (
+                    <ConfirmButton variant="secondary" action={archiveContractAction.bind(null, id, true)} title="Restore this contract?" description="It returns to the contracts list, MRR and billing." confirmLabel="Restore" successMessage={`${contract.name} restored`}>
+                      <ArchiveRestore className="h-4 w-4" /> Restore
+                    </ConfirmButton>
+                  ) : (
+                    <ConfirmButton
+                      variant="danger-outline"
+                      action={archiveContractAction.bind(null, id)}
+                      title="Archive this contract?"
+                      description="It is hidden from the contracts list, excluded from MRR and skipped by billing. Nothing is deleted and you can restore it later."
+                      confirmLabel="Archive"
+                      successMessage={`${contract.name} archived. Find it under "Show archived" on the contracts list.`}
+                      successHref="/contracts"
+                    >
+                      <Archive className="h-4 w-4" /> Archive
+                    </ConfirmButton>
+                  )}
                 </>
               )}
             </>
           )
         }
       />
+      {contract.archivedAt && (
+        <Alert tone="warn" title="Archived" className="mb-4">
+          This contract was archived on {fmtDate(contract.archivedAt, settings)}. It is hidden from the contracts list, excluded from MRR and skipped by billing.{canWrite && " Use Restore to bring it back."}
+        </Alert>
+      )}
       {contract.status === "active" && contract.noticeDeadline && contract.noticeDeadline <= today && (
         <Alert tone="warn" title="Notice deadline reached" className="mb-4">
           The notice period for the {fmtDate(contract.renewalDate, settings)} renewal ended on {fmtDate(contract.noticeDeadline, settings)}. {contract.autoRenew ? "This contract auto-renews." : "This contract will expire unless renewed."}

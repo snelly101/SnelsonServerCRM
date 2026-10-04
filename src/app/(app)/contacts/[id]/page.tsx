@@ -78,6 +78,7 @@ export default async function ContactPage({
                   title={`Archive ${fullName(contact)}?`}
                   description="The contact is hidden from lists but kept for history."
                   confirmLabel="Archive"
+                  successMessage={`${fullName(contact)} archived`}
                 >
                   <Archive className="h-4 w-4" /> Archive
                 </ConfirmButton>

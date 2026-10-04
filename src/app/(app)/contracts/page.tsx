@@ -24,8 +24,9 @@ export default async function ContractsPage({ searchParams }: { searchParams: Pr
   const me = await requirePermission("contract.read");
   const sp = await searchParams;
   const renew = param(sp, "renewing");
+  const archived = param(sp, "archived") === "1";
   const [data, owners, views, settings, totals] = await Promise.all([
-    listContracts({ q: param(sp, "q"), status: param(sp, "status") ?? "all", ownerUserId: param(sp, "owner"), renewingWithinDays: renew ? Number(renew) : undefined, page: toInt(param(sp, "page"), 1) }),
+    listContracts({ q: param(sp, "q"), status: param(sp, "status") ?? "all", ownerUserId: param(sp, "owner"), renewingWithinDays: renew ? Number(renew) : undefined, archived, page: toInt(param(sp, "page"), 1) }),
     listOwners(),
     listSavedViews(me.id, "contracts"),
     getAppSettings(),
@@ -72,8 +73,20 @@ export default async function ContractsPage({ searchParams }: { searchParams: Pr
           { key: "renewing", label: "Renewing", options: [{ value: "30", label: "within 30 days" }, { value: "60", label: "within 60 days" }, { value: "90", label: "within 90 days" }, { value: "180", label: "within 6 months" }] },
         ]}
       />
+      <div className="mb-3 flex items-center justify-between gap-3 text-sm">
+        {archived ? (
+          <span className="text-slate-600">
+            Showing <span className="font-medium text-slate-900">archived</span> contracts. They are excluded from MRR and billing; open one to restore it.
+          </span>
+        ) : (
+          <span />
+        )}
+        <Link href={archived ? "/contracts" : "/contracts?archived=1"} className="text-brand-700 hover:underline">
+          {archived ? "Back to current contracts" : "Show archived"}
+        </Link>
+      </div>
       {data.total === 0 ? (
-        <EmptyState icon={<BellRing className="h-6 w-6" />} title="No contracts match" description="Contracts are created from won opportunities or manually." />
+        <EmptyState icon={<BellRing className="h-6 w-6" />} title={archived ? "No archived contracts" : "No contracts match"} description={archived ? "Archived contracts appear here and can be restored from their page." : "Contracts are created from won opportunities or manually."} />
       ) : (
         <Card padded={false}>
           <div className="overflow-x-auto">
