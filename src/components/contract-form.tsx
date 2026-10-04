@@ -19,6 +19,7 @@ export type ContractFormValues = {
   renewalDate?: string | null;
   noticePeriodDays?: number;
   autoRenew?: boolean;
+  priceLockedUntilRenewal?: boolean;
   billingFrequency?: string;
   billingDay?: number | null;
   billingFrom?: string | null;
@@ -55,6 +56,7 @@ export function ContractForm({
 }) {
   const [result, formAction] = useActionState<ActionResult<unknown> | null, FormData>(action, null);
   const [autoRenew, setAutoRenew] = useState(initial.autoRenew ?? true);
+  const [priceLocked, setPriceLocked] = useState(initial.priceLockedUntilRenewal ?? false);
   const e = (k: string) => fieldErrors(result, k);
   const today = new Date().toISOString().slice(0, 10);
   return (
@@ -62,6 +64,7 @@ export function ContractForm({
       <FormMessage result={result && !result.ok ? result : null} />
       {initial.opportunityId && <input type="hidden" name="opportunityId" value={initial.opportunityId} />}
       <input type="hidden" name="autoRenew" value={autoRenew ? "true" : "false"} />
+      <input type="hidden" name="priceLockedUntilRenewal" value={priceLocked ? "true" : "false"} />
       <section className="grid gap-4 sm:grid-cols-2">
         <Field label="Contract name" htmlFor="name" required error={e("name")} className="sm:col-span-2">
           <Input id="name" name="name" required maxLength={200} defaultValue={initial.name ?? ""} placeholder="Managed IT Agreement 2026" />
@@ -142,6 +145,7 @@ export function ContractForm({
         </Field>
         <div className="flex items-end pb-2">
           <Checkbox label="Auto-renews at the renewal date" checked={autoRenew} onChange={(ev) => setAutoRenew(ev.target.checked)} />
+          <Checkbox label="Prices fixed until the renewal date (a price review applies from then)" checked={priceLocked} onChange={(ev) => setPriceLocked(ev.target.checked)} />
         </div>
         <Field label="Next account review" htmlFor="nextReviewDate" error={e("nextReviewDate")}>
           <Input id="nextReviewDate" name="nextReviewDate" type="date" defaultValue={initial.nextReviewDate ?? ""} />

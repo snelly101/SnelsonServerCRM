@@ -9,6 +9,7 @@ import { formToObject } from "@/lib/validation";
 import { contractLineSchema, contractSchema, linesFromForm } from "@/lib/validation-sales";
 import { archiveContract, createContract, generateReminders, updateContract } from "@/services/contracts";
 import { clearRenewalDecision, recordRenewalDecision } from "@/services/renewals";
+import { applyPriceReview, previewPriceReview, type PriceReviewInput, type PriceReviewPreview } from "@/services/price-reviews";
 
 function readContractForm(fd: FormData) {
   const obj = formToObject(fd);
@@ -80,5 +81,31 @@ export async function clearRenewalDecisionAction(id: string): Promise<ActionResu
     await clearRenewalDecision(z.uuid().parse(id), u.id);
     revalidatePath("/contracts", "layout");
     return undefined;
+  });
+}
+
+const priceReviewSchema = z.object({
+  scope: z.object({ productId: z.uuid().nullish(), descriptionContains: z.string().trim().max(200).nullish() }),
+  change: z.object({ kind: z.enum(["percent", "unit_price", "cost_passthrough"]), value: z.coerce.number() }),
+  effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  reason: z.string().trim().max(500).default(""),
+  lineIds: z.array(z.uuid()).max(2000).nullish(),
+  updateCatalogue: z.boolean().optional(),
+});
+
+export async function previewPriceReviewAction(input: PriceReviewInput): Promise<ActionResult<PriceReviewPreview>> {
+  return runAction(async () => {
+    await requireActionPermission("contract.read");
+    return previewPriceReview(priceReviewSchema.parse(input));
+  });
+}
+
+export async function applyPriceReviewAction(input: PriceReviewInput): Promise<ActionResult<Awaited<ReturnType<typeof applyPriceReview>>>> {
+  return runAction(async () => {
+    const u = await requireActionPermission("contract.write");
+    const r = await applyPriceReview(priceReviewSchema.parse(input), u.id);
+    revalidatePath("/contracts", "layout");
+    revalidatePath("/finance", "layout");
+    return r;
   });
 }

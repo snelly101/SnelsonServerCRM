@@ -166,6 +166,8 @@ export const contracts = pgTable(
     renewalDecidedAt: timestamp("renewal_decided_at", { withTimezone: true }),
     renewalDecidedByUserId: text("renewal_decided_by_user_id").references(() => user.id, { onDelete: "set null" }),
     renewalDecisionNote: text("renewal_decision_note"),
+    /** Agreement constraint: unit prices cannot change before the renewal date; a price review applies from the renewal date instead. */
+    priceLockedUntilRenewal: boolean("price_locked_until_renewal").notNull().default(false),
     notes: text("notes"),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     ...timestamps,
