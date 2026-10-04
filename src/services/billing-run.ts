@@ -1,6 +1,6 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
-import { companies, contractLines, contracts } from "@/db/schema";
+import { companies, contractLines, contracts, type InvoiceDraftLine } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { ActionError } from "@/lib/action-result";
 import { billingPeriodFor, PERIOD_MONTHS, type BillingPeriod } from "@/lib/billing";
@@ -41,6 +41,10 @@ export type BillingRunRow = {
   missedCount: number;
   /** Net amount the draft would carry. */
   net: number;
+  /** The lines the draft would carry (same maths as preparation). */
+  lines: InvoiceDraftLine[];
+  /** The most recent comparable draft before this period (the one ending the day before, else the latest earlier one). */
+  previous: { draftId: string; status: string; periodStart: string; periodEnd: string; net: number; lines: InvoiceDraftLine[] } | null;
   lineCount: number;
   xeroLinked: boolean;
   /** A draft that already covers the current period, if any. */
@@ -72,6 +76,21 @@ export async function previewBillingRun(asOf: string): Promise<BillingRunRow[]> 
     const built = items.length ? await buildLinesForItems(c, cl, items, entries, "", "", history) : [];
     const net = Math.round(built.reduce((a, l) => a + l.quantity * l.unitAmount, 0) * 100) / 100;
     const covering = period ? coveringDraft(entries, recurring.map((l) => l.id), period) : null;
+    // Previous comparable draft: the one whose period ends the day before this one starts, else the latest that started earlier.
+    let previous: BillingRunRow["previous"] = null;
+    if (period) {
+      const byDraft = new Map<string, { status: string; periodStart: string; periodEnd: string; lines: InvoiceDraftLine[] }>();
+      for (const e of entries) {
+        if (!e.periodStart || !e.periodEnd || e.periodStart >= period.periodStart) continue;
+        const d = byDraft.get(e.draftId) ?? { status: e.status, periodStart: e.periodStart, periodEnd: e.periodEnd, lines: [] };
+        d.lines.push(e.line);
+        byDraft.set(e.draftId, d);
+      }
+      const dayBefore = new Date(Date.parse(period.periodStart) - 86400000).toISOString().slice(0, 10);
+      const candidates = [...byDraft.entries()].sort((a, b) => b[1].periodStart.localeCompare(a[1].periodStart));
+      const pick = candidates.find(([, d]) => d.periodEnd === dayBefore) ?? candidates[0];
+      if (pick) previous = { draftId: pick[0], ...pick[1], net: Math.round(pick[1].lines.reduce((a, l) => a + l.quantity * l.unitAmount, 0) * 100) / 100 };
+    }
     const existing = covering ? { id: covering.draftId, reference: covering.draftId, status: covering.status } : null;
     const xeroLinked = Boolean(await getLink("xero", "company", c.companyId));
     const skipReason = !PERIOD_MONTHS[c.billingFrequency]
@@ -87,7 +106,7 @@ export async function previewBillingRun(asOf: string): Promise<BillingRunRow[]> 
               ? `already drafted (${existing.status})`
               : "nothing due: every line period is invoiced"
             : null;
-    out.push({ contractId: c.id, contractName: c.name, companyId: c.companyId, companyName: r.companyName, billingFrequency: c.billingFrequency, period, items, missedCount: items.filter((i) => i.missed).length, net, lineCount: recurring.length, xeroLinked, existingDraft: existing, skipReason });
+    out.push({ contractId: c.id, contractName: c.name, companyId: c.companyId, companyName: r.companyName, billingFrequency: c.billingFrequency, period, items, missedCount: items.filter((i) => i.missed).length, net, lines: built, previous, lineCount: recurring.length, xeroLinked, existingDraft: existing, skipReason });
   }
   // Draft references for the "already drafted" links.
   const draftIds = out.map((o) => o.existingDraft?.id).filter((x): x is string => Boolean(x));
