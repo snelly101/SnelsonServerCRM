@@ -124,7 +124,7 @@ export async function previewBillingRun(asOf: string): Promise<BillingRunRow[]> 
  * the current preview immediately before creation, so a draft prepared in the
  * meantime (or a second click) never produces a duplicate.
  */
-export async function runBillingRun(asOf: string, contractIds: string[], actorUserId: string, opts: { consolidate?: boolean } = {}) {
+export async function runBillingRun(asOf: string, contractIds: string[], actorUserId: string | null, opts: { consolidate?: boolean } = {}) {
   const preview = await previewBillingRun(asOf);
   const chosen = new Set(contractIds);
   const created: { draftId: string; contractId: string; contractName: string; companyName: string; net: number; missed: number; consolidated: number }[] = [];

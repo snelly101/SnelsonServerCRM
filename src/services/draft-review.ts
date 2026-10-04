@@ -107,7 +107,7 @@ export type BatchApprovalResult = {
  * path (claim, outbound ledger, Xero draft), so a failure on one draft never
  * affects the others.
  */
-export async function approveUnchangedDrafts(ids: string[], actorUserId: string, currency: string): Promise<BatchApprovalResult> {
+export async function approveUnchangedDrafts(ids: string[], actorUserId: string | null, currency: string): Promise<BatchApprovalResult> {
   const wanted = new Set(ids);
   const reviewed = new Map((await reviewPendingDrafts(currency)).filter((d) => wanted.has(d.id)).map((d) => [d.id, d]));
   const out: BatchApprovalResult = { approved: [], skipped: [] };

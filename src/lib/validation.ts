@@ -147,6 +147,14 @@ export const securitySettingsSchema = z.object({
 });
 export type SecuritySettingsInput = z.infer<typeof securitySettingsSchema>;
 
+/** Settings → Billing automation: how far the monthly billing run is automated. */
+export const billingAutomationSchema = z.object({
+  billingAutomationLevel: z.coerce.number().int().min(0).max(2),
+  billingAutomationDay: z.coerce.number().int().min(1).max(28),
+  billingAutomationConsolidate: boolish.default(true),
+});
+export type BillingAutomationInput = z.infer<typeof billingAutomationSchema>;
+
 export const vaultSettingsSchema = appSettingsSchema.pick({ vaultRevealSeconds: true, vaultClipboardSeconds: true, vaultStepUpMinutes: true, vaultReviewReminderDays: true, vaultRevealLimit: true }).required();
 
 export const savedViewSchema = z.object({

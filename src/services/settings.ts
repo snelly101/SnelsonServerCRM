@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { appSettings, customFieldDefs, tags, savedViews } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { ActionError } from "@/lib/action-result";
-import type { appSettingsSchema, customFieldDefSchema, tagSchema, savedViewSchema, securitySettingsSchema } from "@/lib/validation";
+import type { appSettingsSchema, billingAutomationSchema, customFieldDefSchema, tagSchema, savedViewSchema, securitySettingsSchema } from "@/lib/validation";
 
 export async function updateAppSettings(input: z.infer<typeof appSettingsSchema>, actorUserId: string) {
   await db.transaction(async (tx) => {
@@ -13,6 +13,14 @@ export async function updateAppSettings(input: z.infer<typeof appSettingsSchema>
       .set({ ...input, defaultTaxRatePercent: String(input.defaultTaxRatePercent), updatedAt: new Date() })
       .where(eq(appSettings.id, 1));
     await audit({ actorUserId, action: "settings.update", entityType: "app_settings", entityId: "1", details: input }, tx);
+  });
+}
+
+/** Settings → Billing automation: the automation level, run day and consolidation. */
+export async function updateBillingAutomationSettings(input: z.infer<typeof billingAutomationSchema>, actorUserId: string) {
+  await db.transaction(async (tx) => {
+    await tx.update(appSettings).set({ billingAutomationLevel: input.billingAutomationLevel, billingAutomationDay: input.billingAutomationDay, billingAutomationConsolidate: input.billingAutomationConsolidate, updatedAt: new Date() }).where(eq(appSettings.id, 1));
+    await audit({ actorUserId, action: "settings.billing_automation.update", entityType: "app_settings", entityId: "1", details: input }, tx);
   });
 }
 

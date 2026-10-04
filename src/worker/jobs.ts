@@ -32,6 +32,7 @@ export const QUEUES = {
   helpdeskSla: "helpdesk.sla",
   helpdeskRules: "helpdesk.rules",
   retention: "system.retention",
+  billingAutomation: "billing.automation",
 } as const;
 
 /** Records that a job runner is alive. Read by /api/health and the Integrations page as "worker last seen". */
@@ -84,6 +85,19 @@ export async function registerJobs(
     {},
     { retryLimit: 1, singletonKey: "retention" },
   );
+
+  // Daily at 07:00: the billing automation policy (Settings → Billing automation). Runs once per month on or after the run day; level 0 only records.
+  await boss.createQueue(QUEUES.billingAutomation, {
+    deleteAfterSeconds: 90 * 24 * 3600,
+    retryLimit: 1,
+    expireInSeconds: 1800,
+  });
+  await boss.work(QUEUES.billingAutomation, async ([job]) => {
+    const { runBillingAutomation } = await import("@/services/billing-automation");
+    const res = await runBillingAutomation({ trigger: "schedule" });
+    logger.info({ jobId: job.id, level: res.level, ran: res.ran, reason: res.reason, prepared: res.prepared.length, approved: res.approved.length }, "billing automation");
+  });
+  await boss.schedule(QUEUES.billingAutomation, "0 7 * * *", {}, { retryLimit: 1, singletonKey: "billing-automation" });
 
   // Daily at 06:00: renewal/review reminder tasks and contract expiry. Idempotent via task source keys.
   await boss.createQueue(QUEUES.reminders, {

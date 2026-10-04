@@ -200,6 +200,20 @@ Applying (contract.write) records a dated unit-price change (and cost, for a pas
 - **Purchase order reference.** A contract's *Customer PO reference* is copied onto every draft prepared from it, shown on the draft and the schedule, and appended to the first line description sent to Xero (*"… (PO PO-2026-118)"*), so it appears on the invoice without touching the CRM reference used for reconciliation.
 - **Consolidated customer invoices.** The billing run's *One draft per customer* option (on by default) prepares one draft when several agreements of the same customer are due: lines are prefixed with the agreement name, the draft records the agreements it covers (`contract_ids`), coverage counts for each of them (a line period is covered through its contract line whichever draft carries it), dated changes on every agreement are settled, staleness looks at all of them, re-preparing rebuilds the consolidated draft, cancelling releases every agreement, and the Finance review compares it with the previous consolidated draft of the same agreements. One settings currency and one Xero contact per customer are what make consolidation safe; drafts prepared by hand or from a single agreement are unchanged.
 
+### 5.8 Staged automation (Settings → Billing automation)
+
+Automation goes as far as the policy says and no further, in the brief's stages: detect, propose, prepare, then explicitly permitted routine approval.
+
+| Level | What runs by itself | What stays with people |
+|---|---|---|
+| 0 Detect only (default) | Findings, the billing workspace, the draft review and the renewal queue are kept current | Everything else |
+| 1 Prepare ready drafts | On the run day each month, drafts are prepared for contracts the workspace rates **ready** (Xero linked, same amount as last time, nothing open), consolidated per customer if the policy says so | Review and approval; every *needs review* and *blocked* contract |
+| 2 Prepare, then approve unchanged | As 1, then drafts the review finds **unchanged** (same lines as the previous invoice, not stale, Xero linked, plain draft) are created in Xero as drafts through the normal approval path with its atomic claim and outbound ledger | Every exception; authorising and sending in Xero |
+
+The scheduled job runs daily at 07:00 and acts once per month on or after the configured run day; administrators can run the policy by hand from the settings page at any time. Every run is audited as `billing.automation.run` naming the policy level, the trigger and what it prepared, approved or left for review, and the last run's summary is shown on the page. Financial calculations, commercial rules and posting decisions remain deterministic: automation only applies the same rules a person applies on the billing run and the draft review.
+
+The customer portal (authorised contacts viewing services, requesting changes, approving quotes, raising queries against charges) remains future work, to be built on these foundations with customer permissions enforced independently of internal roles.
+
 ## 6. Xero: the accounting system
 
 **Set-up**: a Xero app (client id and secret in the server environment), a webhook for Contacts and Invoices, then Connect in the CRM, choose the organisation, choose invoice defaults (sales account code, hardware account code, tax rate, payment terms, branding theme, all read live from Xero), and map customers to Xero contacts (accept a suggestion, search, or create in Xero).

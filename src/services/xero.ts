@@ -527,7 +527,7 @@ export type PrepareInvoiceInput = {
   contracts?: { contractId: string; items: PlannedItem[] }[] | null;
 };
 
-export async function prepareInvoiceDraft(input: PrepareInvoiceInput, actorUserId: string) {
+export async function prepareInvoiceDraft(input: PrepareInvoiceInput, actorUserId: string | null) {
   const conn = await getConnection("xero");
   const cfg = conn.config as XeroConfig;
   const settings = await getAppSettings();
@@ -718,7 +718,7 @@ export async function cancelInvoiceDraft(id: string, actorUserId: string) {
 /** An approval still marked in progress after this long is treated as uncertain and may be retried (the ledger reconciles by reference first). */
 export const APPROVAL_STALE_MS = 10 * 60_000;
 
-export async function approveAndCreateInvoice(id: string, actorUserId: string) {
+export async function approveAndCreateInvoice(id: string, actorUserId: string | null) {
   const resolved = await getXeroClient();
   if (!resolved) throw new ActionError("Xero is not connected.");
   const [d] = await db.select().from(invoiceDrafts).where(eq(invoiceDrafts.id, id)).limit(1);
