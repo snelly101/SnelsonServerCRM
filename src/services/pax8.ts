@@ -65,7 +65,7 @@ import {
   setCredentials,
   updateConnection,
 } from "./integrations";
-import { listDiscrepancies } from "./ninjaone";
+import { listDiscrepancies, reopenExpiredExceptions } from "./ninjaone";
 import { coverageFor, isNonBillable } from "./coverage-lookup";
 
 export type Pax8Subscription = typeof pax8Subscriptions.$inferSelect;
@@ -1412,6 +1412,7 @@ export async function runLicenceCheck(
   actorUserId: string | null,
   companyId?: string,
 ) {
+  await reopenExpiredExceptions();
   const subs = await db
     .select()
     .from(pax8Subscriptions)

@@ -61,7 +61,9 @@ Still open from this section: dated mappings (a service moving from one line to 
 
 **Built in 3B** (`src/services/draft-review.ts`, Finance → *Draft invoices awaiting approval*): every pending draft is reviewed against the previous comparable draft of its contract and is either **unchanged** (contract-sourced, Xero linked, not stale, plain draft, lines identical line for line) or an **exception** with its flags and the *why* reasons. Unchanged drafts are ticked by default and approved together, one after another through the normal single-draft approval with its atomic claim and outbound ledger, each re-checked at the moment of approval so a draft that changed meanwhile is skipped with the reason rather than approved blind. Exceptions keep the one-by-one review.
 
-Still to come in release 3: concrete discrepancy actions with financial impact, owners and expiry on accepted exceptions (3C).
+**Built in 3C** (`src/services/discrepancy-actions.ts`, `src/lib/discrepancy-impact.ts`, migration `0021`): a review item is no longer only accepted or dismissed. Its **Resolve** dialog offers the concrete actions with the money consequence first: amend the contract line to the observed count from a chosen date (a dated change with reason, pro-rated by the engine, linked back from the item), reduce at renewal (lower count, billed at the agreed count until the renewal date), include chosen subscriptions in a bundle line (licence items; the check re-runs at once), accept as an exception with an **owner** and a **review date** (re-opens by itself once the date has passed, noted with the owner), or dismiss. Each action is audited under its own name and posted on the company timeline.
+
+Release 3 is complete. Remaining from the brief: sections 7 to 9 (renewal exposure, price reviews, customer-facing explanations, portal, staged automation) and the future capabilities noted above (separate customer and supplier commitment, credits and corrections, backdated changes more than one period back).
 
 ## Brief section 6: invoice lifecycle
 

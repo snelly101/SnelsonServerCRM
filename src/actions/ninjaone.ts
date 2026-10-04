@@ -1,5 +1,8 @@
 "use server";
 
+import { discrepancyOptions, previewDiscrepancyResolution, resolveDiscrepancy, type ResolutionInput } from "@/services/discrepancy-actions";
+import type { DiscrepancyImpact, ImpactKind } from "@/lib/discrepancy-impact";
+
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireActionPermission } from "@/lib/session";
@@ -94,6 +97,41 @@ export async function reviewDiscrepancyAction(id: string, status: "accepted" | "
     await reviewDiscrepancy(z.uuid().parse(id), status, z.string().trim().max(500).parse(note) || null, u.id);
     revalidate();
     return undefined;
+  });
+}
+
+export async function discrepancyOptionsAction(id: string): Promise<ActionResult<Awaited<ReturnType<typeof discrepancyOptions>>>> {
+  return runAction(async () => {
+    await requireActionPermission("discrepancy.review");
+    return discrepancyOptions(z.uuid().parse(id));
+  });
+}
+
+export async function previewDiscrepancyResolutionAction(id: string, kind: ImpactKind, effectiveFrom: string): Promise<ActionResult<DiscrepancyImpact>> {
+  return runAction(async () => {
+    await requireActionPermission("discrepancy.review");
+    return previewDiscrepancyResolution(z.uuid().parse(id), z.enum(["amend_line", "reduce_at_renewal", "exception"]).parse(kind), z.string().regex(/^\d{4}-\d{2}-\d{2}$/).parse(effectiveFrom));
+  });
+}
+
+const resolutionSchema = z.object({
+  kind: z.enum(["amend_line", "reduce_at_renewal", "include_in_bundle", "exception", "dismiss"]),
+  effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullish(),
+  reason: z.string().trim().max(500).nullish(),
+  bundleLineId: z.uuid().nullish(),
+  subscriptionRowIds: z.array(z.uuid()).max(100).nullish(),
+  ownerUserId: z.string().max(100).nullish(),
+  reviewOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullish(),
+});
+
+export async function resolveDiscrepancyAction(id: string, input: ResolutionInput): Promise<ActionResult<Awaited<ReturnType<typeof resolveDiscrepancy>>>> {
+  return runAction(async () => {
+    const u = await requireActionPermission("discrepancy.review");
+    const r = await resolveDiscrepancy(z.uuid().parse(id), resolutionSchema.parse(input), u.id);
+    revalidate();
+    revalidatePath("/contracts");
+    revalidatePath("/finance");
+    return r;
   });
 }
 
