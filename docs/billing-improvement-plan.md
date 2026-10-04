@@ -53,11 +53,11 @@ Still open from this section: dated mappings (a service moving from one line to 
 - **Imported history.** The card states the stretch of Pax8 invoices held and when they were last fetched. Supplier bills older than the imported history are listed as *outside imported history*, not as a finding. **Import invoices from a date** (admin) brings older invoices and their charge lines in through the same upsert as the sync, so nothing is duplicated and existing hand matches survive; once imported, invoices stay even though the routine sync only refreshes the last N.
 - Older unresolved rows stay visible because mirror rows are never deleted.
 
-Still open: the cross-source finding table (service without coverage, covered service without expected charge, expected charge missing from Xero, actual customer invoice differing from expectation) is release 2C, where the register, the coverage planner and the Xero mirror are read together. Credits and replacement Pax8 invoices are shown as negative or extra lines but not yet netted against the original.
+**Built in 2C** (`src/services/billing-findings.ts`, Finance → **Findings**): the brief's finding table read across the register, the coverage planner, the drafts, the Xero mirror and the Pax8 reconciliation, each with the interpretation the brief gives and a link to where it is resolved: service without commercial coverage (potential missed revenue), free arrangement past review, covered service without an expected charge (its line is on a non-active contract or has quantity 0), expected charge not yet drafted (what the billing run would propose, missed periods in red), draft waiting more than a week, customer invoice changed in Xero after approval, supplier charge differing from expectation (invoice vs bill, charge vs subscription price, bill with no invoice), supplier charge without a customer, and sales invoices raised in Xero outside the CRM (informational). Potential leakage (unmapped) is kept apart from confirmed gaps. Credits and replacement Pax8 invoices are still shown as their own lines rather than netted against the original.
 
 ## Brief section 5: exception-focused workspace
 
-The billing run page lists ready and skipped contracts with a net figure. No comparison with the previous invoice, no change explanations per customer, no batch approval. Release 3.
+The Findings page (2C) is the exception list; the billing run page lists ready and skipped contracts with a net figure. Still to come in release 3: comparison with the previous comparable invoice per customer with plain-language reasons for the difference, batch approval of unchanged drafts, concrete discrepancy actions with financial impact, owners and expiry on accepted exceptions.
 
 ## Brief section 6: invoice lifecycle
 

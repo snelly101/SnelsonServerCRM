@@ -139,7 +139,23 @@ The intended monthly routine:
 - **Approval** claims the draft atomically, so two approvals at once cannot both create an invoice; the second sees "being approved already" or the reused result. An approval that never settled is retried after ten minutes, with the ledger looking the invoice up by reference first.
 - After creation, an invoice **changed in Xero** (net amount, currency, voided or deleted) is flagged on the draft page and in a Finance card against the approved version. Xero's invoice remains what the customer receives.
 
-### 5.4 What the Finance page shows
+### 5.4 Findings (Finance → Findings)
+
+One list of what needs a decision, read across the service register, the billing run, the drafts, Xero and the Pax8 reconciliation, each with its interpretation and a link to where it is resolved:
+
+| Finding | Interpretation |
+|---|---|
+| Service without commercial coverage | potential missed revenue |
+| Free arrangement past its review date | decide: stays free, charged, or ends |
+| Covered service without an expected charge | its line is on a non-active contract or has quantity 0 |
+| Expected charge not yet drafted | a line period is due and no draft carries it (missed periods in red) |
+| Draft waiting more than a week | approve, re-prepare or cancel |
+| Customer invoice differs from what was approved | changed, voided or deleted in Xero |
+| Supplier charge differs from expectation | Pax8 invoice vs bill, charge vs subscription price, bill with no invoice |
+| Supplier charge without a customer | Pax8 company not linked, or no subscription explains it |
+| Customer invoice raised outside the CRM | informational |
+
+### 5.5 What the Finance page shows
 
 Headline stats: outstanding (authorised) total, overdue total and count, paid in the last 30 days, drafts in Xero awaiting approval there, CRM drafts awaiting approval here. Then a table of CRM drafts awaiting approval, and the mirrored Xero sales invoice list with filters (search, status, overdue only), sortable columns, defaulting to newest invoice date first, and a warning on invoices whose Xero contact is not linked to a CRM company.
 
