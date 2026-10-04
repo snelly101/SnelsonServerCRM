@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { companies, contractLineChanges, contracts, invoiceDrafts, opportunityLines, opportunities, user, xeroContacts, xeroInvoices, xeroPayments, type InvoiceDraftLine } from "@/db/schema";
+import { companies, contractLineChanges, contractLines, contracts, invoiceDrafts, opportunityLines, opportunities, user, xeroContacts, xeroInvoices, xeroPayments, type InvoiceDraftLine } from "@/db/schema";
 import { audit, logActivity } from "@/lib/audit";
 import { logger } from "@/lib/logger";
 import { ActionError } from "@/lib/action-result";
@@ -11,7 +11,7 @@ import { billingPeriodFor } from "@/lib/billing";
 import { getXeroClient, type XeroConfig, type XeroCredentials } from "@/connectors/xero";
 import { buildAuthorizeUrl, exchangeCode, listTenants, xeroAppConfig, xeroDate, xeroDateOnly } from "@/connectors/xero/live";
 import type { XeroContactRaw, XeroInvoiceRaw, XeroItemRaw, XeroPaymentRaw, XeroRepeatingInvoiceRaw } from "@/connectors/xero/types";
-import { buildLinesForItems, contractWithLines, draftLineEntries, itemsSpan, planManualItems, type PlannedItem } from "./billing-coverage";
+import { buildLinesForItems, contractWithLines, draftLineEntries, itemsSpan, planManualItems, planSpanItems, type PlannedItem } from "./billing-coverage";
 import { createLink, getConnection, getCredentials, getLink, getLinkByExternal, listLinks, markEventProcessed, raiseConflict, recordInboundEvent, runOutbound, runSync, setConnectionConfig, setCredentials, updateConnection } from "./integrations";
 import { companySchema, contactSchema } from "@/lib/validation";
 import { createCompany, findDuplicateCompanies } from "./companies";
@@ -583,6 +583,61 @@ export async function prepareInvoiceDraft(input: PrepareInvoiceInput, actorUserI
   return id;
 }
 
+/** The lines a manual preparation would produce for a period, without creating anything. */
+export async function previewContractInvoice(contractId: string, periodStart: string, periodEnd: string) {
+  const conn = await getConnection("xero");
+  const cfg = conn.config as XeroConfig;
+  const found = await contractWithLines(contractId);
+  if (!found) throw new ActionError("Contract not found.");
+  const { contract: c, lines: cl } = found;
+  const entries = (await draftLineEntries([c.id])).get(c.id) ?? [];
+  const items = planManualItems(c, cl, periodStart, periodEnd);
+  const lines = items.length ? await buildLinesForItems(c, cl, items, entries, cfg.defaultAccountCode ?? "200", cfg.defaultTaxType ?? "OUTPUT2") : [];
+  const net = round(lines.reduce((a, l) => a + l.quantity * l.unitAmount, 0));
+  // Already-drafted periods inside the span, so the person knows a second draft would double up.
+  const covered = items.filter((i) => entries.some((e) => e.line.contractLineId === i.lineId && e.line.calc && (e.line.calc.kind === "period" || e.line.calc.kind === "prorata") && e.line.calc.from === i.period.periodStart)).map((i) => `${i.description} (${i.period.periodStart} to ${i.period.periodEnd})`);
+  return { lines, net, covered };
+}
+
+/**
+ * Has the contract behind a draft changed since the draft was prepared? Lists
+ * the dated changes recorded after preparation and whether the contract header
+ * or a line was edited, so finance can see why the draft may be out of date.
+ */
+export async function draftStaleness(d: { contractId: string | null; createdAt: Date; status: string }) {
+  if (!d.contractId || !["draft", "failed", "approved"].includes(d.status)) return null;
+  const [c] = await db.select({ updatedAt: contracts.updatedAt }).from(contracts).where(eq(contracts.id, d.contractId)).limit(1);
+  if (!c) return null;
+  const [lineAgg] = await db.select({ latest: sql<Date | null>`max(${contractLines.updatedAt})` }).from(contractLines).where(eq(contractLines.contractId, d.contractId));
+  const changes = await db.select().from(contractLineChanges).where(and(eq(contractLineChanges.contractId, d.contractId), sql`${contractLineChanges.recordedAt} > ${d.createdAt}`)).orderBy(desc(contractLineChanges.recordedAt));
+  const headerChanged = c.updatedAt > d.createdAt;
+  const linesChanged = Boolean(lineAgg?.latest && new Date(lineAgg.latest) > d.createdAt);
+  if (!headerChanged && !linesChanged && !changes.length) return null;
+  return { since: d.createdAt, headerChanged, linesChanged, changes: changes.map((x) => ({ id: x.id, lineDescription: x.lineDescription, field: x.field, previousValue: x.previousValue, newValue: x.newValue, effectiveFrom: x.effectiveFrom, reason: x.reason, recordedAt: x.recordedAt })) };
+}
+
+/**
+ * Cancels a stale draft and prepares a fresh one for the same stretch of
+ * periods from the contract as it stands now. The old draft keeps its history
+ * (status cancelled); its changes and coverage are handed to the new one.
+ */
+export async function reprepareInvoiceDraft(id: string, actorUserId: string) {
+  const [d] = await db.select().from(invoiceDrafts).where(eq(invoiceDrafts.id, id)).limit(1);
+  if (!d) throw new ActionError("Draft not found.");
+  if (!d.contractId || !d.periodStart || !d.periodEnd) throw new ActionError("Only drafts prepared from a contract period can be re-prepared.");
+  if (d.status === "created") throw new ActionError("This invoice already exists in Xero. Void it there and prepare a new draft if needed.");
+  if (d.status === "cancelled") throw new ActionError("This draft was cancelled.");
+  await cancelInvoiceDraft(id, actorUserId);
+  const found = await contractWithLines(d.contractId);
+  if (!found) throw new ActionError("Contract not found.");
+  const entries = (await draftLineEntries([d.contractId])).get(d.contractId) ?? [];
+  const items = planSpanItems(found.contract, found.lines, entries, d.periodStart, d.periodEnd);
+  if (!items.length) throw new ActionError("Nothing is due for that stretch any more (the contract no longer has recurring lines in it). The old draft has been cancelled.");
+  const newId = await prepareInvoiceDraft({ companyId: d.companyId, contractId: d.contractId, items, description: d.description?.replace(/ \(re-prepared.*\)$/, "") ? `${d.description.replace(/ \(re-prepared.*\)$/, "")} (re-prepared from ${d.reference})` : null }, actorUserId);
+  await audit({ actorUserId, action: "invoice.draft.reprepare", entityType: "invoice_draft", entityId: newId, details: { from: id, reference: d.reference } });
+  return newId;
+}
+
 export async function updateInvoiceDraft(id: string, patch: { invoiceDate: string; dueDate: string; description: string | null; lines: InvoiceDraftLine[]; notes: string | null }, actorUserId: string) {
   const [d] = await db.select().from(invoiceDrafts).where(eq(invoiceDrafts.id, id)).limit(1);
   if (!d) throw new ActionError("Draft not found.");
@@ -608,6 +663,9 @@ export async function cancelInvoiceDraft(id: string, actorUserId: string) {
  * once (idempotency key = draft id; Xero also receives an Idempotency-Key).
  * On retry after a failure the draft is looked up by Reference first.
  */
+/** An approval still marked in progress after this long is treated as uncertain and may be retried (the ledger reconciles by reference first). */
+export const APPROVAL_STALE_MS = 10 * 60_000;
+
 export async function approveAndCreateInvoice(id: string, actorUserId: string) {
   const resolved = await getXeroClient();
   if (!resolved) throw new ActionError("Xero is not connected.");
@@ -620,7 +678,19 @@ export async function approveAndCreateInvoice(id: string, actorUserId: string) {
   if (!link) throw new ActionError("Link this company to a Xero contact first (Integrations → Xero → Mapping).");
   const conn = await getConnection("xero");
   const cfg = conn.config as XeroConfig;
-  await db.update(invoiceDrafts).set({ status: "approved", approvedByUserId: actorUserId, approvedAt: new Date(), updatedAt: new Date() }).where(eq(invoiceDrafts.id, id));
+  // Claim the draft in one statement so two approvals at once cannot both proceed. An approval that never settled
+  // (process died mid-call) may be retried after APPROVAL_STALE_MS; the ledger then reconciles by reference first.
+  const staleBefore = new Date(Date.now() - APPROVAL_STALE_MS);
+  const claimed = await db
+    .update(invoiceDrafts)
+    .set({ status: "approved", approvedByUserId: actorUserId, approvedAt: new Date(), updatedAt: new Date() })
+    .where(and(eq(invoiceDrafts.id, id), or(inArray(invoiceDrafts.status, ["draft", "failed"]), and(eq(invoiceDrafts.status, "approved"), sql`${invoiceDrafts.approvedAt} < ${staleBefore}`))))
+    .returning({ id: invoiceDrafts.id });
+  if (!claimed.length) {
+    const [now] = await db.select({ status: invoiceDrafts.status, xeroInvoiceId: invoiceDrafts.xeroInvoiceId }).from(invoiceDrafts).where(eq(invoiceDrafts.id, id)).limit(1);
+    if (now?.status === "created") return { invoiceId: now.xeroInvoiceId!, reused: true };
+    throw new ActionError("This draft is being approved already. Refresh in a moment to see the outcome.");
+  }
   await audit({ actorUserId, action: "invoice.approve", entityType: "invoice_draft", entityId: id, details: { reference: d.reference, subTotal: d.subTotal, currency: d.currencyCode } });
   try {
     const { result, reused } = await runOutbound("xero", `xero:invoice:${id}`, "invoice.create", actorUserId, {
@@ -734,7 +804,24 @@ export async function listInvoiceDrafts(status?: string) {
     .where(status && status !== "all" ? eq(invoiceDrafts.status, status as "draft") : undefined)
     .orderBy(desc(invoiceDrafts.createdAt))
     .limit(200);
-  return rows.map((r) => ({ ...r.draft, companyName: r.companyName, contractName: r.contractName, opportunityTitle: r.opportunityTitle }));
+  const out = rows.map((r) => ({ ...r.draft, companyName: r.companyName, contractName: r.contractName, opportunityTitle: r.opportunityTitle, stale: false }));
+  // Stale = the contract changed after the draft was prepared (only drafts still awaiting approval).
+  const open = out.filter((d) => d.contractId && (d.status === "draft" || d.status === "failed" || d.status === "approved"));
+  if (open.length) {
+    const ids = [...new Set(open.map((d) => d.contractId!))];
+    const [heads, lines, changes] = await Promise.all([
+      db.select({ id: contracts.id, updatedAt: contracts.updatedAt }).from(contracts).where(inArray(contracts.id, ids)),
+      db.select({ contractId: contractLines.contractId, latest: sql<Date | null>`max(${contractLines.updatedAt})` }).from(contractLines).where(inArray(contractLines.contractId, ids)).groupBy(contractLines.contractId),
+      db.select({ contractId: contractLineChanges.contractId, latest: sql<Date | null>`max(${contractLineChanges.recordedAt})` }).from(contractLineChanges).where(inArray(contractLineChanges.contractId, ids)).groupBy(contractLineChanges.contractId),
+    ]);
+    const latest = new Map<string, number>();
+    const bump = (id: string, t: Date | string | null | undefined) => { if (t) latest.set(id, Math.max(latest.get(id) ?? 0, new Date(t).getTime())); };
+    for (const h of heads) bump(h.id, h.updatedAt);
+    for (const l of lines) bump(l.contractId, l.latest);
+    for (const c of changes) bump(c.contractId, c.latest);
+    for (const d of open) d.stale = (latest.get(d.contractId!) ?? 0) > d.createdAt.getTime();
+  }
+  return out;
 }
 
 export async function getInvoiceDraft(id: string) {
@@ -742,7 +829,35 @@ export async function getInvoiceDraft(id: string) {
   if (!row) return null;
   const link = await getLink("xero", "company", row.draft.companyId);
   const mirror = row.draft.xeroInvoiceId ? (await db.select().from(xeroInvoices).where(eq(xeroInvoices.invoiceId, row.draft.xeroInvoiceId)).limit(1))[0] : null;
-  return { ...row.draft, companyName: row.companyName, xeroLink: link, xeroInvoice: mirror ?? null };
+  const stale = await draftStaleness(row.draft);
+  return { ...row.draft, companyName: row.companyName, xeroLink: link, xeroInvoice: mirror ?? null, stale, xeroDiff: mirror ? xeroDifference(row.draft, mirror) : null };
+}
+
+/** How the invoice in Xero now differs from what was approved: a changed net amount, or voided / deleted. Null when it still matches. */
+export function xeroDifference(d: { subTotal: string; currencyCode: string }, m: { subTotal: string | null; status: string; currencyCode: string | null }) {
+  const approved = Number(d.subTotal);
+  const inXero = m.subTotal === null ? null : Number(m.subTotal);
+  const amountChanged = inXero !== null && Math.abs(inXero - approved) >= 0.01;
+  const gone = m.status === "VOIDED" || m.status === "DELETED";
+  const currencyChanged = Boolean(m.currencyCode && m.currencyCode !== d.currencyCode);
+  if (!amountChanged && !gone && !currencyChanged) return null;
+  return { approvedSubTotal: approved, xeroSubTotal: inXero, difference: inXero === null ? null : round(inXero - approved), status: m.status, currencyChanged };
+}
+
+/** Drafts created in Xero whose invoice has since been changed, voided or deleted there. */
+export async function createdDraftsChangedInXero(limit = 20) {
+  const rows = await db
+    .select({ draft: invoiceDrafts, companyName: companies.name, mirror: xeroInvoices })
+    .from(invoiceDrafts)
+    .innerJoin(companies, eq(companies.id, invoiceDrafts.companyId))
+    .innerJoin(xeroInvoices, eq(xeroInvoices.invoiceId, invoiceDrafts.xeroInvoiceId))
+    .where(eq(invoiceDrafts.status, "created"))
+    .orderBy(desc(invoiceDrafts.createdInXeroAt))
+    .limit(500);
+  return rows
+    .map((r) => ({ id: r.draft.id, reference: r.draft.reference, companyId: r.draft.companyId, companyName: r.companyName, xeroInvoiceNumber: r.draft.xeroInvoiceNumber, currencyCode: r.draft.currencyCode, diff: xeroDifference(r.draft, r.mirror) }))
+    .filter((r) => r.diff)
+    .slice(0, limit);
 }
 
 const num = (v: unknown) => (v === null || v === undefined ? null : String(v));

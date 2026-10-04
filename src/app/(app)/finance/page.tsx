@@ -3,7 +3,7 @@ import { ExternalLink, FileCheck2 } from "lucide-react";
 import { requirePermission } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { getAppSettings } from "@/lib/settings";
-import { financeTotals, listInvoiceDrafts, listXeroInvoices, xeroConnectionSummary } from "@/services/xero";
+import { createdDraftsChangedInXero, financeTotals, listInvoiceDrafts, listXeroInvoices, xeroConnectionSummary } from "@/services/xero";
 import { listSavedViews } from "@/services/settings";
 import { PageHeader, Card, EmptyState, Stat } from "@/components/ui/page";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +22,7 @@ const STATUS_TONE: Record<string, string> = { DRAFT: "slate", SUBMITTED: "blue",
 export default async function FinancePage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const me = await requirePermission("finance.read");
   const sp = await searchParams;
+  const changedInXero = await createdDraftsChangedInXero();
   const [data, totals, conn, drafts, views, settings] = await Promise.all([
     listXeroInvoices({ q: param(sp, "q"), status: param(sp, "status"), overdueOnly: param(sp, "overdue") === "1", page: toInt(param(sp, "page"), 1), sort: param(sp, "sort"), dir: param(sp, "dir") }),
     financeTotals(),
@@ -67,6 +68,46 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
         Figures are {stale ? <span className="text-amber-700">cached and may be stale</span> : "cached"}; last fetched {totals.lastFetched ? fmtRelative(totals.lastFetched) : "never"}. Live balances per customer come from the Xero contact record on the company page.
       </p>
 
+      {changedInXero.length > 0 && (
+        <Card title={`Changed in Xero after approval (${changedInXero.length})`} padded={false} className="mb-4">
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Reference</th>
+                <th>Company</th>
+                <th>Xero invoice</th>
+                <th className="text-right">Approved net</th>
+                <th className="text-right">In Xero now</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {changedInXero.map((d) => (
+                <tr key={d.id}>
+                  <td>
+                    <Link href={`/finance/drafts/${d.id}`} className="font-medium text-brand-700 hover:underline">
+                      {d.reference}
+                    </Link>
+                  </td>
+                  <td>
+                    <Link href={`/companies/${d.companyId}`} className="hover:underline">
+                      {d.companyName}
+                    </Link>
+                  </td>
+                  <td className="text-xs text-slate-600">{d.xeroInvoiceNumber ?? "—"}</td>
+                  <td className="text-right tabular-nums">{fmtMoney(d.diff!.approvedSubTotal, d.currencyCode)}</td>
+                  <td className="text-right tabular-nums">{d.diff!.xeroSubTotal === null ? "—" : fmtMoney(d.diff!.xeroSubTotal, d.currencyCode)}</td>
+                  <td>
+                    <Badge tone={d.diff!.status === "VOIDED" || d.diff!.status === "DELETED" ? "red" : "amber"}>{d.diff!.status.toLowerCase()}</Badge>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="px-4 py-2 text-[11px] text-slate-500">Invoices the CRM created as drafts whose amount, currency or status was then changed in Xero. The CRM keeps the approved version for comparison; Xero&apos;s invoice is what the customer receives.</p>
+        </Card>
+      )}
+
       {pending.length > 0 && (
         <Card title={`Draft invoices awaiting approval (${pending.length})`} padded={false} className="mb-4">
           <table className="tbl">
@@ -99,6 +140,7 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
                   <td className="text-right tabular-nums">{fmtMoney(d.subTotal, d.currencyCode)}</td>
                   <td>
                     <Badge tone={d.status === "failed" ? "red" : d.status === "approved" ? "blue" : "slate"}>{d.status}</Badge>
+                    {d.stale && <Badge className="ml-1" tone="amber" title="The contract changed after this draft was prepared">stale</Badge>}
                     {d.lastError && <div className="max-w-xs truncate text-[11px] text-red-600" title={d.lastError}>{d.lastError}</div>}
                   </td>
                   <td className="text-xs text-slate-500">{fmtRelative(d.createdAt)}</td>

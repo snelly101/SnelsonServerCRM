@@ -113,10 +113,17 @@ The intended monthly routine:
 
 ### 5.2 Manual preparation
 
-- **Prepare invoice** on an active contract: the current anchored period by default, or a hand-typed period. Lines invoiced with the contract are built for that period (pro-rated if it is shorter than a full one); lines on their own cycle are included only when their own period starts inside it. Manual preparation does not check coverage, so it can deliberately re-bill.
+- **Prepare invoice** on an active contract: the current anchored period by default, or a hand-typed period. The dialog shows the calculated lines and net for the chosen dates before anything is created, and warns when a period inside them is already drafted. Lines invoiced with the contract are built for that period (a span inside one anchored period is pro-rated against it; a span crossing anchors is billed as typed); lines on their own cycle are included only when their own period starts inside it. Manual preparation does not block a deliberate re-bill.
 - **Prepare invoice** on a won opportunity: the one-off project and hardware lines only (hardware goes to the hardware account code). Recurring lines are left to the contract.
 
-### 5.3 What the Finance page shows
+### 5.3 Draft lifecycle
+
+- A draft awaiting approval is marked **stale** when its contract changed after it was prepared (terms, a line, or a dated change). The draft page lists the changes since and offers **Re-prepare from the contract**: the old draft is cancelled (its coverage and changes are handed back) and a fresh one is prepared for the same stretch of periods.
+- **Cancelling** a draft never deletes it; its periods become due again and its changes await the next draft.
+- **Approval** claims the draft atomically, so two approvals at once cannot both create an invoice; the second sees "being approved already" or the reused result. An approval that never settled is retried after ten minutes, with the ledger looking the invoice up by reference first.
+- After creation, an invoice **changed in Xero** (net amount, currency, voided or deleted) is flagged on the draft page and in a Finance card against the approved version. Xero's invoice remains what the customer receives.
+
+### 5.4 What the Finance page shows
 
 Headline stats: outstanding (authorised) total, overdue total and count, paid in the last 30 days, drafts in Xero awaiting approval there, CRM drafts awaiting approval here. Then a table of CRM drafts awaiting approval, and the mirrored Xero sales invoice list with filters (search, status, overdue only), sortable columns, defaulting to newest invoice date first, and a warning on invoices whose Xero contact is not linked to a CRM company.
 

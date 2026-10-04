@@ -1,5 +1,5 @@
 import { and, eq, inArray, ne } from "drizzle-orm";
-import { parseISO, subDays, addDays, format } from "date-fns";
+import { parseISO, subDays, addDays, format, differenceInCalendarDays } from "date-fns";
 import { db } from "@/db";
 import { contractLines, contracts, invoiceDrafts, type InvoiceDraftLine } from "@/db/schema";
 import { billingPeriodFor, buildContractInvoiceLines, manualPeriod, PERIOD_MONTHS, type BillableLine, type BillingPeriod, type LineChange } from "@/lib/billing";
@@ -132,7 +132,13 @@ export function planItems(c: ContractRow, lines: ContractLineRow[], entries: Dra
 export function planManualItems(c: ContractRow, lines: ContractLineRow[], periodStart: string, periodEnd: string): PlannedItem[] {
   const items: PlannedItem[] = [];
   const anchored = billingPeriodFor(c.startDate, c.billingFrequency, periodStart, c.endDate, c.billingDay);
-  const contractPeriod = anchored && anchored.periodStart === periodStart && anchored.periodEnd === periodEnd ? anchored : manualPeriod(periodStart, periodEnd);
+  // The anchored period itself; a span inside one anchored period is pro-rated against it; a span crossing anchors is billed as typed.
+  const contractPeriod: BillingPeriod =
+    anchored && anchored.periodStart === periodStart && anchored.periodEnd === periodEnd
+      ? anchored
+      : anchored && periodStart >= anchored.periodStart && periodEnd <= anchored.periodEnd
+        ? { periodStart, periodEnd, fullDays: anchored.fullDays, days: Math.max(1, differenceInCalendarDays(parseISO(periodEnd), parseISO(periodStart)) + 1) }
+        : manualPeriod(periodStart, periodEnd);
   for (const l of lines) {
     if (!isRecurring(l)) continue;
     const { frequency, months } = lineSchedule(c, l);
@@ -143,6 +149,21 @@ export function planManualItems(c: ContractRow, lines: ContractLineRow[], period
       continue;
     }
     items.push({ lineId: l.id, description: l.description, period: contractPeriod, months, missed: false });
+  }
+  return items;
+}
+
+/** Every uncovered line period whose start falls inside a span (used to re-prepare a draft for the same stretch after a change). */
+export function planSpanItems(c: ContractRow, lines: ContractLineRow[], entries: DraftLineEntry[], periodStart: string, periodEnd: string): PlannedItem[] {
+  const items: PlannedItem[] = [];
+  for (const l of lines) {
+    if (!isRecurring(l)) continue;
+    const { frequency, months } = lineSchedule(c, l);
+    if (!months) continue;
+    for (const p of periodsBetween(c, frequency, periodStart, periodEnd)) {
+      if (p.periodStart < periodStart || p.periodStart > periodEnd || isCovered(entries, l.id, p)) continue;
+      items.push({ lineId: l.id, description: l.description, period: p, months, missed: false });
+    }
   }
   return items;
 }

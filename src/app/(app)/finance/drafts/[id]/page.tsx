@@ -7,7 +7,7 @@ import { getInvoiceDraft, xeroConnectionSummary, xeroReferenceData } from "@/ser
 import { PageHeader, Card, DescriptionList } from "@/components/ui/page";
 import { Badge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
-import { DraftEditor, ApproveControls } from "./editor";
+import { DraftEditor, ApproveControls, ReprepareButton } from "./editor";
 import { fmtDate, fmtDateTime, fmtMoney } from "@/lib/format";
 import { explainLineCalc } from "@/lib/billing";
 
@@ -47,6 +47,41 @@ export default async function DraftPage({ params }: { params: Promise<{ id: stri
         </Alert>
       )}
       {draft.lastError && <Alert tone="error" title="Last attempt failed" className="mb-4">{draft.lastError}</Alert>}
+      {draft.stale && (
+        <Alert tone="warn" title="The contract changed after this draft was prepared" className="mb-4">
+          <div className="space-y-2">
+            <p>
+              Prepared {fmtDateTime(draft.createdAt, settings)}.{" "}
+              {draft.stale.changes.length > 0 ? `${draft.stale.changes.length} dated change${draft.stale.changes.length === 1 ? "" : "s"} recorded since:` : draft.stale.linesChanged ? "A contract line was edited since." : "The contract's terms were edited since."}
+            </p>
+            {draft.stale.changes.length > 0 && (
+              <ul className="list-disc space-y-0.5 pl-5 text-xs">
+                {draft.stale.changes.slice(0, 8).map((c) => (
+                  <li key={c.id}>
+                    {c.lineDescription}: {c.field === "unit_price" ? `${fmtMoney(c.previousValue ?? 0, draft.currencyCode)} → ${fmtMoney(c.newValue ?? 0, draft.currencyCode)}` : `${Number(c.previousValue ?? 0)} → ${Number(c.newValue ?? 0)}`} from {fmtDate(c.effectiveFrom, settings)}
+                    {c.reason ? ` (${c.reason})` : ""}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {editable && (
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <ReprepareButton id={draft.id} />
+                <span className="text-xs text-slate-600">Cancels this draft and prepares a fresh one for the same periods from the contract as it is now. Nothing is sent to Xero.</span>
+              </div>
+            )}
+          </div>
+        </Alert>
+      )}
+      {draft.xeroDiff && (
+        <Alert tone="warn" title={draft.xeroDiff.status === "VOIDED" || draft.xeroDiff.status === "DELETED" ? `This invoice was ${draft.xeroDiff.status.toLowerCase()} in Xero` : "This invoice was changed in Xero after approval"} className="mb-4">
+          {draft.xeroDiff.xeroSubTotal !== null && draft.xeroDiff.difference !== null && Math.abs(draft.xeroDiff.difference) >= 0.01 && (
+            <>Approved net {fmtMoney(draft.xeroDiff.approvedSubTotal, draft.currencyCode)}; Xero now shows {fmtMoney(draft.xeroDiff.xeroSubTotal, draft.currencyCode)} ({draft.xeroDiff.difference > 0 ? "+" : ""}{fmtMoney(draft.xeroDiff.difference, draft.currencyCode)}). </>
+          )}
+          {draft.xeroDiff.currencyChanged && <>The currency differs from the approved draft. </>}
+          The CRM keeps the approved version here for comparison; the Xero invoice is what the customer receives.
+        </Alert>
+      )}
       {!draft.xeroLink && draft.status !== "created" && (
         <Alert tone="warn" title="Company not linked to a Xero contact" className="mb-4">
           Approval will be refused until the company is linked on <Link href="/integrations/xero" className="underline">Integrations → Xero</Link>.

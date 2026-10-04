@@ -5,11 +5,11 @@ import { db } from "@/db";
 import { companies, contacts, contractLines, contracts, invoiceDrafts, products, xeroContacts, xeroInvoices, outboundRequests, inboundEvents } from "@/db/schema";
 import { createCompany, updateCompany } from "@/services/companies";
 import { companySchema } from "@/lib/validation";
-import { createContract } from "@/services/contracts";
+import { createContract, updateContract } from "@/services/contracts";
 import { contractSchema } from "@/lib/validation-sales";
 import { LiveXeroClient, verifyWebhookSignature, xeroDate, xeroDateOnly } from "@/connectors/xero/live";
 import { demoXeroAuthorise, demoXeroPay, demoXeroReset, demoXeroTouchContact } from "@/connectors/xero/demo";
-import { approveAndCreateInvoice, companyFinancialSummary, createXeroContactForCompany, financeTotals, importAllRepeatingInvoices, importAllXeroCustomers, importRepeatingInvoiceAsContract, importXeroContactAsCompany, linkCompanyToXeroContact, listUnlinkedXeroCustomers, listXeroRepeatingInvoices, repeatingFrequency, prepareInvoiceDraft, processXeroInboundEvents, pushContactDetailsToXero, recordXeroWebhookEvents, suggestXeroContacts, syncXero } from "@/services/xero";
+import { APPROVAL_STALE_MS, approveAndCreateInvoice, cancelInvoiceDraft, companyFinancialSummary, createdDraftsChangedInXero, draftStaleness, getInvoiceDraft, listInvoiceDrafts, previewContractInvoice, reprepareInvoiceDraft, createXeroContactForCompany, financeTotals, importAllRepeatingInvoices, importAllXeroCustomers, importRepeatingInvoiceAsContract, importXeroContactAsCompany, linkCompanyToXeroContact, listUnlinkedXeroCustomers, listXeroRepeatingInvoices, repeatingFrequency, prepareInvoiceDraft, processXeroInboundEvents, pushContactDetailsToXero, recordXeroWebhookEvents, suggestXeroContacts, syncXero } from "@/services/xero";
 import { getLink, listOpenConflicts, setConnectionConfig, updateConnection } from "@/services/integrations";
 import { ActionError } from "@/lib/action-result";
 import { makeUser } from "./helpers";
@@ -286,9 +286,78 @@ describe("Xero workflow (demo adapter)", () => {
 
   it("rejects approval of a cancelled draft", async () => {
     const d = await prepareInvoiceDraft({ companyId, contractId: (await db.select().from(db._.fullSchema.contracts).where(eq(db._.fullSchema.contracts.companyId, companyId)))[0].id }, finance.id);
-    const { cancelInvoiceDraft } = await import("@/services/xero");
     await cancelInvoiceDraft(d, finance.id);
     await expect(approveAndCreateInvoice(d, finance.id)).rejects.toThrow(ActionError);
+  });
+
+  it("approval claims the draft once: two approvals at once produce one Xero invoice, and an approval stuck in progress is retried only after it is stale", async () => {
+    const cid = (await db.select().from(contracts).where(eq(contracts.companyId, companyId)))[0].id;
+    const d = await prepareInvoiceDraft({ companyId, contractId: cid, periodStart: "2026-11-01", periodEnd: "2026-11-30" }, finance.id);
+    const results = await Promise.allSettled([approveAndCreateInvoice(d, finance.id), approveAndCreateInvoice(d, finance.id)]);
+    const ok = results.filter((r): r is PromiseFulfilledResult<{ invoiceId: string; reused: boolean }> => r.status === "fulfilled");
+    const refused = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+    expect(ok.length).toBeGreaterThanOrEqual(1);
+    if (refused.length) expect(String(refused[0].reason.message)).toMatch(/being approved already/);
+    expect(new Set(ok.map((r) => r.value.invoiceId)).size).toBe(1);
+    expect((await db.select().from(outboundRequests).where(eq(outboundRequests.idempotencyKey, `xero:invoice:${d}`))).length).toBe(1);
+    // A draft left "approved" by a process that died: refused while fresh, retried once stale, and the ledger finds the existing invoice by reference.
+    const d2 = await prepareInvoiceDraft({ companyId, contractId: cid, periodStart: "2026-12-01", periodEnd: "2026-12-31" }, finance.id);
+    await db.update(invoiceDrafts).set({ status: "approved", approvedAt: new Date() }).where(eq(invoiceDrafts.id, d2));
+    await expect(approveAndCreateInvoice(d2, finance.id)).rejects.toThrow(/being approved already/);
+    await db.update(invoiceDrafts).set({ approvedAt: new Date(Date.now() - APPROVAL_STALE_MS - 1000) }).where(eq(invoiceDrafts.id, d2));
+    const recovered = await approveAndCreateInvoice(d2, finance.id);
+    expect(recovered.invoiceId).toBeTruthy();
+    expect((await db.select().from(invoiceDrafts).where(eq(invoiceDrafts.id, d2)))[0].status).toBe("created");
+  });
+
+  it("a draft goes stale when its contract changes afterwards, lists the changes, and can be re-prepared for the same stretch; the preview shows lines, net and already-drafted periods", async () => {
+    const cid = await createContract(
+      contractSchema.parse({ companyId, name: "Stale test", startDate: "2026-01-01", status: "active", billingFrequency: "monthly", billingDay: "1" }),
+      [{ id: null, productId: null, siteId: null, description: "Seats", revenueType: "recurring", pricingModel: "per_user", billingFrequency: "monthly", quantity: 10, unitPrice: 20, unitCost: null, countsAsManagedDevice: false }],
+      admin.id,
+    );
+    const preview = await previewContractInvoice(cid, "2026-10-01", "2026-10-31");
+    expect(preview.lines.map((l) => [l.description, l.quantity * l.unitAmount])).toEqual([["Seats (2026-10-01 to 2026-10-31)", 200]]);
+    expect(preview).toMatchObject({ net: 200, covered: [] });
+    // A hand-typed partial period is pro-rated in the preview too.
+    expect((await previewContractInvoice(cid, "2026-10-01", "2026-10-15")).net).toBe(96.77); // 10 × 20 × 15/31
+    const d = await prepareInvoiceDraft({ companyId, contractId: cid, periodStart: "2026-10-01", periodEnd: "2026-10-31" }, finance.id);
+    expect((await previewContractInvoice(cid, "2026-10-01", "2026-10-31")).covered).toEqual(["Seats (2026-10-01 to 2026-10-31)"]);
+    expect(await draftStaleness((await db.select().from(invoiceDrafts).where(eq(invoiceDrafts.id, d)))[0])).toBeNull();
+    expect((await listInvoiceDrafts("draft")).find((x) => x.id === d)!.stale).toBe(false);
+    // The customer adds two seats from 10 October, entered after the draft was prepared.
+    await new Promise((r) => setTimeout(r, 20));
+    const lineId = (await db.select().from(contractLines).where(eq(contractLines.contractId, cid)))[0].id;
+    await updateContract(cid, contractSchema.parse({ companyId, name: "Stale test", startDate: "2026-01-01", status: "active", billingFrequency: "monthly", billingDay: "1" }), [{ id: lineId, productId: null, siteId: null, description: "Seats", revenueType: "recurring", pricingModel: "per_user", billingFrequency: "monthly", quantity: 12, unitPrice: 20, unitCost: null, countsAsManagedDevice: false }], admin.id, { quantityEffectiveFrom: "2026-10-10", changeReason: "two starters" });
+    const full = (await getInvoiceDraft(d))!;
+    expect(full.stale).toBeTruthy();
+    expect(full.stale!.changes.map((c) => [c.previousValue, c.newValue, c.effectiveFrom, c.reason])).toEqual([["10.00", "12.00", "2026-10-10", "two starters"]]);
+    expect((await listInvoiceDrafts("draft")).find((x) => x.id === d)!.stale).toBe(true);
+    const fresh = await reprepareInvoiceDraft(d, finance.id);
+    expect((await db.select().from(invoiceDrafts).where(eq(invoiceDrafts.id, d)))[0].status).toBe("cancelled");
+    const nd = (await db.select().from(invoiceDrafts).where(eq(invoiceDrafts.id, fresh)))[0];
+    expect(nd).toMatchObject({ status: "draft", periodStart: "2026-10-01", periodEnd: "2026-10-31" });
+    expect(nd.description).toMatch(/re-prepared from CRM-/);
+    expect(nd.lines.map((l) => [l.description, l.unitAmount])).toEqual([
+      ["Seats (2026-10-01 to 2026-10-31)", 20],
+      ["Seats: 2 added from 2026-10-10, 22 of 31 days (pro rata)", 28.39],
+    ]);
+    expect(await draftStaleness(nd)).toBeNull();
+    // The change is now accounted for by the new draft, not the cancelled one.
+    const { listContractLineChanges } = await import("@/services/contracts");
+    expect((await listContractLineChanges(cid))[0].settledByDraftId).toBe(fresh);
+    // A created invoice cannot be re-prepared.
+    await approveAndCreateInvoice(fresh, finance.id);
+    await expect(reprepareInvoiceDraft(fresh, finance.id)).rejects.toThrow(/already exists in Xero/);
+    // Changed in Xero after approval: a different net or a void shows up against the approved version.
+    expect((await createdDraftsChangedInXero()).some((x) => x.id === fresh)).toBe(false);
+    const xeroId = (await db.select().from(invoiceDrafts).where(eq(invoiceDrafts.id, fresh)))[0].xeroInvoiceId!;
+    await db.update(xeroInvoices).set({ subTotal: "250.00" }).where(eq(xeroInvoices.invoiceId, xeroId));
+    const changed = (await createdDraftsChangedInXero()).find((x) => x.id === fresh)!;
+    expect(changed.diff).toMatchObject({ approvedSubTotal: 228.39, xeroSubTotal: 250, difference: 21.61, status: "DRAFT" });
+    expect((await getInvoiceDraft(fresh))!.xeroDiff?.difference).toBe(21.61);
+    await db.update(xeroInvoices).set({ subTotal: "228.39", status: "VOIDED" }).where(eq(xeroInvoices.invoiceId, xeroId));
+    expect((await createdDraftsChangedInXero()).find((x) => x.id === fresh)!.diff).toMatchObject({ status: "VOIDED", difference: 0 });
   });
 
   it("imports unlinked Xero customers as companies: creates with address and contact, links obvious duplicates, never touches suppliers, idempotent", async () => {
