@@ -23,6 +23,7 @@ import { DEMO_PAX8_COMPANY_IDS } from "@/connectors/pax8/demo";
 import {
   applyPax8Cost,
   autoLinkPax8Companies,
+  changePax8SubscriptionQuantity,
   companySubscriptionOverview,
   createPax8CompanyForCompany,
   linkPax8Company,
@@ -196,12 +197,12 @@ describe("Pax8 live client", () => {
             c.method === "GET" && c.url.startsWith("https://api.pax8.com/v1/"),
         ),
     ).toBe(true);
-    // The only writes are createCompany and createContact.
+    // The only writes are createCompany, createContact and updateSubscription (quantity); nothing orders, deletes or cancels.
     expect(
       Object.getOwnPropertyNames(LivePax8Client.prototype).filter((k) =>
         /create|update|delete|order|cancel|set|change/i.test(k),
       ).sort(),
-    ).toEqual(["createCompany", "createContact"]);
+    ).toEqual(["createCompany", "createContact", "updateSubscription"]);
   });
 
   it("creates a company with one POST carrying the full address, phone, website, external id and contacts, and adds a contact with a POST under the company", async () => {
@@ -242,6 +243,37 @@ describe("Pax8 live client", () => {
     const contact = { firstName: "Pat", lastName: "Lee", email: "pat@newco.example", phone: "0113 000 0001", types: [{ type: "Admin" as const, primary: true }] };
     expect((await client.createContact("new-1", contact)).id).toBe("ct-1");
     expect(posted[1]).toEqual({ url: "https://api.pax8.com/v1/companies/new-1/contacts", body: contact });
+  });
+
+  it("changes a subscription quantity with one PUT carrying only { quantity }, and turns 404 / 422 into plain messages", async () => {
+    const calls: { method: string; url: string; body?: unknown }[] = [];
+    const json = (data: unknown, status = 200) =>
+      new Response(JSON.stringify(data), {
+        status,
+        headers: { "content-type": "application/json" },
+      });
+    const fetchImpl = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      const u = new URL(String(url));
+      if (u.hostname === "login.pax8.com")
+        return json({ access_token: "tok", expires_in: 3600 });
+      calls.push({ method: init?.method ?? "GET", url: u.href, body: init?.body ? JSON.parse(String(init.body)) : undefined });
+      if (u.pathname.endsWith("/gone")) return json({ message: "not found" }, 404);
+      if (u.pathname.endsWith("/future")) return json({ message: "Subscription has not started" }, 422);
+      return json({ id: "s-1", companyId: "c-1", productId: "p-1", quantity: 16, status: "Active" });
+    });
+    const client = new LivePax8Client(
+      { clientId: "id", clientSecret: "secret" },
+      null,
+      async () => {},
+      fetchImpl as unknown as typeof fetch,
+    );
+    const updated = await client.updateSubscription("s-1", { quantity: 16 });
+    expect(updated.quantity).toBe(16);
+    expect(calls).toEqual([
+      { method: "PUT", url: "https://api.pax8.com/v1/subscriptions/s-1", body: { quantity: 16 } },
+    ]);
+    await expect(client.updateSubscription("gone", { quantity: 2 })).rejects.toThrow(/no longer has this subscription/);
+    await expect(client.updateSubscription("future", { quantity: 2 })).rejects.toThrow(/refused the change \(422\)/);
   });
 });
 
@@ -664,6 +696,78 @@ describe("Pax8 sync, matching, licence check and costs (demo adapter)", () => {
       expect(review).toMatchObject({ kind: "ambiguous_match", externalId: DEMO_PAX8_COMPANY_IDS["Moorland Outdoor Supplies"] });
     } finally {
       await setConnectionConfig("pax8", { autoCreateCompanies: false }, admin.id);
+    }
+  });
+
+  it("quantity changes: off by default; need an Active, linked subscription, a different count of at least 1 and a reason; then the mirror, audit, timeline and licence check reflect the new count and a repeat is served from the ledger", async () => {
+    const [sub] = await db
+      .select()
+      .from(pax8Subscriptions)
+      .where(eq(pax8Subscriptions.subscriptionId, "s-1001"));
+    expect(sub.companyId).toBe(dental);
+    expect(sub.quantity).toBe(14);
+    await expect(
+      changePax8SubscriptionQuantity(sub.id, 16, "two starters", admin.id),
+    ).rejects.toThrow(/switched off/);
+    expect((await companySubscriptionOverview(dental))!.quantityChanges).toBe(false);
+    await setConnectionConfig("pax8", { allowQuantityChanges: true }, admin.id);
+    try {
+      expect((await companySubscriptionOverview(dental))!.quantityChanges).toBe(true);
+      await expect(
+        changePax8SubscriptionQuantity(sub.id, 0, "cancel", admin.id),
+      ).rejects.toThrow(/at least 1/);
+      await expect(
+        changePax8SubscriptionQuantity(sub.id, 14, "same", admin.id),
+      ).rejects.toThrow(/already has 14/);
+      await expect(
+        changePax8SubscriptionQuantity(sub.id, 16, "x", admin.id),
+      ).rejects.toThrow(/reason/);
+      const [cancelled] = await db
+        .select()
+        .from(pax8Subscriptions)
+        .where(eq(pax8Subscriptions.subscriptionId, "s-1003"));
+      await expect(
+        changePax8SubscriptionQuantity(cancelled.id, 2, "revive", admin.id),
+      ).rejects.toThrow(/Only Active subscriptions/);
+      const [unlinked] = await db
+        .select()
+        .from(pax8Subscriptions)
+        .where(eq(pax8Subscriptions.subscriptionId, "s-1010"));
+      await expect(
+        changePax8SubscriptionQuantity(unlinked.id, 7, "more", admin.id),
+      ).rejects.toThrow(/Link the Pax8 company/);
+
+      const r = await changePax8SubscriptionQuantity(sub.id, 16, "two new starters", admin.id);
+      expect(r.from).toBe(14);
+      expect(r.to).toBe(16);
+      expect(r.costDelta).toBeCloseTo(2 * 9.4, 5);
+      const [after] = await db
+        .select()
+        .from(pax8Subscriptions)
+        .where(eq(pax8Subscriptions.id, sub.id));
+      expect(after.quantity).toBe(16);
+      // Pax8 itself (the demo store) now reports 16, and a sync keeps it.
+      const live = (await new DemoPax8Client().listSubscriptions()).find((x) => x.id === "s-1001")!;
+      expect(live.quantity).toBe(16);
+      const timeline = await db
+        .select()
+        .from(activities)
+        .where(and(eq(activities.companyId, dental), eq(activities.source, "pax8")));
+      expect(timeline.some((a) => /changed from 14 to 16/.test(a.title) && /two new starters/.test(a.title))).toBe(true);
+      // The licence check now sees 16 licences against a 14-seat line.
+      const open = (await listDiscrepancies({ companyId: dental, status: "open" })).filter(
+        (d) => d.source === "pax8" && d.observedQty === 16 && Number(d.contractedQty) === 14,
+      );
+      expect(open.length).toBeGreaterThan(0);
+      // Repeating the identical request against the (now moved) mirror is a fresh request; the demo accepts it.
+      await expect(
+        changePax8SubscriptionQuantity(sub.id, 16, "again", admin.id),
+      ).rejects.toThrow(/already has 16/);
+      // Back to 14 so later expectations in this file hold.
+      const back = await changePax8SubscriptionQuantity(sub.id, 14, "leavers", admin.id);
+      expect(back.to).toBe(14);
+    } finally {
+      await setConnectionConfig("pax8", { allowQuantityChanges: false }, admin.id);
     }
   });
 });

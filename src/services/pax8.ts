@@ -1266,6 +1266,108 @@ export async function setSubscriptionBillingLine(
   await runLicenceCheck(actorUserId, s.companyId);
 }
 
+/**
+ * Changes the licence count of a subscription at Pax8 from the CRM. The one
+ * customer-billable write: gated by the admin setting "allow quantity
+ * changes", a confirmation in the UI and contract.write, recorded in the
+ * outbound ledger and the audit log with the reason given, noted on the
+ * company timeline, then the licence check runs so the contract comparison
+ * reflects the new count. Going to zero is a cancellation and stays in the
+ * Pax8 portal.
+ */
+export async function changePax8SubscriptionQuantity(
+  subscriptionRowId: string,
+  quantity: number,
+  reason: string,
+  actorUserId: string,
+) {
+  if (!Number.isInteger(quantity) || quantity < 1)
+    throw new ActionError(
+      "Quantity must be a whole number of at least 1. To cancel a subscription use the Pax8 portal.",
+    );
+  const note = reason.trim();
+  if (note.length < 3)
+    throw new ActionError("Give a short reason for the change (it goes in the audit log).");
+  const resolved = await getPax8Client();
+  if (!resolved) throw new ActionError("Pax8 is not connected.");
+  if (!resolved.config.allowQuantityChanges)
+    throw new ActionError(
+      "Quantity changes from the CRM are switched off. An administrator can allow them under Integrations → Pax8.",
+    );
+  const [s] = await db
+    .select()
+    .from(pax8Subscriptions)
+    .where(eq(pax8Subscriptions.id, subscriptionRowId))
+    .limit(1);
+  if (!s) throw new ActionError("Subscription not found.");
+  if (!s.companyId)
+    throw new ActionError(
+      "Link the Pax8 company to a CRM company before changing its subscriptions.",
+    );
+  if (s.externalStatus !== "active")
+    throw new ActionError("Pax8 no longer has this subscription.");
+  if (s.status !== "Active" && s.status !== "Activated")
+    throw new ActionError(
+      `Only Active subscriptions can be changed from the CRM (this one is ${s.status}).`,
+    );
+  if (s.quantity === quantity)
+    throw new ActionError(`The subscription already has ${quantity} licence${quantity === 1 ? "" : "s"}.`);
+  const from = s.quantity;
+  // The key carries the mirror's last change time, so a repeated submit of
+  // the same change is served from the ledger while a later, different one
+  // (or the same count after it moved) is a new request.
+  const { result } = await runOutbound(
+    "pax8",
+    `pax8:sub-qty:${s.subscriptionId}:${quantity}:${s.updatedAt.getTime()}`,
+    "subscription.quantity",
+    actorUserId,
+    {
+      requestSummary: { product: s.productName, from, to: quantity, reason: note },
+      perform: async () => {
+        const updated = await resolved.client.updateSubscription(
+          s.subscriptionId,
+          { quantity },
+        );
+        return {
+          externalId: updated.id,
+          summary: { quantity: pax8Number(updated.quantity) ?? quantity },
+        };
+      },
+    },
+  );
+  const to = Number(result.summary?.quantity ?? quantity);
+  await db
+    .update(pax8Subscriptions)
+    .set({ quantity: to, updatedAt: new Date() })
+    .where(eq(pax8Subscriptions.id, s.id));
+  await audit({
+    actorUserId,
+    action: "pax8.subscription.quantity",
+    entityType: "company",
+    entityId: s.companyId,
+    details: {
+      subscriptionId: s.subscriptionId,
+      product: s.productName,
+      from,
+      to,
+      reason: note,
+    },
+  });
+  const unitMonthly = monthlyUnitCost(s.price, s.billingTerm);
+  const costDelta = unitMonthly === null ? null : (to - from) * unitMonthly;
+  await logActivity({
+    type: "contract",
+    companyId: s.companyId,
+    entityType: "pax8_subscription",
+    entityId: s.id,
+    title: `Pax8 licences for "${s.productName}" changed from ${from} to ${to}${costDelta !== null ? ` (${costDelta >= 0 ? "+" : "−"}${Math.abs(costDelta).toFixed(2)}/month cost)` : ""}: ${note}`,
+    actorUserId,
+    source: "pax8",
+  });
+  await runLicenceCheck(actorUserId, s.companyId);
+  return { from, to, costDelta };
+}
+
 /** Copies the Pax8 partner cost onto the contract line that bills the subscription, converted to the line's billing period. Audited; price is never touched. */
 export async function applyPax8Cost(
   subscriptionRowId: string,
@@ -1675,5 +1777,6 @@ export async function companySubscriptionOverview(companyId: string) {
       ),
     },
     mode: resolved?.mode ?? null,
+    quantityChanges: resolved?.config.allowQuantityChanges ?? false,
   };
 }

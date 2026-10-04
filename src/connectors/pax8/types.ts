@@ -134,6 +134,8 @@ export type Pax8CompanyCreate = {
   contacts?: Pax8ContactCreate[];
 };
 
+export type Pax8SubscriptionUpdate = { quantity: number };
+
 export interface Pax8Client {
   readonly mode: "live" | "demo";
   testConnection(): Promise<
@@ -147,11 +149,18 @@ export interface Pax8Client {
   listInvoices(limit: number): Promise<Pax8InvoiceRaw[]>;
   listInvoiceItems(invoiceId: string): Promise<Pax8InvoiceItemRaw[]>;
   /**
-   * The one write: create a customer company. Used only by the opt-in
-   * "create when a company becomes a customer" setting and its manual button.
-   * Never orders, changes or cancels subscriptions.
+   * Create a customer company. Used only by the opt-in "create when a
+   * company becomes a customer" setting and its manual button. The CRM never
+   * orders or cancels subscriptions.
    */
   createCompany(input: Pax8CompanyCreate): Promise<Pax8CompanyRaw>;
+  /**
+   * Change the licence count of an existing subscription (the one billable
+   * write, behind the "allow quantity changes" setting, confirmation and an
+   * audit entry). PUT /subscriptions/{id} with { quantity }; Pax8 refuses it
+   * for future-dated subscriptions and quantities below the product minimum.
+   */
+  updateSubscription(subscriptionId: string, input: Pax8SubscriptionUpdate): Promise<Pax8SubscriptionRaw>;
   /** Contacts of a Pax8 company. */
   listContacts(companyId: string): Promise<Pax8ContactRaw[]>;
   /** Adds a contact; once Admin, Billing and Technical each have a primary the company becomes Active. */
