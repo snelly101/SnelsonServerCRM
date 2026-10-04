@@ -3,7 +3,9 @@ import { ExternalLink, FileCheck2 } from "lucide-react";
 import { requirePermission } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { getAppSettings } from "@/lib/settings";
-import { createdDraftsChangedInXero, financeTotals, listInvoiceDrafts, listXeroInvoices, xeroConnectionSummary } from "@/services/xero";
+import { createdDraftsChangedInXero, financeTotals, listXeroInvoices, xeroConnectionSummary } from "@/services/xero";
+import { reviewPendingDrafts } from "@/services/draft-review";
+import { DraftReviewTable } from "./draft-review";
 import { listSavedViews } from "@/services/settings";
 import { PageHeader, Card, EmptyState, Stat } from "@/components/ui/page";
 import { Badge } from "@/components/ui/badge";
@@ -23,17 +25,17 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
   const me = await requirePermission("finance.read");
   const sp = await searchParams;
   const changedInXero = await createdDraftsChangedInXero();
-  const [data, totals, conn, drafts, views, settings] = await Promise.all([
+  const settings = await getAppSettings();
+  const [data, totals, conn, pending, views] = await Promise.all([
     listXeroInvoices({ q: param(sp, "q"), status: param(sp, "status"), overdueOnly: param(sp, "overdue") === "1", page: toInt(param(sp, "page"), 1), sort: param(sp, "sort"), dir: param(sp, "dir") }),
     financeTotals(),
     xeroConnectionSummary(),
-    listInvoiceDrafts("all"),
+    reviewPendingDrafts(settings.currency),
     listSavedViews(me.id, "finance"),
-    getAppSettings(),
   ]);
   const c = settings.currency;
   const today = new Date().toISOString().slice(0, 10);
-  const pending = drafts.filter((d) => d.status === "draft" || d.status === "failed" || d.status === "approved");
+  const unchangedCount = pending.filter((d) => d.verdict === "unchanged").length;
   const stale = totals.lastFetched ? Date.now() - new Date(totals.lastFetched).getTime() > 3 * 3600_000 : true;
 
   return (
@@ -115,50 +117,8 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
       )}
 
       {pending.length > 0 && (
-        <Card title={`Draft invoices awaiting approval (${pending.length})`} padded={false} className="mb-4">
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Reference</th>
-                <th>Company</th>
-                <th>Source</th>
-                <th className="text-right">Net</th>
-                <th>Status</th>
-                <th>Prepared</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {pending.map((d) => (
-                <tr key={d.id}>
-                  <td>
-                    <Link href={`/finance/drafts/${d.id}`} className="font-medium text-brand-700 hover:underline">
-                      {d.reference}
-                    </Link>
-                    {d.description && <div className="max-w-xs truncate text-xs text-slate-500">{d.description}</div>}
-                  </td>
-                  <td>
-                    <Link href={`/companies/${d.companyId}`} className="hover:underline">
-                      {d.companyName}
-                    </Link>
-                  </td>
-                  <td className="text-xs text-slate-600">{d.contractName ?? d.opportunityTitle ?? "manual"}</td>
-                  <td className="text-right tabular-nums">{fmtMoney(d.subTotal, d.currencyCode)}</td>
-                  <td>
-                    <Badge tone={d.status === "failed" ? "red" : d.status === "approved" ? "blue" : "slate"}>{d.status}</Badge>
-                    {d.stale && <Badge className="ml-1" tone="amber" title="The contract changed after this draft was prepared">stale</Badge>}
-                    {d.lastError && <div className="max-w-xs truncate text-[11px] text-red-600" title={d.lastError}>{d.lastError}</div>}
-                  </td>
-                  <td className="text-xs text-slate-500">{fmtRelative(d.createdAt)}</td>
-                  <td className="text-right">
-                    <Link href={`/finance/drafts/${d.id}`} className="text-xs text-brand-700 hover:underline">
-                      {can(me.role, "invoice.approve") ? "Review & approve" : "View"}
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <Card title={`Draft invoices awaiting approval (${pending.length}${unchangedCount ? `, ${unchangedCount} unchanged` : ""})`} padded={false} className="mb-4">
+          <DraftReviewTable rows={pending} canApprove={can(me.role, "invoice.approve")} />
         </Card>
       )}
 
