@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid, jsonb, pgEnum, index, integer, boolean, numeric } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, uuid, jsonb, pgEnum, index, integer, boolean, numeric, date } from "drizzle-orm/pg-core";
 import { user } from "./auth";
 import { companies, sites, timestamps } from "./core";
 import { contractLines, contracts } from "./sales";
@@ -116,6 +116,13 @@ export const billingDiscrepancies = pgTable(
     note: text("note"),
     reviewedByUserId: text("reviewed_by_user_id").references(() => user.id, { onDelete: "set null" }),
     reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    /** What was done about it: amend_line, reduce_at_renewal, include_in_bundle, exception, or null for a plain accept / dismiss. */
+    resolution: text("resolution"),
+    /** Accepted exception: who owns it and when it must be looked at again; past that date it re-opens. */
+    ownerUserId: text("owner_user_id").references(() => user.id, { onDelete: "set null" }),
+    reviewOn: date("review_on"),
+    /** The contract line change recorded when the line was amended from this item. */
+    appliedChangeId: uuid("applied_change_id"),
     ...timestamps,
   },
   (t) => [index("discrepancies_status_idx").on(t.status), index("discrepancies_contract_line_idx").on(t.contractLineId, t.status), index("discrepancies_company_idx").on(t.companyId)],

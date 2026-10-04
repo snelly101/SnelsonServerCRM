@@ -1,5 +1,6 @@
-import { and, asc, desc, eq, inArray, isNull, notInArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lt, notInArray, or, sql } from "drizzle-orm";
 import { db } from "@/db";
+import { alias } from "drizzle-orm/pg-core";
 import { billingDiscrepancies, companies, contractLines, contracts, ninjaDevices, ninjaLocations, ninjaOrganizations, sites, user } from "@/db/schema";
 import { audit, logActivity } from "@/lib/audit";
 import { ActionError } from "@/lib/action-result";
@@ -337,6 +338,7 @@ export async function runDiscrepancyCheck(actorUserId: string | null, companyId?
   const classes = resolved?.config.billableNodeClasses ?? [];
   const approvedOnly = resolved?.config.approvedOnly ?? true;
   const cutoff = new Date(Date.now() - settings.deviceActiveDays * 86400000);
+  await reopenExpiredExceptions();
   const lines = await db
     .select({ line: contractLines, contract: contracts })
     .from(contractLines)
@@ -394,17 +396,20 @@ export async function runDiscrepancyCheck(actorUserId: string | null, companyId?
   return { open, resolved: resolvedCount, checked: lines.length };
 }
 
+const owner = alias(user, "owner");
+
 export async function listDiscrepancies(p: { status?: string; companyId?: string; source?: "ninjaone" | "pax8" }) {
   return db
-    .select({ d: billingDiscrepancies, companyName: companies.name, contractName: contracts.name, siteName: sites.name, reviewedBy: db._.fullSchema.user.name })
+    .select({ d: billingDiscrepancies, companyName: companies.name, contractName: contracts.name, siteName: sites.name, reviewedBy: db._.fullSchema.user.name, ownerName: owner.name })
     .from(billingDiscrepancies)
     .innerJoin(companies, eq(companies.id, billingDiscrepancies.companyId))
     .innerJoin(contracts, eq(contracts.id, billingDiscrepancies.contractId))
     .leftJoin(sites, eq(sites.id, billingDiscrepancies.siteId))
     .leftJoin(db._.fullSchema.user, eq(db._.fullSchema.user.id, billingDiscrepancies.reviewedByUserId))
+    .leftJoin(owner, eq(owner.id, billingDiscrepancies.ownerUserId))
     .where(and(p.status && p.status !== "all" ? eq(billingDiscrepancies.status, p.status as "open") : undefined, p.companyId ? eq(billingDiscrepancies.companyId, p.companyId) : undefined, p.source ? eq(billingDiscrepancies.source, p.source) : undefined))
     .orderBy(sql`case when ${billingDiscrepancies.status} = 'open' then 0 else 1 end`, desc(billingDiscrepancies.lastSeenAt))
-    .then((rows) => rows.map((r) => ({ ...r.d, companyName: r.companyName, contractName: r.contractName, siteName: r.siteName, reviewedBy: r.reviewedBy })));
+    .then((rows) => rows.map((r) => ({ ...r.d, companyName: r.companyName, contractName: r.contractName, siteName: r.siteName, reviewedBy: r.reviewedBy, ownerName: r.ownerName })));
 }
 
 export async function reviewDiscrepancy(id: string, status: "accepted" | "dismissed", note: string | null, actorUserId: string) {
@@ -414,6 +419,19 @@ export async function reviewDiscrepancy(id: string, status: "accepted" | "dismis
   await audit({ actorUserId, action: `discrepancy.${status}`, entityType: "billing_discrepancy", entityId: id, details: { contractLineId: d.contractLineId, contracted: d.contractedQty, observed: d.observedQty, note } });
   const licence = d.source === "pax8";
   await logActivity({ type: licence ? "sync" : "device", companyId: d.companyId, entityType: "contract", entityId: d.contractId, title: `${licence ? "Licence" : "Device"} discrepancy ${status}: ${d.lineDescription} (contracted ${d.contractedQty}, observed ${d.observedQty})`, body: note, actorUserId, source: d.source });
+}
+
+/** Accepted exceptions past their review date re-open so they are looked at again; returns how many. */
+export async function reopenExpiredExceptions(asOf = new Date().toISOString().slice(0, 10), tx: typeof db = db) {
+  const expired = await tx
+    .select({ id: billingDiscrepancies.id, reviewOn: billingDiscrepancies.reviewOn, ownerName: user.name, note: billingDiscrepancies.note })
+    .from(billingDiscrepancies)
+    .leftJoin(user, eq(user.id, billingDiscrepancies.ownerUserId))
+    .where(and(eq(billingDiscrepancies.status, "accepted"), eq(billingDiscrepancies.resolution, "exception"), lt(billingDiscrepancies.reviewOn, asOf)));
+  for (const e of expired) {
+    await tx.update(billingDiscrepancies).set({ status: "open", note: `Exception expired on ${e.reviewOn}${e.ownerName ? ` (owner ${e.ownerName})` : ""}${e.note ? `: ${e.note}` : ""}`, updatedAt: new Date() }).where(eq(billingDiscrepancies.id, e.id));
+  }
+  return expired.length;
 }
 
 export async function saveNinjaConfig(input: { billableNodeClasses: string[]; approvedOnly: boolean; autoCreateOrganizations?: boolean }, actorUserId: string) {

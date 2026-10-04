@@ -79,7 +79,15 @@ Decisions are audited and posted on the company timeline. Nothing in the registe
 
 ### 3.8 Review queue (`billing_discrepancies`)
 
-Every automatic comparison between contract and reality lands here rather than changing anything: company, contract, contract line, source (`ninjaone` or `pax8`), contracted quantity, observed quantity, difference, estimated unbilled or over-billed amount per period, status (`open`, `accepted`, `dismissed`, `resolved`), who reviewed and why. Accepting or dismissing is audited and noted on the company timeline. **Nothing in this queue ever edits a contract or an invoice**; a person does that.
+Every automatic comparison between contract and reality lands here rather than changing anything: company, contract, contract line, source (`ninjaone` or `pax8`), contracted quantity, observed quantity, difference, estimated unbilled or over-billed amount per period, status (`open`, `accepted`, `dismissed`, `resolved`), who reviewed and why. Each open item has a **Resolve** dialog with the concrete actions and the money consequence shown before anything happens (`src/lib/discrepancy-impact.ts`, worked out with the engine's period rules):
+
+- **Amend the contract line** to the observed count from a chosen date: a dated quantity change with a reason, so the next invoice pro-rates the increase (or applies the decrease by the line's reduction policy) and the change history shows it. The item is resolved and linked to the change.
+- **Reduce at renewal** (fewer observed than contracted, contract has a renewal date): the line takes the lower count but its reduction policy becomes *at renewal*, so the agreed count is billed until the renewal date.
+- **Include in a bundle** (licence items): chosen subscriptions are marked as covered by another line of the contract, so they stop counting against this one; the licence check runs again at once.
+- **Accept as an exception** with an **owner**, a **review date** and a reason: the item stays accepted until that date and then re-opens by itself (checked on every sync and re-check), with the expiry noted. Accepted items also re-open earlier if the gap grows.
+- **Dismiss**: not a billing matter.
+
+Every action is audited (`discrepancy.amend_line`, `.reduce_at_renewal`, `.include_in_bundle`, `.exception`, `.dismissed`) and noted on the company timeline. Nothing here edits an invoice; contract changes go through the same history as a manual edit.
 
 ## 4. How billing periods and amounts are calculated
 
@@ -208,7 +216,7 @@ NinjaOne is the RMM. The CRM reads organisations, locations and devices (name, c
 
 **Counting rules** (Settings and the NinjaOne page): a device is **active** if it contacted NinjaOne within the active window (default 30 days); **billable** if active, of a billable node class (default workstations, servers, VM guests) and, optionally, approved.
 
-**Device count check**: every contract line marked "compare with NinjaOne" on an active contract is compared with the billable count at the linked organisation, or at the linked location when the line names a site. Lines of one contract that share a scope are compared together (contracted = their sum, one review item naming all of them). Devices marked internal or free in the service register are left out. Differences become review items with `source = ninjaone` on the Devices page, the company's Devices tab and the contract page, with the estimated unbilled or over-billed amount per period. Re-checked after every sync, link change and rule change; matched counts resolve the item; accepted items re-open only if the gap grows.
+**Device count check**: every contract line marked "compare with NinjaOne" on an active contract is compared with the billable count at the linked organisation, or at the linked location when the line names a site. Lines of one contract that share a scope are compared together (contracted = their sum, one review item naming all of them). Devices marked internal or free in the service register are left out. Differences become review items with `source = ninjaone` on the Devices page, the company's Devices tab and the contract page, with the estimated unbilled or over-billed amount per period. Re-checked after every sync, link change and rule change; matched counts resolve the item; accepted items re-open if the gap grows or, for an accepted exception, once its review date has passed. Each open item offers concrete actions with their money consequence (section 3.8).
 
 NinjaOne has no pricing, so it only informs quantities, never cost.
 
