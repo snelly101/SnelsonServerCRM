@@ -14,7 +14,7 @@ export type SavedView = { id: string; name: string; params: Record<string, strin
  * URL-driven filter bar. Every filter is a search param so views are
  * bookmarkable, shareable and can be saved as named views.
  */
-export function FilterBar({ page, filters, savedViews, currentUserId, placeholder = "Search…" }: { page: string; filters: FilterDef[]; savedViews: SavedView[]; currentUserId: string; placeholder?: string }) {
+export function FilterBar({ page, filters, savedViews, currentUserId, placeholder = "Search…", trailing }: { page: string; filters: FilterDef[]; savedViews: SavedView[]; currentUserId: string; placeholder?: string; /** Extra controls shown at the right end of the filter row, e.g. a "Show archived" link. */ trailing?: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
@@ -81,6 +81,7 @@ export function FilterBar({ page, filters, savedViews, currentUserId, placeholde
             <Bookmark className="h-4 w-4" /> Save view
           </Button>
         )}
+        {trailing && <div className="ml-auto flex items-center gap-2 text-sm">{trailing}</div>}
       </form>
       {saving && (
         <form
