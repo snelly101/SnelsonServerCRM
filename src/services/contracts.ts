@@ -50,6 +50,7 @@ const selectRow = {
   billingDay: contracts.billingDay,
   billingFrom: contracts.billingFrom,
   priceLockedUntilRenewal: contracts.priceLockedUntilRenewal,
+  purchaseOrderRef: contracts.purchaseOrderRef,
   nextReviewDate: contracts.nextReviewDate,
   updatedAt: contracts.updatedAt,
   lines: linesJson,
@@ -167,6 +168,7 @@ function toValues(input: ContractInput) {
     billingDay: input.billingDay ?? null,
     billingFrom: input.billingFrom ?? null,
     priceLockedUntilRenewal: input.priceLockedUntilRenewal ?? false,
+    purchaseOrderRef: input.purchaseOrderRef ?? null,
     nextReviewDate: input.nextReviewDate,
     reviewIntervalMonths: input.reviewIntervalMonths,
     ownerUserId: input.ownerUserId,
@@ -348,7 +350,7 @@ export { desc, inArray, tasks };
 /** The contract's current terms in the shape the form sends (optional fields as empty strings), so code can update one aspect without touching the rest. */
 export function contractAsInput(c: NonNullable<Awaited<ReturnType<typeof getContract>>>): ContractInput {
   const s = (v: string | null | undefined) => v ?? "";
-  return contractSchema.parse({ companyId: c.companyId, opportunityId: s(c.opportunityId), name: c.name, reference: s(c.reference), status: c.status, startDate: c.startDate, endDate: s(c.endDate), renewalDate: s(c.renewalDate), noticePeriodDays: c.noticePeriodDays, autoRenew: c.autoRenew, billingFrequency: c.billingFrequency, billingDay: c.billingDay, billingFrom: s(c.billingFrom), priceLockedUntilRenewal: c.priceLockedUntilRenewal, nextReviewDate: s(c.nextReviewDate), reviewIntervalMonths: c.reviewIntervalMonths, ownerUserId: s(c.ownerUserId), notes: s(c.notes) });
+  return contractSchema.parse({ companyId: c.companyId, opportunityId: s(c.opportunityId), name: c.name, reference: s(c.reference), status: c.status, startDate: c.startDate, endDate: s(c.endDate), renewalDate: s(c.renewalDate), noticePeriodDays: c.noticePeriodDays, autoRenew: c.autoRenew, billingFrequency: c.billingFrequency, billingDay: c.billingDay, billingFrom: s(c.billingFrom), priceLockedUntilRenewal: c.priceLockedUntilRenewal, purchaseOrderRef: s(c.purchaseOrderRef), nextReviewDate: s(c.nextReviewDate), reviewIntervalMonths: c.reviewIntervalMonths, ownerUserId: s(c.ownerUserId), notes: s(c.notes) });
 }
 
 export function contractLinesAsInput(c: NonNullable<Awaited<ReturnType<typeof getContract>>>): ContractLineInput[] {

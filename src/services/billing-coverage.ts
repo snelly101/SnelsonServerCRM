@@ -56,14 +56,29 @@ export const isRecurring = (l: Pick<ContractLineRow, "revenueType" | "billingFre
 export async function draftLineEntries(contractIds: string[]): Promise<Map<string, DraftLineEntry[]>> {
   const out = new Map<string, DraftLineEntry[]>();
   if (!contractIds.length) return out;
-  const rows = await db
-    .select({ id: invoiceDrafts.id, contractId: invoiceDrafts.contractId, status: invoiceDrafts.status, periodStart: invoiceDrafts.periodStart, periodEnd: invoiceDrafts.periodEnd, lines: invoiceDrafts.lines })
-    .from(invoiceDrafts)
-    .where(and(inArray(invoiceDrafts.contractId, contractIds), ne(invoiceDrafts.status, "cancelled")));
+  // Drafts of the contracts' companies, so a consolidated customer draft (several agreements, contract_id null) counts too;
+  // each line is assigned to its contract through contract_line_id, older lines without one through the draft's contract.
+  const owners = await db.select({ id: contracts.id, companyId: contracts.companyId }).from(contracts).where(inArray(contracts.id, contractIds));
+  const companyIds = [...new Set(owners.map((o) => o.companyId))];
+  if (!companyIds.length) return out;
+  const [rows, lineOwners] = await Promise.all([
+    db
+      .select({ id: invoiceDrafts.id, contractId: invoiceDrafts.contractId, contractIds: invoiceDrafts.contractIds, status: invoiceDrafts.status, periodStart: invoiceDrafts.periodStart, periodEnd: invoiceDrafts.periodEnd, lines: invoiceDrafts.lines })
+      .from(invoiceDrafts)
+      .where(and(inArray(invoiceDrafts.companyId, companyIds), ne(invoiceDrafts.status, "cancelled"))),
+    db.select({ id: contractLines.id, contractId: contractLines.contractId }).from(contractLines).where(inArray(contractLines.contractId, contractIds)),
+  ]);
+  const wanted = new Set(contractIds);
+  const contractOfLine = new Map(lineOwners.map((l) => [l.id, l.contractId]));
   for (const r of rows) {
-    const list = out.get(r.contractId!) ?? [];
-    for (const line of r.lines) list.push({ draftId: r.id, status: r.status, periodStart: r.periodStart, periodEnd: r.periodEnd, line });
-    out.set(r.contractId!, list);
+    if (!(r.contractId && wanted.has(r.contractId)) && !r.contractIds?.some((id) => wanted.has(id))) continue;
+    for (const line of r.lines) {
+      const owner = (line.contractLineId && contractOfLine.get(line.contractLineId)) || r.contractId;
+      if (!owner || !wanted.has(owner)) continue;
+      const list = out.get(owner) ?? [];
+      list.push({ draftId: r.id, status: r.status, periodStart: r.periodStart, periodEnd: r.periodEnd, line });
+      out.set(owner, list);
+    }
   }
   return out;
 }

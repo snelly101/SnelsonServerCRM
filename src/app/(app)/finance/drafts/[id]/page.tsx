@@ -10,6 +10,7 @@ import { Alert } from "@/components/ui/alert";
 import { DraftEditor, ApproveControls, ReprepareButton } from "./editor";
 import { fmtDate, fmtDateTime, fmtMoney } from "@/lib/format";
 import { explainLineCalc } from "@/lib/billing";
+import { customerExplanation } from "@/lib/customer-explanation";
 
 export default async function DraftPage({ params }: { params: Promise<{ id: string }> }) {
   const me = await requirePermission("finance.read");
@@ -25,6 +26,7 @@ export default async function DraftPage({ params }: { params: Promise<{ id: stri
     }
   }
   const editable = (draft.status === "draft" || draft.status === "failed") && can(me.role, "invoice.prepare");
+  const customer = customerExplanation(draft.lines, { money: (n) => fmtMoney(n, draft.currencyCode), date: (iso) => fmtDate(iso, settings) });
   const canApprove = can(me.role, "invoice.approve");
   return (
     <>
@@ -119,6 +121,12 @@ export default async function DraftPage({ params }: { params: Promise<{ id: stri
               </table>
             )}
           </Card>
+          {customer.summary && (
+            <Card title="What the customer sees" className="mt-4" actions={<Link href={`/finance/drafts/${draft.id}/schedule`} className="text-xs text-brand-700 hover:underline">Customer schedule (printable)</Link>}>
+              <p className="text-sm leading-6 text-slate-800">{customer.summary}</p>
+              <p className="mt-2 text-xs text-slate-500">Plain-language wording derived from the calculated lines, for the invoice email or notes. The schedule page adds service dates and the licences, devices and domains behind each charge.</p>
+            </Card>
+          )}
           {draft.lines.some((l) => l.calc) && (
             <Card title="How these amounts were calculated" className="mt-4">
               <ol className="space-y-2 text-sm text-slate-700">
@@ -143,6 +151,13 @@ export default async function DraftPage({ params }: { params: Promise<{ id: stri
                   Quantities come from the <Link href={`/contracts/${draft.contractId}`} className="text-brand-700 hover:underline">contract</Link> and its dated change history as they stood when this draft was prepared.
                 </p>
               )}
+              {!draft.contractId && draft.contractIds?.length ? (
+                <p className="mt-3 text-xs text-slate-500">
+                  Consolidated invoice: quantities come from {draft.contractIds.map((cid, i) => (
+                    <span key={cid}>{i > 0 ? ", " : ""}<Link href={`/contracts/${cid}`} className="text-brand-700 hover:underline">agreement {i + 1}</Link></span>
+                  ))} and their dated change history as they stood when this draft was prepared.
+                </p>
+              ) : null}
             </Card>
           )}
         </div>
@@ -153,6 +168,7 @@ export default async function DraftPage({ params }: { params: Promise<{ id: stri
                 { label: "Invoice date", value: fmtDate(draft.invoiceDate, settings) },
                 { label: "Due date", value: fmtDate(draft.dueDate, settings) },
                 { label: "Period", value: draft.periodStart ? `${fmtDate(draft.periodStart, settings)} – ${fmtDate(draft.periodEnd, settings)}` : null },
+                { label: "Customer PO", value: draft.purchaseOrderRef },
                 { label: "Currency", value: draft.currencyCode },
                 { label: "Amounts are", value: draft.lineAmountTypes === "Exclusive" ? "tax exclusive" : draft.lineAmountTypes },
                 { label: "Xero contact", value: draft.xeroLink ? draft.xeroLink.externalName ?? draft.xeroLink.externalId : "not linked" },

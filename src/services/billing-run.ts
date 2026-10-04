@@ -124,22 +124,35 @@ export async function previewBillingRun(asOf: string): Promise<BillingRunRow[]> 
  * the current preview immediately before creation, so a draft prepared in the
  * meantime (or a second click) never produces a duplicate.
  */
-export async function runBillingRun(asOf: string, contractIds: string[], actorUserId: string) {
+export async function runBillingRun(asOf: string, contractIds: string[], actorUserId: string, opts: { consolidate?: boolean } = {}) {
   const preview = await previewBillingRun(asOf);
   const chosen = new Set(contractIds);
-  const created: { draftId: string; contractId: string; contractName: string; companyName: string; net: number; missed: number }[] = [];
+  const created: { draftId: string; contractId: string; contractName: string; companyName: string; net: number; missed: number; consolidated: number }[] = [];
   const skipped: { contractId: string; contractName: string; reason: string }[] = [];
+  const due: BillingRunRow[] = [];
   for (const row of preview) {
     if (!chosen.has(row.contractId)) continue;
     if (row.skipReason || !row.items.length) {
       skipped.push({ contractId: row.contractId, contractName: row.contractName, reason: row.skipReason ?? "nothing due" });
       continue;
     }
-    const draftId = await prepareInvoiceDraft({ companyId: row.companyId, contractId: row.contractId, items: row.items }, actorUserId);
-    created.push({ draftId, contractId: row.contractId, contractName: row.contractName, companyName: row.companyName, net: row.net, missed: row.missedCount });
+    due.push(row);
+  }
+  // One draft per customer when asked and several agreements are due for the same company (same currency and terms apply: one settings currency, one Xero contact).
+  const groups = new Map<string, BillingRunRow[]>();
+  for (const row of due) groups.set(opts.consolidate ? row.companyId : row.contractId, [...(groups.get(opts.consolidate ? row.companyId : row.contractId) ?? []), row]);
+  for (const rows of groups.values()) {
+    if (rows.length === 1) {
+      const row = rows[0];
+      const draftId = await prepareInvoiceDraft({ companyId: row.companyId, contractId: row.contractId, items: row.items }, actorUserId);
+      created.push({ draftId, contractId: row.contractId, contractName: row.contractName, companyName: row.companyName, net: row.net, missed: row.missedCount, consolidated: 0 });
+      continue;
+    }
+    const draftId = await prepareInvoiceDraft({ companyId: rows[0].companyId, contracts: rows.map((r) => ({ contractId: r.contractId, items: r.items })) }, actorUserId);
+    created.push({ draftId, contractId: rows[0].contractId, contractName: rows.map((r) => r.contractName).join(" + "), companyName: rows[0].companyName, net: Math.round(rows.reduce((a, r) => a + r.net, 0) * 100) / 100, missed: rows.reduce((a, r) => a + r.missedCount, 0), consolidated: rows.length });
   }
   const unknown = contractIds.filter((id) => !preview.some((p) => p.contractId === id));
   for (const id of unknown) skipped.push({ contractId: id, contractName: id, reason: "not an active contract" });
-  await audit({ actorUserId, action: "billing.run", entityType: "invoice_draft", entityId: asOf, details: { asOf, requested: contractIds.length, created: created.length, skipped: skipped.length, drafts: created.map((c) => c.draftId) } });
+  await audit({ actorUserId, action: "billing.run", entityType: "invoice_draft", entityId: asOf, details: { asOf, requested: contractIds.length, created: created.length, skipped: skipped.length, consolidate: Boolean(opts.consolidate), drafts: created.map((c) => c.draftId) } });
   return { asOf, created, skipped };
 }

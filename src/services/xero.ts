@@ -523,6 +523,8 @@ export type PrepareInvoiceInput = {
   description?: string | null;
   /** From the billing run: exactly these line periods. Otherwise the period above (or today's) decides. */
   items?: PlannedItem[] | null;
+  /** A consolidated customer draft: these agreements and their line periods, one invoice for the customer. */
+  contracts?: { contractId: string; items: PlannedItem[] }[] | null;
 };
 
 export async function prepareInvoiceDraft(input: PrepareInvoiceInput, actorUserId: string) {
@@ -534,7 +536,38 @@ export async function prepareInvoiceDraft(input: PrepareInvoiceInput, actorUserI
   let lines: InvoiceDraftLine[] = [];
   let description = input.description ?? null;
   let settledPeriodEnd: string | null = null;
-  if (input.contractId) {
+  let purchaseOrderRef: string | null = null;
+  const settle: { contractId: string; periodEnd: string }[] = [];
+  let contractIds: string[] | null = null;
+  if (input.contracts?.length) {
+    // Consolidated: every agreement's lines, grouped by agreement, in one draft for the customer.
+    const names: string[] = [];
+    let missed = 0;
+    let spanStart = null as string | null;
+    let spanEnd = null as string | null;
+    contractIds = [];
+    for (const part of input.contracts) {
+      const found = await contractWithLines(part.contractId);
+      if (!found) throw new ActionError("Contract not found.");
+      const { contract: c, lines: cl } = found;
+      if (c.companyId !== input.companyId) throw new ActionError(`${c.name} belongs to another customer; a consolidated invoice covers one customer.`);
+      if (!part.items.length) continue;
+      const entries = (await draftLineEntries([c.id])).get(c.id) ?? [];
+      const built = await buildLinesForItems(c, cl, part.items, entries, accountCode, taxType);
+      lines.push(...built.map((l) => ({ ...l, description: input.contracts!.length > 1 ? `${c.name} · ${l.description}` : l.description })));
+      const span = itemsSpan(part.items)!;
+      spanStart = spanStart === null || span.periodStart < spanStart ? span.periodStart : spanStart;
+      spanEnd = spanEnd === null || span.periodEnd > spanEnd ? span.periodEnd : spanEnd;
+      missed += part.items.filter((i) => i.missed).length;
+      names.push(c.name);
+      settle.push({ contractId: c.id, periodEnd: span.periodEnd });
+      contractIds.push(c.id);
+      purchaseOrderRef ??= c.purchaseOrderRef;
+    }
+    if (!lines.length) throw new ActionError("Nothing to invoice for those agreements.");
+    description ??= `${names.join(" + ")} — consolidated billing${missed ? ` (includes ${missed} missed period${missed === 1 ? "" : "s"})` : ""}`;
+    input = { ...input, contractId: null, periodStart: spanStart, periodEnd: spanEnd };
+  } else if (input.contractId) {
     const found = await contractWithLines(input.contractId);
     if (!found) throw new ActionError("Contract not found.");
     const { contract: c, lines: cl } = found;
@@ -555,6 +588,8 @@ export async function prepareInvoiceDraft(input: PrepareInvoiceInput, actorUserI
     const missed = items.filter((i) => i.missed).length;
     description ??= `${c.name} — ${c.billingFrequency} billing${missed ? ` (includes ${missed} missed period${missed === 1 ? "" : "s"})` : ""}`;
     settledPeriodEnd = span.periodEnd;
+    settle.push({ contractId: c.id, periodEnd: span.periodEnd });
+    purchaseOrderRef = c.purchaseOrderRef;
     input = { ...input, periodStart: span.periodStart, periodEnd: span.periodEnd };
   } else if (input.opportunityId) {
     const [o] = await db.select().from(opportunities).where(eq(opportunities.id, input.opportunityId)).limit(1);
@@ -571,11 +606,12 @@ export async function prepareInvoiceDraft(input: PrepareInvoiceInput, actorUserI
   const due = new Date(Date.now() + (cfg.dueDays ?? 30) * 86400000).toISOString().slice(0, 10);
   const subTotal = lines.reduce((a, l) => a + l.quantity * l.unitAmount, 0);
   const id = await db.transaction(async (tx) => {
-    const [row] = await tx.insert(invoiceDrafts).values({ companyId: input.companyId, contractId: input.contractId ?? null, opportunityId: input.opportunityId ?? null, reference: "pending", description, currencyCode: settings.currency, invoiceDate: today, dueDate: due, periodStart: input.periodStart ?? null, periodEnd: input.periodEnd ?? null, lines, subTotal: String(round(subTotal)), preparedByUserId: actorUserId }).returning({ id: invoiceDrafts.id });
+    const [row] = await tx.insert(invoiceDrafts).values({ companyId: input.companyId, contractId: input.contractId ?? null, contractIds, purchaseOrderRef, opportunityId: input.opportunityId ?? null, reference: "pending", description, currencyCode: settings.currency, invoiceDate: today, dueDate: due, periodStart: input.periodStart ?? null, periodEnd: input.periodEnd ?? null, lines, subTotal: String(round(subTotal)), preparedByUserId: actorUserId }).returning({ id: invoiceDrafts.id });
     await tx.update(invoiceDrafts).set({ reference: draftReference(row.id) }).where(eq(invoiceDrafts.id, row.id));
     // Changes dated on or before the end of this period are now accounted for by this draft (traceability only; the history itself is never cleared).
-    if (input.contractId && settledPeriodEnd) {
-      await tx.update(contractLineChanges).set({ settledByDraftId: row.id }).where(and(eq(contractLineChanges.contractId, input.contractId), isNull(contractLineChanges.settledByDraftId), sql`${contractLineChanges.effectiveFrom} <= ${settledPeriodEnd}`));
+    void settledPeriodEnd;
+    for (const s of settle) {
+      await tx.update(contractLineChanges).set({ settledByDraftId: row.id }).where(and(eq(contractLineChanges.contractId, s.contractId), isNull(contractLineChanges.settledByDraftId), sql`${contractLineChanges.effectiveFrom} <= ${s.periodEnd}`));
     }
     await audit({ actorUserId, action: "invoice.prepare", entityType: "invoice_draft", entityId: row.id, details: { companyId: input.companyId, lines: lines.length, subTotal, periodStart: input.periodStart ?? null, periodEnd: input.periodEnd ?? null } }, tx);
     return row.id;
@@ -604,13 +640,14 @@ export async function previewContractInvoice(contractId: string, periodStart: st
  * the dated changes recorded after preparation and whether the contract header
  * or a line was edited, so finance can see why the draft may be out of date.
  */
-export async function draftStaleness(d: { contractId: string | null; createdAt: Date; status: string }) {
-  if (!d.contractId || !["draft", "failed", "approved"].includes(d.status)) return null;
-  const [c] = await db.select({ updatedAt: contracts.updatedAt }).from(contracts).where(eq(contracts.id, d.contractId)).limit(1);
-  if (!c) return null;
-  const [lineAgg] = await db.select({ latest: sql<Date | null>`max(${contractLines.updatedAt})` }).from(contractLines).where(eq(contractLines.contractId, d.contractId));
-  const changes = await db.select().from(contractLineChanges).where(and(eq(contractLineChanges.contractId, d.contractId), sql`${contractLineChanges.recordedAt} > ${d.createdAt}`)).orderBy(desc(contractLineChanges.recordedAt));
-  const headerChanged = c.updatedAt > d.createdAt;
+export async function draftStaleness(d: { contractId: string | null; contractIds?: string[] | null; createdAt: Date; status: string }) {
+  const ids = d.contractId ? [d.contractId] : (d.contractIds ?? []);
+  if (!ids.length || !["draft", "failed", "approved"].includes(d.status)) return null;
+  const heads = await db.select({ updatedAt: contracts.updatedAt }).from(contracts).where(inArray(contracts.id, ids));
+  if (!heads.length) return null;
+  const [lineAgg] = await db.select({ latest: sql<Date | null>`max(${contractLines.updatedAt})` }).from(contractLines).where(inArray(contractLines.contractId, ids));
+  const changes = await db.select().from(contractLineChanges).where(and(inArray(contractLineChanges.contractId, ids), sql`${contractLineChanges.recordedAt} > ${d.createdAt}`)).orderBy(desc(contractLineChanges.recordedAt));
+  const headerChanged = heads.some((c) => c.updatedAt > d.createdAt);
   const linesChanged = Boolean(lineAgg?.latest && new Date(lineAgg.latest) > d.createdAt);
   if (!headerChanged && !linesChanged && !changes.length) return null;
   return { since: d.createdAt, headerChanged, linesChanged, changes: changes.map((x) => ({ id: x.id, lineDescription: x.lineDescription, field: x.field, previousValue: x.previousValue, newValue: x.newValue, effectiveFrom: x.effectiveFrom, reason: x.reason, recordedAt: x.recordedAt })) };
@@ -624,10 +661,25 @@ export async function draftStaleness(d: { contractId: string | null; createdAt: 
 export async function reprepareInvoiceDraft(id: string, actorUserId: string) {
   const [d] = await db.select().from(invoiceDrafts).where(eq(invoiceDrafts.id, id)).limit(1);
   if (!d) throw new ActionError("Draft not found.");
-  if (!d.contractId || !d.periodStart || !d.periodEnd) throw new ActionError("Only drafts prepared from a contract period can be re-prepared.");
+  if ((!d.contractId && !d.contractIds?.length) || !d.periodStart || !d.periodEnd) throw new ActionError("Only drafts prepared from a contract period can be re-prepared.");
   if (d.status === "created") throw new ActionError("This invoice already exists in Xero. Void it there and prepare a new draft if needed.");
   if (d.status === "cancelled") throw new ActionError("This draft was cancelled.");
   await cancelInvoiceDraft(id, actorUserId);
+  const baseDescription = d.description?.replace(/ \(re-prepared.*\)$/, "");
+  if (!d.contractId) {
+    const parts: { contractId: string; items: PlannedItem[] }[] = [];
+    for (const cid of d.contractIds!) {
+      const f = await contractWithLines(cid);
+      if (!f) continue;
+      const entries = (await draftLineEntries([cid])).get(cid) ?? [];
+      const items = planSpanItems(f.contract, f.lines, entries, d.periodStart, d.periodEnd);
+      if (items.length) parts.push({ contractId: cid, items });
+    }
+    if (!parts.length) throw new ActionError("Nothing is due for that stretch any more. The old draft has been cancelled.");
+    const newId = await prepareInvoiceDraft({ companyId: d.companyId, contracts: parts, description: baseDescription ? `${baseDescription} (re-prepared from ${d.reference})` : null }, actorUserId);
+    await audit({ actorUserId, action: "invoice.draft.reprepare", entityType: "invoice_draft", entityId: newId, details: { from: id, reference: d.reference } });
+    return newId;
+  }
   const found = await contractWithLines(d.contractId);
   if (!found) throw new ActionError("Contract not found.");
   const entries = (await draftLineEntries([d.contractId])).get(d.contractId) ?? [];
@@ -696,7 +748,7 @@ export async function approveAndCreateInvoice(id: string, actorUserId: string) {
     const { result, reused } = await runOutbound("xero", `xero:invoice:${id}`, "invoice.create", actorUserId, {
       requestSummary: { reference: d.reference, contactId: link.externalId, lines: d.lines.length, subTotal: d.subTotal },
       perform: async () => {
-        const inv = await resolved.client.createDraftInvoice({ contactId: link.externalId, reference: d.reference, date: d.invoiceDate, dueDate: d.dueDate, currencyCode: d.currencyCode, lineAmountTypes: d.lineAmountTypes as "Exclusive", brandingThemeId: cfg.brandingThemeId || undefined, url: `${process.env.APP_URL ?? ""}/finance/drafts/${id}`, lineItems: d.lines }, `xero:invoice:${id}`);
+        const inv = await resolved.client.createDraftInvoice({ contactId: link.externalId, reference: d.reference, date: d.invoiceDate, dueDate: d.dueDate, currencyCode: d.currencyCode, lineAmountTypes: d.lineAmountTypes as "Exclusive", brandingThemeId: cfg.brandingThemeId || undefined, url: `${process.env.APP_URL ?? ""}/finance/drafts/${id}`, lineItems: d.purchaseOrderRef ? d.lines.map((l, i) => (i === 0 ? { ...l, description: `${l.description} (PO ${d.purchaseOrderRef})` } : l)) : d.lines }, `xero:invoice:${id}`);
         await upsertInvoice(inv);
         return { externalId: inv.InvoiceID, summary: { invoiceNumber: inv.InvoiceNumber, total: inv.Total } as Record<string, unknown> };
       },
@@ -806,9 +858,9 @@ export async function listInvoiceDrafts(status?: string) {
     .limit(200);
   const out = rows.map((r) => ({ ...r.draft, companyName: r.companyName, contractName: r.contractName, opportunityTitle: r.opportunityTitle, stale: false }));
   // Stale = the contract changed after the draft was prepared (only drafts still awaiting approval).
-  const open = out.filter((d) => d.contractId && (d.status === "draft" || d.status === "failed" || d.status === "approved"));
+  const open = out.filter((d) => (d.contractId || d.contractIds?.length) && (d.status === "draft" || d.status === "failed" || d.status === "approved"));
   if (open.length) {
-    const ids = [...new Set(open.map((d) => d.contractId!))];
+    const ids = [...new Set(open.flatMap((d) => (d.contractId ? [d.contractId] : (d.contractIds ?? []))))];
     const [heads, lines, changes] = await Promise.all([
       db.select({ id: contracts.id, updatedAt: contracts.updatedAt }).from(contracts).where(inArray(contracts.id, ids)),
       db.select({ contractId: contractLines.contractId, latest: sql<Date | null>`max(${contractLines.updatedAt})` }).from(contractLines).where(inArray(contractLines.contractId, ids)).groupBy(contractLines.contractId),
@@ -819,7 +871,7 @@ export async function listInvoiceDrafts(status?: string) {
     for (const h of heads) bump(h.id, h.updatedAt);
     for (const l of lines) bump(l.contractId, l.latest);
     for (const c of changes) bump(c.contractId, c.latest);
-    for (const d of open) d.stale = (latest.get(d.contractId!) ?? 0) > d.createdAt.getTime();
+    for (const d of open) d.stale = (d.contractId ? [d.contractId] : (d.contractIds ?? [])).some((cid) => (latest.get(cid) ?? 0) > d.createdAt.getTime());
   }
   return out;
 }

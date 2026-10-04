@@ -168,6 +168,8 @@ export const contracts = pgTable(
     renewalDecisionNote: text("renewal_decision_note"),
     /** Agreement constraint: unit prices cannot change before the renewal date; a price review applies from the renewal date instead. */
     priceLockedUntilRenewal: boolean("price_locked_until_renewal").notNull().default(false),
+    /** Customer purchase order reference carried onto every invoice drafted from this agreement. */
+    purchaseOrderRef: text("purchase_order_ref"),
     notes: text("notes"),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     ...timestamps,

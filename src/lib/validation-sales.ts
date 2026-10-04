@@ -120,6 +120,7 @@ export const contractSchema = z.object({
   billingFrom: optionalDate,
   /** Agreement constraint: prices fixed until the renewal date. */
   priceLockedUntilRenewal: boolish.default(false),
+  purchaseOrderRef: optionalText,
   nextReviewDate: optionalDate,
   reviewIntervalMonths: z.coerce.number().int().min(1).max(36).default(6),
   ownerUserId: optionalUserId,

@@ -103,7 +103,7 @@ export function DraftReviewTable({ rows, canApprove }: { rows: DraftReviewRow[];
                     {d.companyName}
                   </Link>
                 </td>
-                <td className="text-xs text-slate-600">{d.contractName ?? d.opportunityTitle ?? "manual"}</td>
+                <td className="text-xs text-slate-600">{d.contractName ?? (d.contractIds?.length ? `consolidated · ${d.contractIds.length} agreements` : (d.opportunityTitle ?? "manual"))}</td>
                 <td className="text-right tabular-nums">{fmtMoney(d.subTotal, d.currencyCode)}</td>
                 <td className="text-right tabular-nums text-slate-600">
                   {d.previous ? (
