@@ -23,7 +23,7 @@ export default async function EditContractPage({ params }: { params: Promise<{ i
         <ContractForm
           action={updateContractAction.bind(null, id)}
           initial={contract}
-          lines={contract.lines.map((l) => ({ key: l.id, productId: l.productId ?? "", description: l.description, revenueType: l.revenueType, pricingModel: l.pricingModel, billingFrequency: l.billingFrequency, quantity: Number(l.quantity), unitPrice: Number(l.unitPrice), unitCost: l.unitCost === null ? null : Number(l.unitCost), siteId: l.siteId ?? "", countsAsManagedDevice: l.countsAsManagedDevice }))}
+          lines={contract.lines.map((l) => ({ key: l.id, productId: l.productId ?? "", description: l.description, revenueType: l.revenueType, pricingModel: l.pricingModel, billingFrequency: l.billingFrequency, quantity: Number(l.quantity), unitPrice: Number(l.unitPrice), unitCost: l.unitCost === null ? null : Number(l.unitCost), siteId: l.siteId ?? "", countsAsManagedDevice: l.countsAsManagedDevice, invoiceSchedule: l.invoiceSchedule as "contract" | "own", reductionPolicy: l.reductionPolicy as "next_period" | "immediate" | "at_renewal" }))}
           companies={[{ id: contract.companyId, name: contract.companyName }]}
           sites={sites}
           owners={owners}

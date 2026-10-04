@@ -155,6 +155,8 @@ export const contracts = pgTable(
     billingFrequency: billingFrequencyEnum("billing_frequency").notNull().default("monthly"),
     // Day of month (1–28) billing periods are anchored to; null anchors them to the start date. A mid-period start is pro-rated.
     billingDay: integer("billing_day"),
+    // Billing commencement in the CRM: periods from this date with no draft are proposed as missed by the billing run. Null = only ever the current period (no back-billing).
+    billingFrom: date("billing_from"),
     nextReviewDate: date("next_review_date"),
     reviewIntervalMonths: integer("review_interval_months").notNull().default(6),
     ownerUserId: text("owner_user_id").references(() => user.id, { onDelete: "set null" }),
@@ -192,6 +194,10 @@ export const contractLines = pgTable(
     unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull().default("0"),
     unitCost: numeric("unit_cost", { precision: 12, scale: 2 }),
     countsAsManagedDevice: boolean("counts_as_managed_device").notNull().default(false),
+    // contract: the line's price is spread over the contract's invoices (an annual price on a monthly contract bills a twelfth a month). own: invoiced on its own cycle (an annual domain once a year), anchored like the contract.
+    invoiceSchedule: text("invoice_schedule").notNull().default("contract"),
+    // What happens when the quantity goes down mid-period: next_period (no credit, lower quantity from the next period), immediate (credit the unused days), at_renewal (the old quantity is billed until the contract's renewal date).
+    reductionPolicy: text("reduction_policy").notNull().default("next_period"),
     sortOrder: integer("sort_order").notNull().default(0),
     ...timestamps,
   },

@@ -32,8 +32,8 @@ Sales build an opportunity with line items drawn from the catalogue or typed by 
 
 A contract is the billing agreement for one company:
 
-- **Header**: name, status (`draft`, `active`, `expired`, `cancelled`), start date, optional end date, renewal date, notice period, auto-renew flag, **billing frequency** (`monthly`, `quarterly`, `annual`), optional **billing day** (1 to 28; empty means periods are anchored on the start date), review date and interval, owner, linked opportunity, external proposal id.
-- **Lines**: description, product (optional), revenue type, pricing model, billing frequency of the line itself, **contracted quantity**, unit price, optional unit cost, optional site restriction (for per-device lines at one location), "compare with NinjaOne" flag. Lines keep their ids across edits, so history attached to a line survives.
+- **Header**: name, status (`draft`, `active`, `expired`, `cancelled`), start date, optional end date, renewal date, notice period, auto-renew flag, **billing frequency** (`monthly`, `quarterly`, `annual`), optional **billing day** (1 to 28; empty means periods are anchored on the start date), optional **Bill from (CRM)** date (billing commencement: uninvoiced periods from that date are proposed as missed; empty means only the current period is ever proposed), review date and interval, owner, linked opportunity, external proposal id.
+- **Lines**: description, product (optional), revenue type, pricing model, **billing frequency of the line** (its price basis: per month, quarter or year), **invoice schedule** (*with the contract*: the price is spread over the contract's invoices, so an annual price on a monthly contract bills a twelfth each month; *own cycle*: invoiced once per its own period, anchored like the contract, e.g. a domain once a year), **reduction policy** (what a mid-period decrease does: lower quantity from the next period, credit the unused days, or old quantity until the contract's renewal date), **contracted quantity**, unit price, optional unit cost, optional site restriction (for per-device lines at one location), "compare with NinjaOne" flag. Lines keep their ids across edits, so history attached to a line survives.
 - **Change history** (`contract_line_changes`): every quantity or unit-price change on a line of an active contract, every recurring line added or removed, with the value before and after, the day it takes effect (the form asks "Changes take effect from", default today), who recorded it, a reason, and the draft invoice that first accounted for it. This history is what drives pro-rating (see 4.3); it is never cleared, and cancelling a draft hands its changes back to the next one. The contract page lists it in a **Change history** card and shows pending changes under each quantity.
 
 The contract page shows a **Contracted services** table (service, type, pricing, site, contracted qty, unit price, per period), the **device count check** against NinjaOne, terms and tasks. The line editor on the contract form is one row per line (product search, qty, unit price, total) with a details toggle for the less-used fields.
@@ -81,7 +81,7 @@ All of this lives in one pure module (`src/lib/billing.ts`) shared by the billin
 
 For each recurring line (one-off lines are skipped here):
 
-- The line's own frequency is normalised to the contract's period. An annual line on a monthly contract bills a twelfth each month; a monthly line on an annual contract bills twelve months.
+- Lines invoiced *with the contract* have their price normalised to the contract's period: an annual price on a monthly contract bills a twelfth each month; a monthly price on an annual contract bills twelve months. Lines on their *own cycle* use their own period (an annual domain bills its full price once a year).
 - A **full period** produces `quantity × unit per period`, described as "Service (2026-10-01 to 2026-10-31)".
 - A **partial period** (stub start or an end date inside the period) produces one line with quantity 1 and amount `quantity × unit per period × days covered ÷ days in full period`, described as "Service (dates): 14 × 9.40, 17 of 31 days (pro rata)".
 
@@ -91,7 +91,7 @@ The engine reconstructs the quantity on any day from the line's dated history:
 
 - A period is charged at the quantity in force on its first day (whole or pro-rated as above).
 - Each **increase** inside the period is added for its own remaining days: `increase × unit per period × days remaining ÷ days in full period`, one line per change day ("Service: 2 added from 2026-10-14, 18 of 31 days (pro rata)"). Several changes in one period each count for their own days. A change recorded with a reason keeps it.
-- **Decreases are never credited** inside the period; the lower quantity applies from the next period.
+- **Decreases** follow the line's reduction policy: *from the next period* (default) means no credit and the lower quantity from the next period; *credit the unused days* adds a negative line for the remaining days (and a credit catch-up when the drop fell in the previous, already invoiced, period); *until renewal* keeps billing the old quantity until the contract's renewal date, after which the real quantity applies.
 - **Unit price changes** apply from the first period that starts on or after their effective day and are never pro-rated.
 - **Catch-up**: if a change fell inside the previous, already invoiced, period and that invoice did not reflect it, the next invoice carries one line for the difference between what that period should have cost and what its draft actually billed for the line. A draft prepared after the change therefore never double-bills.
 - Every engine-produced line carries its calculation inputs, shown on the draft page under **How these amounts were calculated**; hand-edited lines are flagged there.
@@ -104,16 +104,16 @@ Example: a 14-seat Microsoft 365 line at £9.40 per month, billed monthly on the
 
 The intended monthly routine:
 
-1. Open Finance → **Billing run**. Pick a run date (default today). The page lists **one row per active contract** whose billing period contains that date: company, contract, period, net amount, whether the company is linked to a Xero contact, and a status (ready, or why not).
-2. Only the **current** period is ever proposed, so a contract imported mid-life is never back-billed. A contract that already has a non-cancelled draft for that period start is **skipped**, so re-running the page is safe.
-3. Tick the rows wanted and click **Prepare drafts**. Each becomes an ordinary CRM draft (same code path as the manual button). The run is audited as `billing.run`.
-4. Review each draft (Finance → draft page): lines table (description, qty, unit, account, tax, line total), details (dates, description, notes), and an **Approve and create in Xero** button for finance/admin. Lines can be edited before approval.
+1. Open Finance → **Billing run**. Pick a run date (default today). The page lists **one row per active contract** with everything that is due and not yet invoiced: for each recurring line, its current period under its schedule (the contract's period, or the line's own cycle), plus, when the contract has a *Bill from* date, earlier periods that no draft covers, flagged **missed**. Each row shows company, contract, period, net amount, whether the company is linked to a Xero contact, and a status (ready, or why not).
+2. **Coverage is per line and period**: a period of a line counts as invoiced when any non-cancelled draft carries it. A line period that is already drafted is never proposed again, so re-running the page is safe. Without a *Bill from* date nothing earlier than the current period is ever proposed, so a contract imported mid-life is never back-billed by accident.
+3. Tick the rows wanted and click **Prepare drafts**. Each becomes an ordinary CRM draft carrying all of its items (its description says when missed periods are included). The run is audited as `billing.run`.
+4. Review each draft (Finance → draft page): lines table (description, qty, unit, account, tax, line total), the **How these amounts were calculated** panel, details (dates, description, notes), and an **Approve and create in Xero** button for finance/admin. Lines can be edited before approval.
 5. Approval creates the invoice in Xero as **DRAFT** (never authorised), with `Reference = CRM-XXXXXXXX`, an `Idempotency-Key` header, the configured account codes, tax type, due date from payment terms and branding theme. The Xero invoice's URL field links back to the CRM draft. A failed attempt is retried by looking the invoice up by reference first, so a retry can never create two invoices.
 6. Finance then approve and send from Xero as usual. Payments and status changes flow back through Xero webhooks and the hourly sync, and appear on the Finance page and the company's Invoices tab.
 
 ### 5.2 Manual preparation
 
-- **Prepare invoice** on an active contract: the current anchored period by default, or a hand-typed period (if it equals an anchored period it is pro-rated as such; otherwise it is billed whole).
+- **Prepare invoice** on an active contract: the current anchored period by default, or a hand-typed period. Lines invoiced with the contract are built for that period (pro-rated if it is shorter than a full one); lines on their own cycle are included only when their own period starts inside it. Manual preparation does not check coverage, so it can deliberately re-bill.
 - **Prepare invoice** on a won opportunity: the one-off project and hardware lines only (hardware goes to the hardware account code). Recurring lines are left to the contract.
 
 ### 5.3 What the Finance page shows

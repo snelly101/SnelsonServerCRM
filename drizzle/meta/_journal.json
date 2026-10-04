@@ -134,6 +134,13 @@
       "when": 1791120331419,
       "tag": "0018_contract_line_changes",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1791121367079,
+      "tag": "0019_billing_schedules",
+      "breakpoints": true
     }
   ]
 }

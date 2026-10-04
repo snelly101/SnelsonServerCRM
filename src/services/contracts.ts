@@ -48,6 +48,7 @@ const selectRow = {
   autoRenew: contracts.autoRenew,
   billingFrequency: contracts.billingFrequency,
   billingDay: contracts.billingDay,
+  billingFrom: contracts.billingFrom,
   nextReviewDate: contracts.nextReviewDate,
   updatedAt: contracts.updatedAt,
   lines: linesJson,
@@ -163,6 +164,7 @@ function toValues(input: ContractInput) {
     autoRenew: input.autoRenew,
     billingFrequency: input.billingFrequency,
     billingDay: input.billingDay ?? null,
+    billingFrom: input.billingFrom ?? null,
     nextReviewDate: input.nextReviewDate,
     reviewIntervalMonths: input.reviewIntervalMonths,
     ownerUserId: input.ownerUserId,
@@ -183,6 +185,8 @@ function lineValues(contractId: string, l: ContractLineInput, i: number) {
     unitPrice: String(l.unitPrice),
     unitCost: l.unitCost === null ? null : String(l.unitCost),
     countsAsManagedDevice: l.pricingModel === "per_device" && l.countsAsManagedDevice,
+    invoiceSchedule: l.revenueType === "recurring" ? (l.invoiceSchedule ?? "contract") : "contract",
+    reductionPolicy: l.reductionPolicy ?? "next_period",
     sortOrder: i,
   };
 }

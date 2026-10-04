@@ -107,7 +107,8 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
                       </td>
                       <td className="text-slate-600">
                         {PRICING_LABELS[l.pricingModel]}
-                        {l.revenueType === "recurring" && <span className="text-xs"> · {FREQUENCY_LABELS[l.billingFrequency]}</span>}
+                        {l.revenueType === "recurring" && <span className="text-xs"> · {FREQUENCY_LABELS[l.billingFrequency]}{l.invoiceSchedule === "own" ? ", own cycle" : ""}</span>}
+                        {l.revenueType === "recurring" && l.reductionPolicy !== "next_period" && <div className="text-[11px] text-slate-500">{l.reductionPolicy === "immediate" ? "decreases credited" : "decreases at renewal"}</div>}
                       </td>
                       <td className="text-slate-600">{l.siteName ?? "All"}</td>
                       <td className="text-right tabular-nums font-medium">

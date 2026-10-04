@@ -38,7 +38,10 @@ export function BillingRunForm({ asOf, rows, currency, settings }: { asOf: strin
               {created.map((c) => (
                 <tr key={c.draftId}>
                   <td>{c.companyName}</td>
-                  <td>{c.contractName}</td>
+                  <td>
+                    {c.contractName}
+                    {c.missed > 0 && <Badge className="ml-1" tone="amber">{c.missed} missed period{c.missed === 1 ? "" : "s"}</Badge>}
+                  </td>
                   <td className="text-right tabular-nums">{fmtMoney(c.net, currency)}</td>
                   <td className="text-right">
                     <Link href={`/finance/drafts/${c.draftId}`} className="text-xs text-brand-700 hover:underline">
@@ -118,9 +121,18 @@ export function BillingRunForm({ asOf, rows, currency, settings }: { asOf: strin
                     </Link>
                     <div className="text-xs text-slate-500">
                       {r.billingFrequency} · {r.lineCount} recurring line{r.lineCount === 1 ? "" : "s"}
+                      {r.items.some((i) => i.months !== (r.billingFrequency === "annual" ? 12 : r.billingFrequency === "quarterly" ? 3 : 1)) && " · includes services on their own cycle"}
                     </div>
                   </td>
-                  <td className="whitespace-nowrap text-xs">{r.period ? `${fmtDate(r.period.periodStart, settings)} – ${fmtDate(r.period.periodEnd, settings)}` : "—"}</td>
+                  <td className="text-xs">
+                    <div className="whitespace-nowrap">{r.period ? `${fmtDate(r.period.periodStart, settings)} – ${fmtDate(r.period.periodEnd, settings)}` : "—"}</div>
+                    {r.missedCount > 0 && (
+                      <div className="mt-0.5">
+                        <Badge tone="amber">{r.missedCount} missed period{r.missedCount === 1 ? "" : "s"}</Badge>
+                        <span className="ml-1 text-slate-500">from {fmtDate(r.items.filter((i) => i.missed).reduce((a, i) => (i.period.periodStart < a ? i.period.periodStart : a), r.items[0].period.periodStart), settings)}</span>
+                      </div>
+                    )}
+                  </td>
                   <td className="text-right tabular-nums">{fmtMoney(r.net, currency)}</td>
                   <td>{r.xeroLinked ? <Badge tone="green">linked</Badge> : <Badge tone="amber">not linked</Badge>}</td>
                   <td className="text-xs">
