@@ -78,7 +78,7 @@ export default async function DashboardPage() {
       </div>
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Pipeline (first year)" value={fmtMoney(pipeline.total, settings.currency)} hint={`${pipeline.count} open · weighted ${fmtMoney(pipeline.weighted, settings.currency)}`} />
-        <Stat label="MRR (active contracts)" value={fmtMoney(contractsTotals.mrr, settings.currency)} hint={`${contractsTotals.active} active · ARR ${fmtMoney(contractsTotals.arr, settings.currency)}`} tone="good" />
+        <Stat label="Billed monthly (active contracts)" value={fmtMoney(contractsTotals.monthlyBilled, settings.currency)} hint={`${contractsTotals.active} active · MRR normalised ${fmtMoney(contractsTotals.mrr, settings.currency)}`} tone="good" />
         <Stat label="My open tasks" value={counts.mine} hint={counts.mineOverdue ? `${counts.mineOverdue} overdue` : "none overdue"} tone={counts.mineOverdue ? "danger" : "default"} />
         <Stat label="Renewals in 90 days" value={renewals.total} tone={renewals.total ? "warn" : "default"} />
       </div>

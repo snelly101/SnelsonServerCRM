@@ -13,9 +13,9 @@ const tones: Record<string, string> = {
   pink: "bg-pink-50 text-pink-700 ring-pink-200",
 };
 
-export function Badge({ tone = "slate", className, children }: { tone?: string; className?: string; children: React.ReactNode }) {
+export function Badge({ tone = "slate", className, title, children }: { tone?: string; className?: string; title?: string; children: React.ReactNode }) {
   return (
-    <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset whitespace-nowrap", tones[tone] ?? tones.slate, className)}>
+    <span title={title} className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset whitespace-nowrap", tones[tone] ?? tones.slate, className)}>
       {children}
     </span>
   );

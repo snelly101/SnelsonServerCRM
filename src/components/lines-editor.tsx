@@ -348,7 +348,24 @@ export function ProductPicker({ products, value, currency, fallbackLabel, onSele
 export function RevenueSummaryBadges({ summary, currency, compact }: { summary: ReturnType<typeof summariseLines>; currency: string; compact?: boolean }) {
   return (
     <div className={`flex flex-wrap items-center gap-2 ${compact ? "text-xs" : "text-sm"}`}>
-      <Badge tone="green">MRR {fmtMoney(summary.mrr, currency)}</Badge>
+      <Badge tone="green" title="Recurring lines billed monthly: what goes on each monthly invoice">
+        Monthly {fmtMoney(summary.monthlyBilled, currency)}
+      </Badge>
+      {summary.quarterlyBilled > 0 && (
+        <Badge tone="green" title="Recurring lines billed every three months">
+          Quarterly {fmtMoney(summary.quarterlyBilled, currency)}/qtr
+        </Badge>
+      )}
+      {summary.annualBilled > 0 && (
+        <Badge tone="green" title="Recurring lines billed once a year">
+          Annually {fmtMoney(summary.annualBilled, currency)}/yr
+        </Badge>
+      )}
+      {Math.abs(summary.mrr - summary.monthlyBilled) >= 0.005 && (
+        <Badge tone="slate" title="Normalised MRR: annual ÷ 12 and quarterly ÷ 3 added to the monthly lines. Used for forecasting, not what is invoiced in a month.">
+          MRR {fmtMoney(summary.mrr, currency)} normalised
+        </Badge>
+      )}
       {summary.oneOff > 0 && <Badge tone="blue">Project {fmtMoney(summary.oneOff, currency)}</Badge>}
       {summary.hardware > 0 && <Badge tone="indigo">Hardware {fmtMoney(summary.hardware, currency)}</Badge>}
       <Badge>First year {fmtMoney(summary.firstYearValue, currency)}</Badge>

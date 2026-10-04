@@ -134,6 +134,9 @@ export default async function CompanyPage({
   const vaultCategories = vaultCaps.list ? await listCategories() : [];
   const activeContracts = companyContracts.filter((c) => c.status === "active");
   const mrr = activeContracts.reduce((a, c) => a + c.summary.mrr, 0);
+  const monthlyBilled = activeContracts.reduce((a, c) => a + c.summary.monthlyBilled, 0);
+  const quarterlyBilled = activeContracts.reduce((a, c) => a + c.summary.quarterlyBilled, 0);
+  const annualBilled = activeContracts.reduce((a, c) => a + c.summary.annualBilled, 0);
   const openOpps = opportunities.filter((o) => o.status === "open");
   const canWrite = can(me.role, "company.write");
   const openTasks = companyTasks.rows.filter((t) => t.status === "open").length;
@@ -778,7 +781,7 @@ export default async function CompanyPage({
                       <th>Opportunity</th>
                       <th>Stage</th>
                       <th className="text-right">First-year value</th>
-                      <th className="text-right">MRR</th>
+                      <th className="text-right" title="Normalised: annual ÷ 12, quarterly ÷ 3">MRR</th>
                       <th>Expected close</th>
                       <th>Owner</th>
                     </tr>
@@ -830,7 +833,7 @@ export default async function CompanyPage({
         {tab === "contracts" && (
           <>
             <Card
-              title={`Contracts · MRR ${fmtMoney(mrr, settings.currency)}`}
+              title={`Contracts · ${fmtMoney(monthlyBilled, settings.currency)}/month${quarterlyBilled > 0 ? ` + ${fmtMoney(quarterlyBilled, settings.currency)}/qtr` : ""}${annualBilled > 0 ? ` + ${fmtMoney(annualBilled, settings.currency)}/yr` : ""}${Math.abs(mrr - monthlyBilled) >= 0.005 ? ` (MRR ${fmtMoney(mrr, settings.currency)} normalised)` : ""}`}
               padded={false}
               actions={
                 can(me.role, "contract.write") && (

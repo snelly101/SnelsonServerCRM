@@ -54,8 +54,8 @@ export default async function ContractsPage({ searchParams }: { searchParams: Pr
       />
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Active contracts" value={totals.active} />
-        <Stat label="MRR" value={fmtMoney(totals.mrr, c)} hint="Σ recurring lines ÷ months per period" tone="good" />
-        <Stat label="ARR" value={fmtMoney(totals.arr, c)} hint="MRR × 12" />
+        <Stat label="Billed monthly" value={fmtMoney(totals.monthlyBilled, c)} hint={[totals.quarterlyBilled > 0 ? `+ ${fmtMoney(totals.quarterlyBilled, c)}/qtr` : null, totals.annualBilled > 0 ? `+ ${fmtMoney(totals.annualBilled, c)}/yr` : null].filter(Boolean).join(" ") || "no quarterly or annual lines"} tone="good" />
+        <Stat label="MRR (normalised)" value={fmtMoney(totals.mrr, c)} hint={`annual ÷ 12, quarterly ÷ 3 · ARR ${fmtMoney(totals.arr, c)}`} />
         <Stat label="One-off in active contracts" value={fmtMoney(totals.oneOff + totals.hardware, c)} hint="project + hardware, reported separately" />
       </div>
       <FilterBar
@@ -80,7 +80,7 @@ export default async function ContractsPage({ searchParams }: { searchParams: Pr
                   <th>Contract</th>
                   <th>Company</th>
                   <th>Status</th>
-                  <th className="text-right">MRR</th>
+                  <th className="text-right" title="Normalised: annual ÷ 12, quarterly ÷ 3">MRR</th>
                   <th>Billing</th>
                   <th>Start</th>
                   <th>Renewal</th>

@@ -39,10 +39,16 @@ export function annualValue(l: LineLike) {
 }
 
 export type RevenueSummary = {
-  /** Monthly recurring revenue (normalised). */
+  /** Monthly recurring revenue, normalised: annual ÷ 12, quarterly ÷ 3. The forecasting figure. */
   mrr: number;
-  /** Annual recurring revenue. */
+  /** Annual recurring revenue (normalised MRR × 12). */
   arr: number;
+  /** What is actually invoiced each month: recurring lines billed monthly only. */
+  monthlyBilled: number;
+  /** Recurring lines billed quarterly, per quarter. */
+  quarterlyBilled: number;
+  /** Recurring lines billed annually, per year. */
+  annualBilled: number;
   /** One-off project revenue. */
   oneOff: number;
   /** Hardware revenue. */
@@ -58,6 +64,9 @@ export type RevenueSummary = {
 
 export function summariseLines(lines: LineLike[]): RevenueSummary {
   let mrr = 0;
+  let monthlyBilled = 0;
+  let quarterlyBilled = 0;
+  let annualBilled = 0;
   let oneOff = 0;
   let hardware = 0;
   let revenue = 0;
@@ -67,6 +76,9 @@ export function summariseLines(lines: LineLike[]): RevenueSummary {
     if (l.revenueType === "recurring") {
       mrr += monthlyValue(l);
       revenue += annualValue(l);
+      if (l.billingFrequency === "annual") annualBilled += lineTotal(l);
+      else if (l.billingFrequency === "quarterly") quarterlyBilled += lineTotal(l);
+      else if (l.billingFrequency === "monthly") monthlyBilled += lineTotal(l);
     } else if (l.revenueType === "one_off_project") {
       oneOff += lineTotal(l);
       revenue += lineTotal(l);
@@ -82,6 +94,9 @@ export function summariseLines(lines: LineLike[]): RevenueSummary {
   return {
     mrr,
     arr: mrr * 12,
+    monthlyBilled,
+    quarterlyBilled,
+    annualBilled,
     oneOff,
     hardware,
     firstYearValue: revenue,
