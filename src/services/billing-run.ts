@@ -7,6 +7,7 @@ import { ActionError } from "@/lib/action-result";
 import { billingPeriodFor, buildContractInvoiceLines, PERIOD_MONTHS, type BillingPeriod, type PreviousInvoice } from "@/lib/billing";
 import { getLink } from "./integrations";
 import { prepareInvoiceDraft } from "./xero";
+import { lineChangesFor } from "./contracts";
 
 /**
  * Billing run: one draft invoice per active contract for the **current**
@@ -54,6 +55,7 @@ export async function previewBillingRun(asOf: string): Promise<BillingRunRow[]> 
   if (!rows.length) return [];
   const ids = rows.map((r) => r.contract.id);
   const lines = await db.select().from(contractLines).where(inArray(contractLines.contractId, ids));
+  const history = await lineChangesFor(ids);
   const drafts = await db
     .select({ id: invoiceDrafts.id, contractId: invoiceDrafts.contractId, periodStart: invoiceDrafts.periodStart, periodEnd: invoiceDrafts.periodEnd, lines: invoiceDrafts.lines, reference: invoiceDrafts.reference, status: invoiceDrafts.status, createdAt: invoiceDrafts.createdAt })
     .from(invoiceDrafts)
@@ -61,7 +63,7 @@ export async function previewBillingRun(asOf: string): Promise<BillingRunRow[]> 
   const out: BillingRunRow[] = [];
   for (const r of rows) {
     const c = r.contract;
-    const recurring = lines.filter((l) => l.contractId === c.id && l.revenueType === "recurring" && l.billingFrequency !== "one_off");
+    const recurring = lines.filter((l) => l.contractId === c.id && l.revenueType === "recurring" && l.billingFrequency !== "one_off").map((l) => ({ ...l, changes: history.get(l.id) ?? [] }));
     const period = billingPeriodFor(c.startDate, c.billingFrequency, asOf, c.endDate, c.billingDay);
     const months = PERIOD_MONTHS[c.billingFrequency] ?? 0;
     // Same maths as the draft itself, so the preview shows pro-rated amounts and catch-up lines.

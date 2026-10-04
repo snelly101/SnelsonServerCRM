@@ -48,6 +48,7 @@ One codebase, two processes (`web` and `worker`) sharing the same database. Noth
 | `products` | Service catalogue. Same pricing fields plus `counts_as_managed_device` for per-device lines to be compared with NinjaOne. |
 | `contracts` | Start/end/renewal dates, notice period, auto-renew, billing frequency, review date/interval, linked opportunity, `external_proposal_id`. |
 | `contract_lines` | **Contracted** quantity (never overwritten by observed counts), optional `site_id`, `counts_as_managed_device`. |
+| `contract_line_changes` | Dated history of quantity and unit-price changes on active contracts: value before/after, effective day, actor, reason, the draft that first accounted for the change. The billing engine reconstructs the quantity on any day from it. |
 | `tasks` | Owner, due, priority, links to company/opportunity/contract/onboarding, unique `source_key` for system-generated tasks (renewal/review/onboarding items). |
 | `checklist_templates`, `checklist_template_items` | Reusable onboarding checklists (day offsets, default owner role). |
 | `onboardings` | Unique `source_key` (`opportunity:<id>` or `proposal:<external id>`) guarantees exactly-once creation. Items are `tasks` rows. |

@@ -112,11 +112,11 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
                       <td className="text-slate-600">{l.siteName ?? "All"}</td>
                       <td className="text-right tabular-nums font-medium">
                         {Number(l.quantity)}
-                        {l.previousQuantity !== null && l.quantityChangedOn && (
-                          <div className="text-[11px] font-normal text-amber-700" title="Pro-rated on the next invoice">
-                            was {Number(l.previousQuantity)} until {fmtDate(l.quantityChangedOn, settings)}
+                        {l.pendingChanges.filter((h) => h.field === "quantity").map((h) => (
+                          <div key={h.id} className="text-[11px] font-normal text-amber-700" title="Not yet on an invoice; the next one pro-rates it">
+                            {Number(h.previousValue ?? 0)} → {Number(h.newValue ?? 0)} from {fmtDate(h.effectiveFrom, settings)}
                           </div>
-                        )}
+                        ))}
                       </td>
                       <td className="text-right tabular-nums">{fmtMoney(l.unitPrice, c)}</td>
                       <td className="text-right tabular-nums">{fmtMoney(Number(l.quantity) * Number(l.unitPrice), c)}</td>
@@ -129,6 +129,53 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
               <strong>Monthly</strong> is what the monthly invoice carries (recurring lines billed monthly). Quarterly and annual lines are invoiced on their own cycle and shown per quarter or per year. <strong>MRR normalised</strong> (annual ÷ 12, quarterly ÷ 3, added to the monthly lines) appears only when it differs; it is the forecasting figure used on the Reports page, not a monthly bill. One-off and hardware lines are excluded from both.
             </p>
           </Card>
+
+          {contract.history.length > 0 && (
+            <Card title={`Change history (${contract.history.length})`} padded={false}>
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Recorded</th>
+                    <th>Service</th>
+                    <th>Change</th>
+                    <th>Effective</th>
+                    <th>By / reason</th>
+                    <th>Invoiced on</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {contract.history.map((h) => (
+                    <tr key={h.id}>
+                      <td className="whitespace-nowrap text-xs text-slate-500">{fmtDate(h.recordedAt, settings)}</td>
+                      <td>
+                        {h.lineDescription}
+                        {!h.contractLineId && <Badge className="ml-1" tone="slate">removed</Badge>}
+                      </td>
+                      <td className="tabular-nums">
+                        {h.field === "unit_price" ? `${fmtMoney(h.previousValue ?? 0, c)} → ${fmtMoney(h.newValue ?? 0, c)}` : `${Number(h.previousValue ?? 0)} → ${Number(h.newValue ?? 0)}`}
+                        <span className="ml-1 text-xs text-slate-500">{h.field === "unit_price" ? "price" : "qty"}</span>
+                      </td>
+                      <td className="whitespace-nowrap">{fmtDate(h.effectiveFrom, settings)}</td>
+                      <td className="text-xs text-slate-600">
+                        {h.actorName ?? "—"}
+                        {h.reason && <div className="text-slate-500">{h.reason}</div>}
+                      </td>
+                      <td className="text-xs">
+                        {h.settledByDraftId ? (
+                          <Link href={`/finance/drafts/${h.settledByDraftId}`} className="text-brand-700 hover:underline">
+                            {h.draftReference} <span className="text-slate-500">({h.draftStatus})</span>
+                          </Link>
+                        ) : (
+                          <span className="text-amber-700">awaiting invoice</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="px-4 py-2 text-[11px] text-slate-500">Every dated change on this active contract. The next invoice bills increases pro rata from their effective day; decreases apply from the following period; price changes apply from the next period starting on or after the effective day. A cancelled draft hands its changes back to the next one.</p>
+            </Card>
+          )}
 
           <Card title="Device count check" padded={contractDiscrepancies.length === 0}>
             {deviceLines.length === 0 ? (

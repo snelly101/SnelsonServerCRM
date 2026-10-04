@@ -186,7 +186,7 @@ export const contractLines = pgTable(
     billingFrequency: billingFrequencyEnum("billing_frequency").notNull().default("monthly"),
     // The contracted (billable) quantity. Observed device counts live in ninja_devices (Phase 5).
     quantity: numeric("quantity", { precision: 12, scale: 2 }).notNull().default("1"),
-    // Set when the quantity changes mid-period: the quantity before the change and the day it took effect. Cleared once a period covering that day has been invoiced.
+    // Superseded by contract_line_changes (dated history). Kept for one release so a rollback still has the last pending change; no longer written.
     previousQuantity: numeric("previous_quantity", { precision: 12, scale: 2 }),
     quantityChangedOn: date("quantity_changed_on"),
     unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull().default("0"),
@@ -196,6 +196,40 @@ export const contractLines = pgTable(
     ...timestamps,
   },
   (t) => [index("contract_lines_contract_idx").on(t.contractId, t.sortOrder)],
+);
+
+/**
+ * Dated history of commercial changes to contract lines: every quantity or
+ * unit-price change on an active contract, with the value before and after,
+ * the day it takes effect, who recorded it and why. The billing engine
+ * reconstructs the quantity on any day from these rows, so several changes
+ * can fall inside one period and a backdated change is caught up on the next
+ * invoice. `settled_by_draft_id` is the first non-cancelled draft whose period
+ * covers the effective date (cleared again if that draft is cancelled); it is
+ * traceability, not an input to the calculation. A removed line keeps its
+ * rows with `contract_line_id` null and the description it had.
+ */
+export const contractLineChanges = pgTable(
+  "contract_line_changes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    contractId: uuid("contract_id")
+      .notNull()
+      .references(() => contracts.id, { onDelete: "cascade" }),
+    contractLineId: uuid("contract_line_id").references(() => contractLines.id, { onDelete: "set null" }),
+    lineDescription: text("line_description").notNull(),
+    /** quantity | unit_price */
+    field: text("field").notNull(),
+    previousValue: numeric("previous_value", { precision: 12, scale: 2 }),
+    newValue: numeric("new_value", { precision: 12, scale: 2 }),
+    effectiveFrom: date("effective_from").notNull(),
+    reason: text("reason"),
+    actorUserId: text("actor_user_id").references(() => user.id, { onDelete: "set null" }),
+    /** invoice_drafts.id (no FK: the drafts table is defined with the Xero mirrors). */
+    settledByDraftId: uuid("settled_by_draft_id"),
+    recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("contract_line_changes_line_idx").on(t.contractLineId, t.effectiveFrom), index("contract_line_changes_contract_idx").on(t.contractId, t.effectiveFrom)],
 );
 
 // ---------------------------------------------------------------------------

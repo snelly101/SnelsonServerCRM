@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { companies, contractLines, contracts, invoiceDrafts, opportunityLines, opportunities, user, xeroContacts, xeroInvoices, xeroPayments, type InvoiceDraftLine } from "@/db/schema";
+import { companies, contractLineChanges, contractLines, contracts, invoiceDrafts, opportunityLines, opportunities, user, xeroContacts, xeroInvoices, xeroPayments, type InvoiceDraftLine } from "@/db/schema";
 import { audit, logActivity } from "@/lib/audit";
 import { logger } from "@/lib/logger";
 import { ActionError } from "@/lib/action-result";
@@ -12,6 +12,7 @@ import { differenceInCalendarDays, parseISO, subDays } from "date-fns";
 import { getXeroClient, type XeroConfig, type XeroCredentials } from "@/connectors/xero";
 import { buildAuthorizeUrl, exchangeCode, listTenants, xeroAppConfig, xeroDate, xeroDateOnly } from "@/connectors/xero/live";
 import type { XeroContactRaw, XeroInvoiceRaw, XeroItemRaw, XeroPaymentRaw, XeroRepeatingInvoiceRaw } from "@/connectors/xero/types";
+import { lineChangesFor } from "./contracts";
 import { createLink, getConnection, getCredentials, getLink, getLinkByExternal, listLinks, markEventProcessed, raiseConflict, recordInboundEvent, runOutbound, runSync, setConnectionConfig, setCredentials, updateConnection } from "./integrations";
 import { companySchema, contactSchema } from "@/lib/validation";
 import { createCompany, findDuplicateCompanies } from "./companies";
@@ -527,6 +528,7 @@ export async function prepareInvoiceDraft(input: { companyId: string; contractId
     const [c] = await db.select().from(contracts).where(eq(contracts.id, input.contractId)).limit(1);
     if (!c) throw new ActionError("Contract not found.");
     const cl = await db.select().from(contractLines).where(eq(contractLines.contractId, input.contractId)).orderBy(contractLines.sortOrder);
+    const history = await lineChangesFor([input.contractId]);
     const months = PERIOD_MONTHS[c.billingFrequency] ?? 1;
     // The anchored period (so a mid-period start is pro-rated); a hand-typed period that is not an anchored one is billed whole.
     const today = new Date().toISOString().slice(0, 10);
@@ -542,7 +544,7 @@ export async function prepareInvoiceDraft(input: { companyId: string; contractId
       .orderBy(desc(invoiceDrafts.createdAt))
       .limit(1);
     const previous: PreviousInvoice | null = prevDraft?.periodStart && prevDraft.periodEnd ? { period: { periodStart: prevDraft.periodStart, periodEnd: prevDraft.periodEnd, fullDays: Math.max(1, differenceInCalendarDays(parseISO(prevDraft.periodEnd), parseISO(prevDraft.periodStart)) + 1) }, lines: prevDraft.lines } : null;
-    lines = buildContractInvoiceLines({ lines: cl, period, months, previous, accountCode, taxType });
+    lines = buildContractInvoiceLines({ lines: cl.map((l) => ({ ...l, changes: history.get(l.id) ?? [] })), period, months, previous, accountCode, taxType });
     description ??= `${c.name} — ${c.billingFrequency} billing`;
     settledPeriodEnd = period.periodEnd;
     input = { ...input, periodStart: period.periodStart, periodEnd: period.periodEnd };
@@ -563,9 +565,9 @@ export async function prepareInvoiceDraft(input: { companyId: string; contractId
   const id = await db.transaction(async (tx) => {
     const [row] = await tx.insert(invoiceDrafts).values({ companyId: input.companyId, contractId: input.contractId ?? null, opportunityId: input.opportunityId ?? null, reference: "pending", description, currencyCode: settings.currency, invoiceDate: today, dueDate: due, periodStart: input.periodStart ?? null, periodEnd: input.periodEnd ?? null, lines, subTotal: String(round(subTotal)), preparedByUserId: actorUserId }).returning({ id: invoiceDrafts.id });
     await tx.update(invoiceDrafts).set({ reference: draftReference(row.id) }).where(eq(invoiceDrafts.id, row.id));
-    // Quantity changes dated on or before the end of this period are now invoiced; stop carrying them.
+    // Changes dated on or before the end of this period are now accounted for by this draft (traceability only; the history itself is never cleared).
     if (input.contractId && settledPeriodEnd) {
-      await tx.update(contractLines).set({ previousQuantity: null, quantityChangedOn: null }).where(and(eq(contractLines.contractId, input.contractId), sql`${contractLines.quantityChangedOn} <= ${settledPeriodEnd}`));
+      await tx.update(contractLineChanges).set({ settledByDraftId: row.id }).where(and(eq(contractLineChanges.contractId, input.contractId), isNull(contractLineChanges.settledByDraftId), sql`${contractLineChanges.effectiveFrom} <= ${settledPeriodEnd}`));
     }
     await audit({ actorUserId, action: "invoice.prepare", entityType: "invoice_draft", entityId: row.id, details: { companyId: input.companyId, lines: lines.length, subTotal, periodStart: input.periodStart ?? null, periodEnd: input.periodEnd ?? null } }, tx);
     return row.id;
@@ -588,6 +590,8 @@ export async function cancelInvoiceDraft(id: string, actorUserId: string) {
   if (!d) throw new ActionError("Draft not found.");
   if (d.status === "created") throw new ActionError("This invoice already exists in Xero. Void it there if needed.");
   await db.update(invoiceDrafts).set({ status: "cancelled", updatedAt: new Date() }).where(eq(invoiceDrafts.id, id));
+  // The changes this draft accounted for are open again for the next one.
+  await db.update(contractLineChanges).set({ settledByDraftId: null }).where(eq(contractLineChanges.settledByDraftId, id));
   await audit({ actorUserId, action: "invoice.draft.cancel", entityType: "invoice_draft", entityId: id });
 }
 
