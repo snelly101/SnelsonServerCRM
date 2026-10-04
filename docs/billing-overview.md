@@ -138,7 +138,9 @@ Everything about money sits under one sidebar entry, **Billing**, with a fixed s
 | **Invoices** | The Xero sales mirror (outstanding, overdue, paid) and the Pax8 supplier bill reconciliation (7). |
 | **Automation ↗** | The staged automation policy in Settings (5.8). |
 
-Contracts keeps agreements and the catalogue; the Devices and Pax8 integration pages keep their contextual discrepancy lists and link into Exceptions. Old addresses (`/finance/…`, `/contracts/renewals`, `/contracts/price-reviews`) redirect.
+Contracts keeps agreements and the catalogue; the Devices and Pax8 integration pages keep their contextual discrepancy lists and link into Exceptions.
+
+Each company page has a **Billing** tab (`src/services/company-billing.ts`): the same picture narrowed to that customer. A "what to do next" list for the customer, the Xero balances, every active agreement with what the next run proposes and why (ready / needs review / blocked, previous invoice, reasons), drafts awaiting approval with batch approval, open and accepted count discrepancies with the Resolve dialog, renewals with the decision button, the service coverage counts, and the invoices created in Xero with links to their customer schedules. Old addresses (`/finance/…`, `/contracts/renewals`, `/contracts/price-reviews`) redirect.
 
 
 ### 5.1 The billing run (Billing → Monthly run → Prepare)
