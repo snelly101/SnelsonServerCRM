@@ -272,6 +272,9 @@ export class DemoPax8Client implements Pax8Client {
   async listInvoices(limit: number) {
     return invoices.slice(0, limit).map((i) => ({ ...i }));
   }
+  async listInvoicesSince(fromDate: string, max = 2000) {
+    return invoices.filter((i) => String(i.invoiceDate) >= fromDate).slice(0, max).map((i) => ({ ...i }));
+  }
   async listInvoiceItems(invoiceId: string) {
     const inv = invoices.find((i) => i.id === invoiceId);
     return inv ? itemsFor(inv) : [];

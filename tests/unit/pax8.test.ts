@@ -7,6 +7,7 @@ import {
   contractLines,
   pax8Companies,
   pax8InvoiceItems,
+  pax8Invoices,
   pax8Subscriptions,
   products,
   xeroInvoices,
@@ -27,6 +28,8 @@ import {
   changePax8SubscriptionQuantity,
   matchPax8Invoice,
   pax8InvoiceReconciliation,
+  pax8InvoiceAllocation,
+  importPax8InvoicesSince,
   setPax8Supplier,
   companySubscriptionOverview,
   createPax8CompanyForCompany,
@@ -797,7 +800,7 @@ describe("Pax8 sync, matching, licence check and costs (demo adapter)", () => {
       const row = (id: string) => after.rows.find((x) => x.pax8InvoiceId === id)!;
       expect(row(cur.id).state).toBe("no_bill");
       expect(row(last.id).state).toBe("matched");
-      expect(row(last.id).matchSource).toBe("auto");
+      expect(row(last.id).matchSource).toBe("reference");
       expect(row(last.id).difference).toBe(0);
       expect(row(older.id).state).toBe("amount_differs");
       expect(row(older.id).difference).toBeCloseTo(12.5, 2);
@@ -819,6 +822,46 @@ describe("Pax8 sync, matching, licence check and costs (demo adapter)", () => {
       await matchPax8Invoice(olderAgain.id, "demo-b-2", admin.id);
       expect(again.rows.find((x) => x.pax8InvoiceId === last.id)!.state).toBe("matched");
       expect((await pax8InvoiceReconciliation()).rows.find((x) => x.pax8InvoiceId === older.id)!.bill?.invoiceId).toBe("demo-b-2");
+    } finally {
+      await setPax8Supplier(null, admin.id);
+    }
+  });
+
+  it("charge-level allocation ties every Pax8 line to a customer and subscription, flags the ones it cannot, reports the match basis and imported history, and a historical import adds without duplicating", async () => {
+    await syncXero("manual", admin.id);
+    const supplier = (await pax8InvoiceReconciliation()).suppliers.find((s) => /pax8/i.test(s.name))!;
+    await setPax8Supplier(supplier.contactId, admin.id);
+    try {
+      const recon = await pax8InvoiceReconciliation();
+      const [cur, last] = demoPax8InvoiceSummary();
+      const lastRow = recon.rows.find((r) => r.pax8InvoiceId === last.id)!;
+      expect(lastRow.matchSource).toBe("reference");
+      expect(recon.coverage).toMatchObject({ count: 3, oldest: demoPax8InvoiceSummary()[2].invoiceDate, newest: cur.invoiceDate });
+      expect(recon.totals.olderBills).toBe(1); // the £49.99 bill predates the imported history
+      expect(recon.olderBills[0].invoiceId).toBe("demo-b-3");
+      // Every demo charge belongs to a linked company and a mirrored subscription, except the two unlinked companies' lines.
+      expect(lastRow.allocation).toBeTruthy();
+      expect(lastRow.allocation!.items).toBeGreaterThan(5);
+      expect(lastRow.allocation!.findings.no_customer).toBeGreaterThanOrEqual(1); // Moorland Outdoor Supplies is not linked
+      expect(lastRow.allocation!.billLines).toEqual({ kind: "summary" }); // the demo bill has one line
+      const detail = (await pax8InvoiceAllocation(last.id))!;
+      expect(detail.summary.allocated + detail.summary.unallocated).toBeCloseTo(detail.summary.total, 2);
+      const dentalCharges = detail.customers.find((c) => c.companyId === dental)!;
+      expect(dentalCharges.items.length).toBeGreaterThanOrEqual(2);
+      expect(dentalCharges.items.every((i) => i.finding === "ok")).toBe(true);
+      const noCustomer = detail.customers.find((c) => !c.companyId)!;
+      expect(noCustomer.items.every((i) => i.finding === "no_customer")).toBe(true);
+      // Two months ago Northern Freight had 32 Premium seats against 34 today: informational quantity difference.
+      const older = (await pax8InvoiceAllocation(demoPax8InvoiceSummary()[2].id))!;
+      const premium = older.customers.flatMap((c) => c.items).find((i) => /Business Premium/.test(i.description ?? "") && i.quantity === 32)!;
+      expect(premium.finding).toBe("quantity_differs");
+      // Historical import: same three invoices → nothing added, all refreshed, matches unchanged; a hand match survives.
+      await matchPax8Invoice(lastRow.id, lastRow.bill!.invoiceId, admin.id);
+      const imp = await importPax8InvoicesSince("2020-01-01", admin.id);
+      expect(imp).toMatchObject({ found: 3, added: 0, refreshed: 3, failures: [] });
+      expect((await db.select().from(pax8Invoices)).length).toBe(3);
+      expect((await pax8InvoiceReconciliation()).rows.find((r) => r.pax8InvoiceId === last.id)!.matchSource).toBe("manual");
+      await expect(importPax8InvoicesSince("nonsense", admin.id)).rejects.toThrow(/YYYY-MM-DD/);
     } finally {
       await setPax8Supplier(null, admin.id);
     }

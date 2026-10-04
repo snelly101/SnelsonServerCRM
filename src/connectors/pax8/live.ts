@@ -168,6 +168,22 @@ export class LivePax8Client implements Pax8Client {
       .slice(0, limit);
   }
 
+  async listInvoicesSince(fromDate: string, max = 2000) {
+    // Newest first; stop paging once a page ends before the date wanted.
+    const out: Pax8InvoiceRaw[] = [];
+    for (let page = 0; page < 200 && out.length < max; page++) {
+      const res = await this.http.get<Pax8Page<Pax8InvoiceRaw> | Pax8InvoiceRaw[]>("/invoices", { sort: "invoiceDate", direction: "desc", page, size: this.pageSize });
+      const d = res.data;
+      const content = Array.isArray(d) ? d : Array.isArray(d?.content) ? d.content : [];
+      if (!content.length) break;
+      for (const inv of content) if (String(inv.invoiceDate ?? "").slice(0, 10) >= fromDate) out.push(inv);
+      const oldest = content.reduce((a, i) => (String(i.invoiceDate ?? "") < a ? String(i.invoiceDate ?? "") : a), "9999");
+      const totalPages = Array.isArray(d) ? 1 : d?.page?.totalPages;
+      if (oldest.slice(0, 10) < fromDate || content.length < this.pageSize || (typeof totalPages === "number" && page + 1 >= totalPages)) break;
+    }
+    return out.slice(0, max);
+  }
+
   async listInvoiceItems(invoiceId: string) {
     try {
       return await this.paged<Pax8InvoiceItemRaw>(

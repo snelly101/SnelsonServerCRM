@@ -52,6 +52,8 @@ import {
   type Pax8ContactCreate,
   type Pax8ContactType,
   type Pax8InvoiceItemRaw,
+  type Pax8Client,
+  type Pax8InvoiceRaw,
 } from "@/connectors/pax8/types";
 import { registrableDomain } from "@/connectors/twentyi/types";
 import {
@@ -386,88 +388,14 @@ export async function syncPax8(
       try {
         const invoices = await client.listInvoices(config.invoiceCount);
         for (const inv of invoices) {
-          let items: Pax8InvoiceItemRaw[] = [];
-          try {
-            items = await client.listInvoiceItems(inv.id);
-          } catch (err) {
-            await fail(
-              `Invoice ${inv.id} items: ${err instanceof Error ? err.message : String(err)}`,
-              { externalId: inv.id },
-            );
+          const r = await mirrorPax8Invoice(client, inv, linkByPax8, now);
+          if (!r.ok) {
+            await fail(`Invoice ${inv.id} items: ${r.error}`, { externalId: inv.id });
             continue;
           }
           invoiceCount++;
-          const itemsTotal = items.reduce(
-            (a, it) => a + (pax8Number(it.total) ?? 0),
-            0,
-          );
-          const invValues = {
-            pax8InvoiceId: inv.id,
-            status: inv.status ?? null,
-            invoiceDate: pax8Date(inv.invoiceDate),
-            dueDate: pax8Date(inv.dueDate),
-            total:
-              pax8Number(inv.total) === null
-                ? null
-                : String(Math.round(pax8Number(inv.total)! * 100) / 100),
-            balance:
-              pax8Number(inv.balance) === null
-                ? null
-                : String(Math.round(pax8Number(inv.balance)! * 100) / 100),
-            itemsTotal: String(Math.round(itemsTotal * 100) / 100),
-            currency: inv.currency ?? null,
-            partnerName: inv.partnerName ?? null,
-            externalId: inv.externalId ?? null,
-            raw: inv as Record<string, unknown>,
-          };
-          await db
-            .insert(pax8Invoices)
-            .values({ ...invValues, fetchedAt: now })
-            .onConflictDoUpdate({
-              target: pax8Invoices.pax8InvoiceId,
-              set: { ...invValues, fetchedAt: now, updatedAt: now },
-            });
-          for (const it of items) {
-            counters.fetched++;
-            itemCount++;
-            const v = {
-              itemId: it.id,
-              invoiceId: inv.id,
-              invoiceDate: pax8Date(inv.invoiceDate),
-              invoiceStatus: inv.status ?? null,
-              pax8CompanyId: it.companyId ?? null,
-              companyId: it.companyId
-                ? (linkByPax8.get(it.companyId) ?? null)
-                : null,
-              productId: it.productId ?? null,
-              sku: it.sku ?? null,
-              description: it.description ?? null,
-              quantity:
-                pax8Number(it.quantity) === null
-                  ? null
-                  : String(pax8Number(it.quantity)),
-              unitPrice:
-                pax8Number(it.unitPrice) === null
-                  ? null
-                  : String(pax8Number(it.unitPrice)),
-              total:
-                pax8Number(it.total) === null
-                  ? null
-                  : String(pax8Number(it.total)),
-              currency: it.currency ?? inv.currency ?? null,
-              startPeriod: pax8Date(it.startPeriod),
-              endPeriod: pax8Date(it.endPeriod),
-              chargeType: it.chargeType ?? it.type ?? null,
-              raw: it as Record<string, unknown>,
-            };
-            await db
-              .insert(pax8InvoiceItems)
-              .values({ ...v, fetchedAt: now })
-              .onConflictDoUpdate({
-                target: pax8InvoiceItems.itemId,
-                set: { ...v, fetchedAt: now, updatedAt: now },
-              });
-          }
+          itemCount += r.items;
+          counters.fetched += r.items;
         }
       } catch (err) {
         await fail(
@@ -1630,6 +1558,106 @@ export function pax8Freshness(
   return "stale";
 }
 
+
+/** Mirrors one Pax8 invoice and its charge lines (used by the routine sync and the historical import). */
+export async function mirrorPax8Invoice(
+  client: Pax8Client,
+  inv: Pax8InvoiceRaw,
+  linkByPax8: Map<string, string | null>,
+  now: Date,
+): Promise<{ ok: true; items: number } | { ok: false; error: string }> {
+  let items: Pax8InvoiceItemRaw[] = [];
+  try {
+    items = await client.listInvoiceItems(inv.id);
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+  const money = (v: unknown) => (pax8Number(v) === null ? null : String(Math.round(pax8Number(v)! * 100) / 100));
+  const itemsTotal = items.reduce((a, it) => a + (pax8Number(it.total) ?? 0), 0);
+  const invValues = {
+    pax8InvoiceId: inv.id,
+    status: inv.status ?? null,
+    invoiceDate: pax8Date(inv.invoiceDate),
+    dueDate: pax8Date(inv.dueDate),
+    total: money(inv.total),
+    balance: money(inv.balance),
+    itemsTotal: String(Math.round(itemsTotal * 100) / 100),
+    currency: inv.currency ?? null,
+    partnerName: inv.partnerName ?? null,
+    externalId: inv.externalId ?? null,
+    raw: inv as Record<string, unknown>,
+  };
+  await db
+    .insert(pax8Invoices)
+    .values({ ...invValues, fetchedAt: now })
+    .onConflictDoUpdate({ target: pax8Invoices.pax8InvoiceId, set: { ...invValues, fetchedAt: now, updatedAt: now } });
+  for (const it of items) {
+    const v = {
+      itemId: it.id,
+      invoiceId: inv.id,
+      invoiceDate: pax8Date(inv.invoiceDate),
+      invoiceStatus: inv.status ?? null,
+      pax8CompanyId: it.companyId ?? null,
+      companyId: it.companyId ? (linkByPax8.get(it.companyId) ?? null) : null,
+      productId: it.productId ?? null,
+      sku: it.sku ?? null,
+      description: it.description ?? null,
+      quantity: pax8Number(it.quantity) === null ? null : String(pax8Number(it.quantity)),
+      unitPrice: pax8Number(it.unitPrice) === null ? null : String(pax8Number(it.unitPrice)),
+      total: pax8Number(it.total) === null ? null : String(pax8Number(it.total)),
+      currency: it.currency ?? inv.currency ?? null,
+      startPeriod: pax8Date(it.startPeriod),
+      endPeriod: pax8Date(it.endPeriod),
+      chargeType: it.chargeType ?? it.type ?? null,
+      raw: it as Record<string, unknown>,
+    };
+    await db
+      .insert(pax8InvoiceItems)
+      .values({ ...v, fetchedAt: now })
+      .onConflictDoUpdate({ target: pax8InvoiceItems.itemId, set: { ...v, fetchedAt: now, updatedAt: now } });
+  }
+  return { ok: true, items: items.length };
+}
+
+/** Links Pax8 company id → CRM company id, from the mirrored companies. */
+async function pax8CompanyLinks() {
+  const rows = await db.select({ pax8Id: pax8Companies.pax8Id, companyId: pax8Companies.companyId }).from(pax8Companies).where(sql`${pax8Companies.companyId} is not null`);
+  return new Map(rows.map((r) => [r.pax8Id, r.companyId!]));
+}
+
+/**
+ * Historical import: every Pax8 invoice dated on or after `fromDate`, with its
+ * charge lines, added to the mirror without touching what is already there
+ * (same upsert as the sync, so nothing is duplicated and hand matches on
+ * existing invoices survive). Then the supplier's bills are matched again.
+ */
+export async function importPax8InvoicesSince(fromDate: string, actorUserId: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fromDate)) throw new ActionError("Enter the date as YYYY-MM-DD.");
+  const resolved = await getPax8Client();
+  if (!resolved) throw new ActionError("Pax8 is not connected.");
+  const before = new Set((await db.select({ id: pax8Invoices.pax8InvoiceId }).from(pax8Invoices)).map((r) => r.id));
+  const links = await pax8CompanyLinks();
+  const now = new Date();
+  const invoices = await resolved.client.listInvoicesSince(fromDate);
+  let added = 0;
+  let refreshed = 0;
+  let items = 0;
+  const failures: string[] = [];
+  for (const inv of invoices) {
+    const r = await mirrorPax8Invoice(resolved.client, inv, links, now);
+    if (!r.ok) {
+      failures.push(`${inv.id}: ${r.error}`);
+      continue;
+    }
+    items += r.items;
+    if (before.has(inv.id)) refreshed++;
+    else added++;
+  }
+  const rec = await reconcilePax8Invoices();
+  await audit({ actorUserId, action: "pax8.invoices.import", entityType: "integration", entityId: "pax8", details: { fromDate, found: invoices.length, added, refreshed, items, failures: failures.length, matched: rec.matched } });
+  return { fromDate, found: invoices.length, added, refreshed, items, failures, matched: rec.matched };
+}
+
 // ---------------------------------------------------------------------------
 // Pax8 invoices vs Xero bills. The Pax8 supplier is a Xero contact chosen on
 // the Pax8 page; its ACCPAY bills are mirrored into xero_invoices (type
@@ -1727,10 +1755,10 @@ export async function reconcilePax8Invoices() {
       date: b.date,
     })),
   );
-  for (const [rowId, billId] of matches)
+  for (const [rowId, m] of matches)
     await db
       .update(pax8Invoices)
-      .set({ xeroInvoiceId: billId, matchSource: "auto", updatedAt: new Date() })
+      .set({ xeroInvoiceId: m.billId, matchSource: m.basis, updatedAt: new Date() })
       .where(eq(pax8Invoices.id, rowId));
   return { matched: matches.size };
 }
@@ -1752,7 +1780,7 @@ export async function setPax8Supplier(
   await db
     .update(pax8Invoices)
     .set({ xeroInvoiceId: null, matchSource: null, updatedAt: new Date() })
-    .where(eq(pax8Invoices.matchSource, "auto"));
+    .where(inArray(pax8Invoices.matchSource, ["auto", "reference", "amount"]));
   if (!contactId) return { bills: 0, matched: 0 };
   const bills = (await syncPax8SupplierBills(contactId)) ?? 0;
   const rec = await reconcilePax8Invoices();
@@ -1800,6 +1828,7 @@ export async function matchPax8Invoice(
 export type Pax8ReconciliationRow = {
   id: string;
   pax8InvoiceId: string;
+  allocation: AllocationSummary | null;
   status: string | null;
   invoiceDate: string | null;
   dueDate: string | null;
@@ -1835,6 +1864,7 @@ export async function pax8InvoiceReconciliation() {
   const bills = supplierId ? await supplierBills(supplierId) : [];
   const byId = new Map(bills.map((b) => [b.invoiceId, b]));
   const usedBills = new Set<string>();
+  const allocations = await pax8AllocationSummaries(invoices.map((i) => ({ pax8InvoiceId: i.pax8InvoiceId, xeroInvoiceId: i.xeroInvoiceId })));
   const rows: Pax8ReconciliationRow[] = invoices.map((i) => {
     const b = i.xeroInvoiceId ? (byId.get(i.xeroInvoiceId) ?? null) : null;
     if (b) usedBills.add(b.invoiceId);
@@ -1845,6 +1875,7 @@ export async function pax8InvoiceReconciliation() {
     return {
       id: i.id,
       pax8InvoiceId: i.pax8InvoiceId,
+      allocation: allocations.get(i.pax8InvoiceId) ?? null,
       status: i.status,
       invoiceDate: i.invoiceDate,
       dueDate: i.dueDate,
@@ -1858,10 +1889,12 @@ export async function pax8InvoiceReconciliation() {
     };
   });
   const oldestPax8 = invoices.reduce<string | null>((a, i) => (i.invoiceDate && (!a || i.invoiceDate < a) ? i.invoiceDate : a), null);
-  // Bills nobody matched, within the window the Pax8 mirror covers (older bills predate the mirror and are not a finding).
-  const unmatchedBills = bills
-    .filter((b) => !usedBills.has(b.invoiceId) && (!oldestPax8 || !b.date || b.date >= oldestPax8))
-    .map((b) => ({ invoiceId: b.invoiceId, invoiceNumber: b.invoiceNumber, reference: b.reference, status: b.status, date: b.date, total: pax8Number(b.total), amountDue: pax8Number(b.amountDue), currencyCode: b.currencyCode }));
+  const newestPax8 = invoices.reduce<string | null>((a, i) => (i.invoiceDate && (!a || i.invoiceDate > a) ? i.invoiceDate : a), null);
+  const lastFetched = invoices.reduce<Date | null>((a, i) => (!a || i.fetchedAt > a ? i.fetchedAt : a), null);
+  const toBill = (b: (typeof bills)[number]) => ({ invoiceId: b.invoiceId, invoiceNumber: b.invoiceNumber, reference: b.reference, status: b.status, date: b.date, total: pax8Number(b.total), amountDue: pax8Number(b.amountDue), currencyCode: b.currencyCode });
+  // Bills nobody matched, within the window the Pax8 mirror covers; older ones are "outside imported history", not a finding, until an import brings their invoices in.
+  const unmatchedBills = bills.filter((b) => !usedBills.has(b.invoiceId) && (!oldestPax8 || !b.date || b.date >= oldestPax8)).map(toBill);
+  const olderBills = bills.filter((b) => !usedBills.has(b.invoiceId) && oldestPax8 && b.date && b.date < oldestPax8).map(toBill);
   const freeBills = bills
     .filter((b) => !usedBills.has(b.invoiceId))
     .map((b) => ({ invoiceId: b.invoiceId, label: `${b.invoiceNumber ?? b.invoiceId}${b.reference ? ` · ${b.reference}` : ""} · ${b.date ?? "no date"} · ${b.total ?? "?"}` }));
@@ -1870,16 +1903,188 @@ export async function pax8InvoiceReconciliation() {
     suppliers,
     rows,
     unmatchedBills,
+    olderBills,
     freeBills,
+    /** What the mirror holds: the stretch of Pax8 invoices imported and when they were last fetched. */
+    coverage: { oldest: oldestPax8, newest: newestPax8, count: invoices.length, lastFetched },
     totals: {
       invoices: rows.length,
       matched: rows.filter((r) => r.state === "matched").length,
       differs: rows.filter((r) => r.state === "amount_differs").length,
       noBill: rows.filter((r) => r.state === "no_bill").length,
       extraBills: unmatchedBills.length,
+      olderBills: olderBills.length,
+      unallocated: rows.reduce((a, r) => a + (r.allocation?.unallocated ?? 0), 0),
+      chargeFindings: rows.reduce((a, r) => a + (r.allocation ? r.allocation.findings.no_customer + r.allocation.findings.no_subscription + r.allocation.findings.price_differs : 0), 0),
     },
     xeroConfigured: Boolean(await getXeroClient()),
   };
+}
+
+
+// ---------------------------------------------------------------------------
+// Charge-level allocation: each Pax8 invoice line → CRM customer → mirrored
+// subscription, with the findings the brief asks for (supplier charge
+// without a customer, charge for no known subscription, price or quantity
+// differing from the subscription). Compared with the matched Xero bill's
+// lines only when that bill has line detail; a one-line bill is reported as
+// total-matched, never as reconciled line by line.
+// ---------------------------------------------------------------------------
+export type AllocationFinding = "ok" | "no_customer" | "no_subscription" | "price_differs" | "quantity_differs";
+export const ALLOCATION_FINDING_LABELS: Record<AllocationFinding, string> = {
+  ok: "allocated",
+  no_customer: "no customer",
+  no_subscription: "no matching subscription",
+  price_differs: "price differs from subscription",
+  quantity_differs: "quantity differs from subscription",
+};
+
+export type AllocatedItem = {
+  itemId: string;
+  description: string | null;
+  sku: string | null;
+  chargeType: string | null;
+  quantity: number | null;
+  unitPrice: number | null;
+  total: number | null;
+  currency: string | null;
+  startPeriod: string | null;
+  endPeriod: string | null;
+  pax8CompanyId: string | null;
+  pax8CompanyName: string | null;
+  companyId: string | null;
+  companyName: string | null;
+  subscription: { id: string; subscriptionId: string; productName: string; quantity: number; price: number | null; billingTerm: string | null; status: string } | null;
+  finding: AllocationFinding;
+};
+
+export type AllocationSummary = {
+  items: number;
+  total: number;
+  allocated: number;
+  unallocated: number;
+  findings: Record<Exclude<AllocationFinding, "ok">, number>;
+  /** Against the matched Xero bill: null when no bill, "summary" when the bill has no usable line detail. */
+  billLines: { kind: "summary" } | { kind: "lines"; matched: number; total: number } | null;
+};
+
+function allocateItems(items: (typeof pax8InvoiceItems.$inferSelect)[], subs: (typeof pax8Subscriptions.$inferSelect)[], pax8Names: Map<string, string>, companyNames: Map<string, string>): AllocatedItem[] {
+  const byKey = new Map<string, (typeof subs)[number][]>();
+  for (const sub of subs) byKey.set(`${sub.pax8CompanyId}:${sub.productId}`, [...(byKey.get(`${sub.pax8CompanyId}:${sub.productId}`) ?? []), sub]);
+  return items.map((it) => {
+    const candidates = it.pax8CompanyId && it.productId ? (byKey.get(`${it.pax8CompanyId}:${it.productId}`) ?? []) : [];
+    // Prefer an active subscription; otherwise any (a cancelled one still explains a final charge).
+    const sub = candidates.find((c) => c.externalStatus === "active" && BILLED_STATUSES.includes(c.status)) ?? candidates[0] ?? null;
+    const qty = pax8Number(it.quantity);
+    const unit = pax8Number(it.unitPrice);
+    let finding: AllocationFinding = "ok";
+    if (!it.companyId) finding = "no_customer";
+    else if (!sub) finding = "no_subscription";
+    else if (unit !== null && pax8Number(sub.price) !== null && Math.abs(unit - pax8Number(sub.price)!) > 0.005) finding = "price_differs";
+    else if (qty !== null && qty !== sub.quantity) finding = "quantity_differs";
+    return {
+      itemId: it.itemId,
+      description: it.description,
+      sku: it.sku,
+      chargeType: it.chargeType,
+      quantity: qty,
+      unitPrice: unit,
+      total: pax8Number(it.total),
+      currency: it.currency,
+      startPeriod: it.startPeriod,
+      endPeriod: it.endPeriod,
+      pax8CompanyId: it.pax8CompanyId,
+      pax8CompanyName: it.pax8CompanyId ? (pax8Names.get(it.pax8CompanyId) ?? null) : null,
+      companyId: it.companyId,
+      companyName: it.companyId ? (companyNames.get(it.companyId) ?? null) : null,
+      subscription: sub ? { id: sub.id, subscriptionId: sub.subscriptionId, productName: sub.productName, quantity: sub.quantity, price: pax8Number(sub.price), billingTerm: sub.billingTerm, status: sub.status } : null,
+      finding,
+    };
+  });
+}
+
+function compareBillLines(items: AllocatedItem[], lineItems: Record<string, unknown>[] | null | undefined): AllocationSummary["billLines"] {
+  if (!lineItems) return null;
+  const amounts = lineItems.map((l) => pax8Number((l.LineAmount as number | string | null | undefined) ?? null)).filter((n): n is number => n !== null);
+  if (amounts.length <= 1) return { kind: "summary" };
+  const pool = items.map((i) => i.total).filter((n): n is number => n !== null);
+  let matched = 0;
+  for (const a of amounts) {
+    const idx = pool.findIndex((t) => Math.abs(t - a) < 0.005);
+    if (idx >= 0) {
+      matched++;
+      pool.splice(idx, 1);
+    }
+  }
+  return { kind: "lines", matched, total: amounts.length };
+}
+
+function summariseAllocation(items: AllocatedItem[], billLines: AllocationSummary["billLines"]): AllocationSummary {
+  const sum = (xs: AllocatedItem[]) => Math.round(xs.reduce((a, i) => a + (i.total ?? 0), 0) * 100) / 100;
+  const un = items.filter((i) => i.finding === "no_customer" || i.finding === "no_subscription");
+  return {
+    items: items.length,
+    total: sum(items),
+    allocated: sum(items.filter((i) => !un.includes(i))),
+    unallocated: sum(un),
+    findings: {
+      no_customer: items.filter((i) => i.finding === "no_customer").length,
+      no_subscription: items.filter((i) => i.finding === "no_subscription").length,
+      price_differs: items.filter((i) => i.finding === "price_differs").length,
+      quantity_differs: items.filter((i) => i.finding === "quantity_differs").length,
+    },
+    billLines,
+  };
+}
+
+async function allocationContext(invoiceIds: string[]) {
+  const items = invoiceIds.length ? await db.select().from(pax8InvoiceItems).where(inArray(pax8InvoiceItems.invoiceId, invoiceIds)).orderBy(asc(pax8InvoiceItems.invoiceDate), asc(pax8InvoiceItems.description)) : [];
+  const pax8CompanyIds = [...new Set(items.map((i) => i.pax8CompanyId).filter((x): x is string => Boolean(x)))];
+  const [subs, pcs] = await Promise.all([
+    pax8CompanyIds.length ? db.select().from(pax8Subscriptions).where(inArray(pax8Subscriptions.pax8CompanyId, pax8CompanyIds)) : Promise.resolve([] as (typeof pax8Subscriptions.$inferSelect)[]),
+    pax8CompanyIds.length ? db.select({ pax8Id: pax8Companies.pax8Id, name: pax8Companies.name }).from(pax8Companies).where(inArray(pax8Companies.pax8Id, pax8CompanyIds)) : Promise.resolve([] as { pax8Id: string; name: string }[]),
+  ]);
+  const companyIds = [...new Set(items.map((i) => i.companyId).filter((x): x is string => Boolean(x)))];
+  const cos = companyIds.length ? await db.select({ id: companies.id, name: companies.name }).from(companies).where(inArray(companies.id, companyIds)) : [];
+  return { items, subs, pax8Names: new Map(pcs.map((p) => [p.pax8Id, p.name])), companyNames: new Map(cos.map((c) => [c.id, c.name])) };
+}
+
+/** Full charge-level view of one Pax8 invoice: every line allocated, the matched bill and its lines. */
+export async function pax8InvoiceAllocation(pax8InvoiceId: string) {
+  const [inv] = await db.select().from(pax8Invoices).where(eq(pax8Invoices.pax8InvoiceId, pax8InvoiceId)).limit(1);
+  if (!inv) return null;
+  const ctx = await allocationContext([pax8InvoiceId]);
+  const items = allocateItems(ctx.items, ctx.subs, ctx.pax8Names, ctx.companyNames);
+  const bill = inv.xeroInvoiceId ? ((await db.select().from(xeroInvoices).where(eq(xeroInvoices.invoiceId, inv.xeroInvoiceId)).limit(1))[0] ?? null) : null;
+  const billLines = compareBillLines(items, bill?.lineItems);
+  const byCustomer = new Map<string, { companyId: string | null; name: string; items: AllocatedItem[]; total: number }>();
+  for (const it of items) {
+    const key = it.companyId ?? `pax8:${it.pax8CompanyId ?? "none"}`;
+    const g = byCustomer.get(key) ?? { companyId: it.companyId, name: it.companyName ?? it.pax8CompanyName ?? "No customer", items: [], total: 0 };
+    g.items.push(it);
+    g.total = Math.round((g.total + (it.total ?? 0)) * 100) / 100;
+    byCustomer.set(key, g);
+  }
+  return {
+    invoice: { ...inv, total: pax8Number(inv.total), itemsTotal: pax8Number(inv.itemsTotal) },
+    summary: summariseAllocation(items, billLines),
+    customers: [...byCustomer.values()].sort((a, b) => (a.companyId ? 0 : 1) - (b.companyId ? 0 : 1) || a.name.localeCompare(b.name)),
+    bill: bill ? { invoiceId: bill.invoiceId, invoiceNumber: bill.invoiceNumber, reference: bill.reference, status: bill.status, date: bill.date, subTotal: pax8Number(bill.subTotal), total: pax8Number(bill.total), lineItems: (bill.lineItems ?? []).map((l) => ({ description: String(l.Description ?? ""), quantity: pax8Number((l.Quantity as number | null | undefined) ?? null), unitAmount: pax8Number((l.UnitAmount as number | null | undefined) ?? null), lineAmount: pax8Number((l.LineAmount as number | null | undefined) ?? null) })) } : null,
+  };
+}
+
+/** Allocation summaries for many invoices at once (the reconciliation table). */
+export async function pax8AllocationSummaries(invoices: { pax8InvoiceId: string; xeroInvoiceId: string | null }[]) {
+  const ctx = await allocationContext(invoices.map((i) => i.pax8InvoiceId));
+  const billIds = invoices.map((i) => i.xeroInvoiceId).filter((x): x is string => Boolean(x));
+  const bills = billIds.length ? await db.select({ invoiceId: xeroInvoices.invoiceId, lineItems: xeroInvoices.lineItems }).from(xeroInvoices).where(inArray(xeroInvoices.invoiceId, billIds)) : [];
+  const billLinesById = new Map(bills.map((b) => [b.invoiceId, b.lineItems]));
+  const out = new Map<string, AllocationSummary>();
+  for (const inv of invoices) {
+    const items = allocateItems(ctx.items.filter((i) => i.invoiceId === inv.pax8InvoiceId), ctx.subs, ctx.pax8Names, ctx.companyNames);
+    out.set(inv.pax8InvoiceId, summariseAllocation(items, inv.xeroInvoiceId ? compareBillLines(items, billLinesById.get(inv.xeroInvoiceId)) : null));
+  }
+  return out;
 }
 
 export async function pax8Totals(companyId?: string) {

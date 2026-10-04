@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogClose, DialogContent } from "@/components/ui/dialog";
 import { fmtDate, fmtMoney, type DisplaySettings } from "@/lib/format";
+import { MATCH_BASIS_LABELS } from "@/lib/pax8-reconcile";
 import {
   Field,
   Select,
@@ -28,6 +29,7 @@ import {
   applyPax8CostAction,
   changePax8QuantityAction,
   connectPax8Action,
+  importPax8InvoicesAction,
   linkPax8CompanyAction,
   matchPax8InvoiceAction,
   recheckLicencesAction,
@@ -777,7 +779,7 @@ export function Pax8SupplierForm({
 }
 
 const RECON_LABEL: Record<string, { text: string; tone: string }> = {
-  matched: { text: "matched", tone: "green" },
+  matched: { text: "total matched", tone: "green" },
   amount_differs: { text: "amount differs", tone: "amber" },
   no_bill: { text: "no bill in Xero", tone: "red" },
   no_pax8_invoice: { text: "no Pax8 invoice", tone: "amber" },
@@ -786,6 +788,7 @@ const RECON_LABEL: Record<string, { text: string; tone: string }> = {
 type ReconRow = {
   id: string;
   pax8InvoiceId: string;
+  allocation: { items: number; total: number; allocated: number; unallocated: number; findings: Record<string, number>; billLines: { kind: "summary" } | { kind: "lines"; matched: number; total: number } | null } | null;
   status: string | null;
   invoiceDate: string | null;
   total: number | null;
@@ -882,6 +885,7 @@ export function Pax8ReconciliationTable({
             <th className="text-right">Bill total</th>
             <th className="text-right">Difference</th>
             <th>State</th>
+            <th>Charges</th>
           </tr>
         </thead>
         <tbody>
@@ -922,7 +926,9 @@ export function Pax8ReconciliationTable({
                   {r.bill && (
                     <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[11px] text-slate-500">
                       {r.bill.date ? fmtDate(r.bill.date, settings) : "no date"} · {r.bill.status.toLowerCase()}
-                      {r.matchSource === "manual" && <Badge tone="slate">by hand</Badge>}
+                      <Badge tone={r.matchSource === "amount" ? "amber" : "slate"} title={r.matchSource === "amount" ? "Same total near the same date: weaker evidence than a reference" : undefined}>
+                        {MATCH_BASIS_LABELS[r.matchSource ?? "auto"] ?? r.matchSource}
+                      </Badge>
                       <a href={billUrl(r.bill.invoiceId)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-brand-700 hover:underline">
                         <ExternalLink className="h-3 w-3" /> Xero
                       </a>
@@ -935,6 +941,20 @@ export function Pax8ReconciliationTable({
                 </td>
                 <td>
                   <Badge tone={label.tone}>{label.text}</Badge>
+                  {r.allocation?.billLines && (
+                    <div className="text-[11px] text-slate-500">{r.allocation.billLines.kind === "lines" ? `${r.allocation.billLines.matched}/${r.allocation.billLines.total} bill lines match` : "summarised bill"}</div>
+                  )}
+                </td>
+                <td className="text-xs">
+                  {r.allocation ? (
+                    <Link href={`/integrations/pax8/invoices/${encodeURIComponent(r.pax8InvoiceId)}`} className="text-brand-700 hover:underline">
+                      {r.allocation.items} line{r.allocation.items === 1 ? "" : "s"}
+                    </Link>
+                  ) : (
+                    "—"
+                  )}
+                  {r.allocation && r.allocation.unallocated > 0 && <div className="text-red-700">{money(r.allocation.unallocated, r.currency)} unallocated</div>}
+                  {r.allocation && r.allocation.findings.price_differs > 0 && <div className="text-amber-700">{r.allocation.findings.price_differs} price differ{r.allocation.findings.price_differs === 1 ? "s" : ""}</div>}
                 </td>
               </tr>
             );
@@ -957,10 +977,31 @@ export function Pax8ReconciliationTable({
               <td>
                 <Badge tone="amber">no Pax8 invoice</Badge>
               </td>
+              <td />
             </tr>
           ))}
         </tbody>
       </table>
     </div>
+  );
+}
+
+/** Historical import of Pax8 invoices from a date, for reconciliation further back than the routine sync keeps. */
+export function Pax8ImportForm({ oldest }: { oldest: string | null }) {
+  const [result, formAction] = useActionState(importPax8InvoicesAction, null);
+  return (
+    <form action={formAction} className="flex flex-wrap items-end gap-2">
+      <Field label="Import invoices from" htmlFor="p8-import-from" help={oldest ? `The mirror currently starts at ${oldest}.` : "Nothing is mirrored yet."}>
+        <Input id="p8-import-from" name="fromDate" type="date" required className="w-44" />
+      </Field>
+      <SubmitButton size="sm" variant="secondary">
+        Import
+      </SubmitButton>
+      {result && (
+        <span className={`text-xs ${result.ok ? "text-green-700" : "text-red-700"}`}>
+          {result.ok ? `${result.data.found} found: ${result.data.added} added, ${result.data.refreshed} refreshed, ${result.data.items} charge lines, ${result.data.matched} newly matched${result.data.failures.length ? `, ${result.data.failures.length} failed` : ""}` : result.error}
+        </span>
+      )}
+    </form>
   );
 }

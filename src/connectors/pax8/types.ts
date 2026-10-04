@@ -147,6 +147,8 @@ export interface Pax8Client {
   listSubscriptions(): Promise<Pax8SubscriptionRaw[]>;
   /** Partner invoices from Pax8, newest first. */
   listInvoices(limit: number): Promise<Pax8InvoiceRaw[]>;
+  /** Partner invoices dated on or after `fromDate` (YYYY-MM-DD), newest first, for a historical import. */
+  listInvoicesSince(fromDate: string, max?: number): Promise<Pax8InvoiceRaw[]>;
   listInvoiceItems(invoiceId: string): Promise<Pax8InvoiceItemRaw[]>;
   /**
    * Create a customer company. Used only by the opt-in "create when a

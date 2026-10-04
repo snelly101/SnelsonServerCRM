@@ -27,10 +27,10 @@ describe("Pax8 invoice vs Xero bill matching", () => {
         bill("b-far", 1000, "2026-09-20"), // right total, wrong month
       ],
     );
-    expect(Object.fromEntries(m)).toEqual({
-      "row-inv-2026-08-01": "b-ref",
-      "row-inv-2026-07-01": "b-amt",
-      "row-inv-2026-06-01": "b-ext",
+    expect(Object.fromEntries([...m].map(([k, v]) => [k, `${v.billId}:${v.basis}`]))).toEqual({
+      "row-inv-2026-08-01": "b-ref:reference",
+      "row-inv-2026-07-01": "b-amt:amount",
+      "row-inv-2026-06-01": "b-ext:reference",
     });
   });
 
@@ -40,6 +40,11 @@ describe("Pax8 invoice vs Xero bill matching", () => {
       [bill("b1", 500, "2026-05-02"), bill("b2", 500, "2026-05-03"), bill("b3", 250, "2026-06-15")],
     );
     expect(m.size).toBe(0);
+  });
+
+  it("a reference must carry the whole id: a longer number that merely contains it does not match", () => {
+    const m = matchPax8Bills([inv("inv-2026-10-01", 100, "2026-10-01")], [bill("b-longer", 999, "2026-10-02", "Pax8 inv-2026-10-011"), bill("b-exact", 999, "2026-10-02", "Pax8 inv-2026-10-01 October")]);
+    expect(m.get("row-inv-2026-10-01")).toEqual({ billId: "b-exact", basis: "reference" });
   });
 
   it("ignores short keys so a four-digit id cannot match by accident, and reports states", () => {
