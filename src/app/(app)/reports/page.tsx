@@ -373,7 +373,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
                 </table>
               )}
               <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500">
-                Balances come from the Xero invoice mirror (hourly sync + webhooks). Xero is the source of truth; see the <Link href="/finance" className="text-brand-700 hover:underline">Finance</Link> page for invoice detail.
+                Balances come from the Xero invoice mirror (hourly sync + webhooks). Xero is the source of truth; see the <Link href="/billing" className="text-brand-700 hover:underline">Finance</Link> page for invoice detail.
               </p>
             </Card>
           </TabsContent>

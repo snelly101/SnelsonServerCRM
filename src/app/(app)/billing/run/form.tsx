@@ -52,7 +52,7 @@ export function BillingRunForm({ asOf, rows, currency, settings }: { asOf: strin
                   </td>
                   <td className="text-right tabular-nums">{fmtMoney(c.net, currency)}</td>
                   <td className="text-right">
-                    <Link href={`/finance/drafts/${c.draftId}`} className="text-xs text-brand-700 hover:underline">
+                    <Link href={`/billing/drafts/${c.draftId}`} className="text-xs text-brand-700 hover:underline">
                       Review draft
                     </Link>
                   </td>
@@ -73,7 +73,7 @@ export function BillingRunForm({ asOf, rows, currency, settings }: { asOf: strin
             </ul>
           </div>
         )}
-        <Link href="/finance" className="inline-flex items-center gap-1 text-sm text-brand-700 hover:underline">
+        <Link href="/billing" className="inline-flex items-center gap-1 text-sm text-brand-700 hover:underline">
           <CheckCircle2 className="h-4 w-4" /> Back to Finance
         </Link>
       </div>
@@ -138,7 +138,7 @@ export function BillingRunForm({ asOf, rows, currency, settings }: { asOf: strin
                   <td className="align-top text-right tabular-nums">{r.status === "nothing" ? "—" : fmtMoney(r.net, currency)}</td>
                   <td className="align-top text-right text-xs tabular-nums">
                     {r.previous ? (
-                      <Link href={`/finance/drafts/${r.previous.draftId}`} className="hover:underline" title={`${r.previous.periodStart} to ${r.previous.periodEnd} (${r.previous.status})`}>
+                      <Link href={`/billing/drafts/${r.previous.draftId}`} className="hover:underline" title={`${r.previous.periodStart} to ${r.previous.periodEnd} (${r.previous.status})`}>
                         {fmtMoney(r.previous.net, currency)}
                       </Link>
                     ) : (
@@ -148,7 +148,7 @@ export function BillingRunForm({ asOf, rows, currency, settings }: { asOf: strin
                   <td className="align-top text-xs">
                     {r.status === "nothing" ? (
                       r.existingDraft ? (
-                        <Link href={`/finance/drafts/${r.existingDraft.id}`} className="text-brand-700 hover:underline">
+                        <Link href={`/billing/drafts/${r.existingDraft.id}`} className="text-brand-700 hover:underline">
                           {r.skipReason}
                         </Link>
                       ) : (

@@ -63,7 +63,7 @@ Rows that disappear upstream are marked deleted or archived, never removed.
 
 ### 3.7 Service register (`service_coverage`)
 
-Every service the integrations report for a customer (Pax8 subscriptions, 20i packages and domains, NinjaOne managed devices) has a commercial state, shown on the company's **Services** tab and across customers on Finance → **Service coverage**:
+Every service the integrations report for a customer (Pax8 subscriptions, 20i packages and domains, NinjaOne managed devices) has a commercial state, shown on the company's **Services** tab and across customers on Billing → **Services**:
 
 | State | Meaning | Effect |
 |---|---|---|
@@ -124,18 +124,35 @@ Example: a 14-seat Microsoft 365 line at £9.40 per month, billed monthly on the
 
 ## 5. Producing invoices
 
-### 5.1 The billing run (Finance → Billing run)
+### 5.0 The Billing area
+
+Everything about money sits under one sidebar entry, **Billing**, with a fixed sub-navigation in the order the work flows:
+
+| Section | What it is for |
+|---|---|
+| **Overview** | Where this month stands and a "what to do next" list that links straight into the steps below. |
+| **Monthly run** | Three steps as tabs: **Prepare** (the exception-focused workspace, 5.1), **Approve** (the draft review with batch approval, 5.3), **Issued** (what was created in Xero, and anything changed in Xero after approval). |
+| **Exceptions** | Findings (5.4), licence and device count discrepancies (3.8) and accepted exceptions, in one place with the Resolve dialog. |
+| **Services** | The service register (3.7): what we provide against what we bill, per customer. |
+| **Renewals & pricing** | The renewal queue (5.5) and the price review (5.6). |
+| **Invoices** | The Xero sales mirror (outstanding, overdue, paid) and the Pax8 supplier bill reconciliation (7). |
+| **Automation ↗** | The staged automation policy in Settings (5.8). |
+
+Contracts keeps agreements and the catalogue; the Devices and Pax8 integration pages keep their contextual discrepancy lists and link into Exceptions. Old addresses (`/finance/…`, `/contracts/renewals`, `/contracts/price-reviews`) redirect.
+
+
+### 5.1 The billing run (Billing → Monthly run → Prepare)
 
 The intended monthly routine:
 
-1. Open Finance → **Billing run**. Pick a run date (default today). The page opens with one summary line for the month: how many contracts are **ready**, how many **need review**, how many are **blocked**, the expected billing total, the potential missed revenue across services without commercial coverage, and renewals and notice deadlines falling in the next seven days. Below it is **one row per active contract** with everything that is due and not yet invoiced: for each recurring line, its current period under its schedule (the contract's period, or the line's own cycle), plus, when the contract has a *Bill from* date, earlier periods that no draft covers, flagged **missed**. Each row shows company, contract, period, the proposed net, the **previous comparable draft** (the one ending the day before, else the latest earlier one, linked), the difference against it, and a status:
+1. Open Billing → **Monthly run**, step 1 **Prepare**. Pick a run date (default today). The page opens with one summary line for the month: how many contracts are **ready**, how many **need review**, how many are **blocked**, the expected billing total, the potential missed revenue across services without commercial coverage, and renewals and notice deadlines falling in the next seven days. Below it is **one row per active contract** with everything that is due and not yet invoiced: for each recurring line, its current period under its schedule (the contract's period, or the line's own cycle), plus, when the contract has a *Bill from* date, earlier periods that no draft covers, flagged **missed**. Each row shows company, contract, period, the proposed net, the **previous comparable draft** (the one ending the day before, else the latest earlier one, linked), the difference against it, and a status:
    - **Ready**: Xero-linked, same amount as the previous invoice, nothing open against the customer. Ticked by default.
    - **Needs review**: something deserves a look before preparation. Items are listed in amber: a changed amount with plain-language **reasons** derived from the calculated lines (quantity or price changes per line, new or removed lines, pro-rated additions, credited reductions, catch-ups, missed periods, lines due on their own cycle), open licence or device discrepancies (with the unbilled amount per period), services without commercial coverage, stale Pax8 or NinjaOne data (not fetched for three hours), or a first invoice from the CRM. Tickable, not ticked by default.
    - **Blocked**: the company has no Xero contact link, so a draft could not be approved. Cannot be ticked; the row links to the fix.
    The *why* toggle on a row shows the reasons; reasons never guess, they are read from the calculated lines against the previous draft's lines.
 2. **Coverage is per line and period**: a period of a line counts as invoiced when any non-cancelled draft carries it. A line period that is already drafted is never proposed again, so re-running the page is safe. Without a *Bill from* date nothing earlier than the current period is ever proposed, so a contract imported mid-life is never back-billed by accident.
 3. Tick the rows wanted and click **Prepare drafts**. Each becomes an ordinary CRM draft carrying all of its items (its description says when missed periods are included). The run is audited as `billing.run`.
-4. Review each draft (Finance → draft page): lines table (description, qty, unit, account, tax, line total), the **How these amounts were calculated** panel, details (dates, description, notes), and an **Approve and create in Xero** button for finance/admin. Lines can be edited before approval.
+4. Review each draft (step 2 **Approve**, then the draft page): lines table (description, qty, unit, account, tax, line total), the **How these amounts were calculated** panel, details (dates, description, notes), and an **Approve and create in Xero** button for finance/admin. Lines can be edited before approval.
 5. Approval creates the invoice in Xero as **DRAFT** (never authorised), with `Reference = CRM-XXXXXXXX`, an `Idempotency-Key` header, the configured account codes, tax type, due date from payment terms and branding theme. The Xero invoice's URL field links back to the CRM draft. A failed attempt is retried by looking the invoice up by reference first, so a retry can never create two invoices.
 6. Finance then approve and send from Xero as usual. Payments and status changes flow back through Xero webhooks and the hourly sync, and appear on the Finance page and the company's Invoices tab.
 
@@ -148,11 +165,11 @@ The intended monthly routine:
 
 - A draft awaiting approval is marked **stale** when its contract changed after it was prepared (terms, a line, or a dated change). The draft page lists the changes since and offers **Re-prepare from the contract**: the old draft is cancelled (its coverage and changes are handed back) and a fresh one is prepared for the same stretch of periods.
 - **Cancelling** a draft never deletes it; its periods become due again and its changes await the next draft.
-- **Batch approval of unchanged drafts** (Finance → *Draft invoices awaiting approval*): each pending draft is reviewed against the previous comparable draft for its contract (the one ending the day before its period, else the latest earlier one). A draft is **unchanged** when it came from a contract, the company is linked to a Xero contact, the contract has not changed since it was prepared, it is a plain draft (not failed, not mid-approval) and its lines match the previous draft line for line (same contract lines, quantities and unit prices; no pro-rata, increase, decrease or catch-up lines). Unchanged drafts are ticked by default and **Approve N in Xero** creates them one after another through the normal single-draft approval, re-checking each at the moment of approval; anything that stopped being unchanged meanwhile is skipped with the reason. Everything else is an **exception** with its flags (hand-prepared, no Xero link, failed, stale, first invoice from the CRM, amount differs with the *why* reasons) and keeps the one-by-one review. Audited as `invoice.approve.batch` plus the usual per-draft entries.
+- **Batch approval of unchanged drafts** (Billing → Monthly run → step 2 **Approve**): each pending draft is reviewed against the previous comparable draft for its contract (the one ending the day before its period, else the latest earlier one). A draft is **unchanged** when it came from a contract, the company is linked to a Xero contact, the contract has not changed since it was prepared, it is a plain draft (not failed, not mid-approval) and its lines match the previous draft line for line (same contract lines, quantities and unit prices; no pro-rata, increase, decrease or catch-up lines). Unchanged drafts are ticked by default and **Approve N in Xero** creates them one after another through the normal single-draft approval, re-checking each at the moment of approval; anything that stopped being unchanged meanwhile is skipped with the reason. Everything else is an **exception** with its flags (hand-prepared, no Xero link, failed, stale, first invoice from the CRM, amount differs with the *why* reasons) and keeps the one-by-one review. Audited as `invoice.approve.batch` plus the usual per-draft entries.
 - **Approval** claims the draft atomically, so two approvals at once cannot both create an invoice; the second sees "being approved already" or the reused result. An approval that never settled is retried after ten minutes, with the ledger looking the invoice up by reference first.
 - After creation, an invoice **changed in Xero** (net amount, currency, voided or deleted) is flagged on the draft page and in a Finance card against the approved version. Xero's invoice remains what the customer receives.
 
-### 5.4 Findings (Finance → Findings)
+### 5.4 Findings (Billing → Exceptions)
 
 One list of what needs a decision, read across the service register, the billing run, the drafts, Xero and the Pax8 reconciliation, each with its interpretation and a link to where it is resolved:
 
@@ -168,13 +185,13 @@ One list of what needs a decision, read across the service register, the billing
 | Supplier charge without a customer | Pax8 company not linked, or no subscription explains it |
 | Customer invoice raised outside the CRM | informational |
 
-### 5.5 What the Finance page shows
+### 5.5 What the Billing overview shows
 
 Headline stats: outstanding (authorised) total, overdue total and count, paid in the last 30 days, drafts in Xero awaiting approval there, CRM drafts awaiting approval here. Then a table of CRM drafts awaiting approval, and the mirrored Xero sales invoice list with filters (search, status, overdue only), sortable columns, defaulting to newest invoice date first, and a warning on invoices whose Xero contact is not linked to a CRM company.
 
 The company page's **Invoices** tab (hidden from roles without `finance.read`) shows the Xero balances for the contact, 12-month invoiced and paid, invoice history, and pending CRM drafts.
 
-### 5.5 Renewals (Contracts → Renewals)
+### 5.5 Renewals (Billing → Renewals & pricing)
 
 Every active contract with a renewal date, queued by its **decision deadline**: the notice deadline (renewal date minus the notice period) less the *renewal decision lead* in Settings → General (default 30 days). Statuses are *decision overdue*, *decide now* (inside the lead), *upcoming* and *decided*.
 
@@ -185,7 +202,7 @@ Each row sets the customer's renewal against the **supplier commitments** behind
 
 Planned quantities and prices (dated line changes after today) are listed, so the next invoice after renewal is already visible. Account managers **record the customer's decision** for that renewal date: renew as is, renew with amendments, or not renewing (with a reason). The decision is audited, posted on the company timeline and cleared automatically when the renewal date moves. **Prepare amendment** opens the contract edit form with *Changes take effect from* set to the renewal date, so the amendment lands as dated history and the *Prepare invoice* preview shows its effect before anything reaches Xero. The contract page carries the same card. The daily reminder job still raises a task at the notice deadline.
 
-### 5.6 Price reviews (Contracts → Price review)
+### 5.6 Price reviews (Billing → Renewals & pricing → Price review)
 
 A proposed change to a sell price is never applied silently. The review takes a scope (a catalogue product, or contract lines whose description contains a phrase), a change (a percentage, a new unit price, or a new supplier unit cost passed through at the same margin), an effective date and a reason, and shows every affected active contract line before anything happens: customer, quantity, price now and after, cost now and after, margin now and after, the monthly revenue change, the day the change applies for that customer and the first invoice period that carries it (price changes apply from the next anchored period on or after the day and are never pro-rated), plus the **agreement constraints**: *prices fixed until renewal* on the contract (the change applies from the renewal date instead), the agreement ending before the change (not applicable), a customer who has said they are not renewing, and a notice deadline within 30 days. Totals give monthly revenue and blended margin before and after.
 
@@ -242,7 +259,7 @@ Pax8 is the distributor the MSP buys Microsoft 365 and other cloud subscriptions
 
 **What Pax8 charged for this customer**: a per-customer table of the mirrored partner invoice lines (invoice date, invoice, lines, cost), so partner cost can be compared with what the customer was invoiced.
 
-**Pax8 invoices vs Xero bills** (Pax8 page): an admin picks the Xero supplier contact that is Pax8. Each sync mirrors the recent Pax8 partner invoices and that supplier's Xero purchase bills and matches them, first by a bill reference or number carrying the whole Pax8 invoice id (*by reference*), then by a unique identical total within ten days (*by amount and date*, weaker and shown as such). The card lists each Pax8 invoice with its bill, the difference and a state (total matched, amount differs, no bill in Xero), plus any supplier bill that no Pax8 invoice explains, and states the imported history (bills older than it are outside imported history, not a finding). Finance can match or unmatch by hand and that decision sticks. An admin can import older invoices from a date without duplicating anything.
+**Pax8 invoices vs Xero bills** (Billing → Invoices → Supplier bills; the Pax8 integration page keeps a summary): an admin picks the Xero supplier contact that is Pax8. Each sync mirrors the recent Pax8 partner invoices and that supplier's Xero purchase bills and matches them, first by a bill reference or number carrying the whole Pax8 invoice id (*by reference*), then by a unique identical total within ten days (*by amount and date*, weaker and shown as such). The card lists each Pax8 invoice with its bill, the difference and a state (total matched, amount differs, no bill in Xero), plus any supplier bill that no Pax8 invoice explains, and states the imported history (bills older than it are outside imported history, not a finding). Finance can match or unmatch by hand and that decision sticks. An admin can import older invoices from a date without duplicating anything.
 
 **Charge-level allocation**: every Pax8 charge line is tied to the customer and the subscription it belongs to, with findings for lines that have no customer (Pax8 company not linked), no matching subscription, or a unit price that differs from the subscription. A Xero bill with line detail is compared line by line by amount; a one-line bill is only ever "total matched". Nothing is written to Xero or Pax8; entering and paying bills stays in Xero.
 
@@ -292,8 +309,8 @@ Proposals are built and signed in Better Proposals. The CRM creates the proposal
 |---|---|
 | Billing maths (periods, history, pro-rata, line building, explanations) | `src/lib/billing.ts` |
 | Improvement plan against the brief | `docs/billing-improvement-plan.md` |
-| Billing run | `src/services/billing-run.ts`, `src/app/(app)/finance/billing-run/` |
-| Draft invoices and Xero | `src/services/xero.ts`, `src/connectors/xero/`, `src/app/(app)/finance/` |
+| Billing run | `src/services/billing-run.ts`, `src/app/(app)/billing/run/` |
+| Draft invoices and Xero | `src/services/xero.ts`, `src/connectors/xero/`, `src/app/(app)/billing/` |
 | Contracts and revenue summaries | `src/services/contracts.ts`, `src/lib/money.ts`, `src/components/lines-editor.tsx` |
 | Pax8 | `src/services/pax8.ts`, `src/connectors/pax8/`, `src/components/subscriptions-panel.tsx` |
 | NinjaOne and the discrepancy engine | `src/services/ninjaone.ts`, `src/connectors/ninjaone/` |

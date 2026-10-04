@@ -40,7 +40,7 @@ const NAV = [
   { href: "/tasks", label: "Tasks & Onboarding", icon: ListChecks },
   { href: "/devices", label: "Devices", icon: MonitorSmartphone },
   { href: "/helpdesk", label: "Helpdesk", icon: LifeBuoy },
-  { href: "/finance", label: "Finance", icon: Landmark },
+  { href: "/billing", label: "Billing", icon: Landmark },
   { href: "/reports", label: "Reports", icon: BarChart3 },
   { href: "/integrations", label: "Integrations", icon: Plug },
   { href: "/settings", label: "Settings", icon: Settings },

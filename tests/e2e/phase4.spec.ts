@@ -13,7 +13,7 @@ async function login(page: Page, email: string) {
 
 test("finance user sees Xero (demo) invoices, prepares a draft from a contract, approves it once", async ({ page }) => {
   await login(page, "finance@example.com");
-  await page.goto("/finance");
+  await page.goto("/billing");
   await expect(page.getByText("Demo data")).toBeVisible();
   await expect(page.getByText("Outstanding (authorised)")).toBeVisible();
   await expect(page.getByRole("cell", { name: /INV-01/ }).first()).toBeVisible();
@@ -23,7 +23,7 @@ test("finance user sees Xero (demo) invoices, prepares a draft from a contract, 
   await page.getByRole("link", { name: "Managed IT & Security Agreement" }).click();
   await page.getByRole("button", { name: "Prepare invoice" }).click();
   await page.getByRole("button", { name: "Prepare draft" }).click();
-  await expect(page).toHaveURL(/\/finance\/drafts\//);
+  await expect(page).toHaveURL(/\/billing\/drafts\//);
   await expect(page.getByText(/Draft invoice CRM-/)).toBeVisible();
   await page.getByRole("button", { name: "Approve and create in Xero" }).click();
   await expect(page.getByText("Draft invoice created in Xero.")).toBeVisible();
@@ -32,7 +32,7 @@ test("finance user sees Xero (demo) invoices, prepares a draft from a contract, 
 
 test("sales user cannot see Finance or approve, and the company page hides financial data", async ({ page }) => {
   await login(page, "sales@example.com");
-  await page.goto("/finance");
+  await page.goto("/billing");
   await expect(page).toHaveURL(/\/forbidden/);
   await page.goto("/companies");
   await page.getByRole("link", { name: "Northern Freight Solutions Ltd" }).click();

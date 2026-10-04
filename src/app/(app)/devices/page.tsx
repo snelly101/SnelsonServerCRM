@@ -101,7 +101,7 @@ export default async function DevicesPage({ searchParams }: { searchParams: Prom
         }
       >
         <DiscrepancyTable rows={discrepancies} canReview={canReview} currency={settings.currency} />
-        <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500">Observed = active devices in billable classes at the linked organisation (and location, for site-specific lines). Review only records a decision; contracts and invoices are never changed automatically.</p>
+        <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500">Observed = active devices in billable classes at the linked organisation (and location, for site-specific lines). Resolve offers amend, reduce at renewal, exception or dismiss with the money consequence first. Together with licence discrepancies and billing findings in <Link href="/billing/exceptions" className="text-brand-700 hover:underline">Billing → Exceptions</Link>.</p>
       </Card>
 
       <FilterBar

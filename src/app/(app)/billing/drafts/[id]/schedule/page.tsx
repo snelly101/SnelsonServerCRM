@@ -25,7 +25,7 @@ export default async function CustomerSchedulePage({ params }: { params: Promise
   return (
     <div className="mx-auto max-w-3xl space-y-6 bg-surface p-6 text-slate-900 print:max-w-none print:p-0">
       <div className="flex items-start justify-between gap-4 print:hidden">
-        <Link href={`/finance/drafts/${id}`} className="text-sm text-brand-700 hover:underline">← Back to draft {draft.reference}</Link>
+        <Link href={`/billing/drafts/${id}`} className="text-sm text-brand-700 hover:underline">← Back to draft {draft.reference}</Link>
         <PrintButton />
       </div>
       <header className="border-b border-slate-200 pb-4">

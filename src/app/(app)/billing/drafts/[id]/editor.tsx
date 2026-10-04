@@ -153,7 +153,7 @@ export function ReprepareButton({ id }: { id: string }) {
           start(async () => {
             const r = await reprepareDraftAction(id);
             if (!r.ok) return setError(r.error);
-            router.push(`/finance/drafts/${r.data.draftId}`);
+            router.push(`/billing/drafts/${r.data.draftId}`);
           })
         }
       >

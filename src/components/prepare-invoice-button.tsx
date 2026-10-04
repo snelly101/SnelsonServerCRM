@@ -117,7 +117,7 @@ export function PrepareInvoiceButton({ companyId, contractId, opportunityId, bil
                 const r = await prepareInvoiceAction({ companyId, contractId, opportunityId, periodStart: contractId ? periodStart : undefined, periodEnd: contractId ? periodEnd : undefined });
                 if (!r.ok) return setError(r.error);
                 setOpen(false);
-                router.push(`/finance/drafts/${r.data.draftId}`);
+                router.push(`/billing/drafts/${r.data.draftId}`);
               })
             }
           >

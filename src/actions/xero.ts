@@ -12,7 +12,7 @@ import type { InvoiceDraftLine } from "@/db/schema";
 
 const revalidateXero = () => {
   revalidatePath("/integrations", "layout");
-  revalidatePath("/finance", "layout");
+  revalidatePath("/billing", "layout");
   revalidatePath("/companies", "layout");
 };
 

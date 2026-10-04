@@ -40,7 +40,7 @@ export function DraftReviewTable({ rows, canApprove }: { rows: DraftReviewRow[];
           <ul className="space-y-0.5 text-sm">
             {approved.map((a) => (
               <li key={a.id}>
-                <Link href={`/finance/drafts/${a.id}`} className="text-brand-700 hover:underline">{a.reference}</Link> <span className="text-slate-500">{a.companyName}</span>
+                <Link href={`/billing/drafts/${a.id}`} className="text-brand-700 hover:underline">{a.reference}</Link> <span className="text-slate-500">{a.companyName}</span>
               </li>
             ))}
           </ul>
@@ -51,7 +51,7 @@ export function DraftReviewTable({ rows, canApprove }: { rows: DraftReviewRow[];
             <ul className="list-disc space-y-0.5 pl-5 text-xs text-slate-600">
               {skipped.map((s) => (
                 <li key={s.id}>
-                  <Link href={`/finance/drafts/${s.id}`} className="text-brand-700 hover:underline">{s.reference}</Link> {s.companyName && <span>({s.companyName})</span>}: {s.reason}
+                  <Link href={`/billing/drafts/${s.id}`} className="text-brand-700 hover:underline">{s.reference}</Link> {s.companyName && <span>({s.companyName})</span>}: {s.reason}
                 </li>
               ))}
             </ul>
@@ -93,7 +93,7 @@ export function DraftReviewTable({ rows, canApprove }: { rows: DraftReviewRow[];
                   </td>
                 )}
                 <td>
-                  <Link href={`/finance/drafts/${d.id}`} className="font-medium text-brand-700 hover:underline">
+                  <Link href={`/billing/drafts/${d.id}`} className="font-medium text-brand-700 hover:underline">
                     {d.reference}
                   </Link>
                   {d.description && <div className="max-w-xs truncate text-xs text-slate-500">{d.description}</div>}
@@ -107,7 +107,7 @@ export function DraftReviewTable({ rows, canApprove }: { rows: DraftReviewRow[];
                 <td className="text-right tabular-nums">{fmtMoney(d.subTotal, d.currencyCode)}</td>
                 <td className="text-right tabular-nums text-slate-600">
                   {d.previous ? (
-                    <Link href={`/finance/drafts/${d.previous.draftId}`} className="hover:underline" title={`${d.previous.reference}, ${d.previous.periodStart} to ${d.previous.periodEnd}`}>
+                    <Link href={`/billing/drafts/${d.previous.draftId}`} className="hover:underline" title={`${d.previous.reference}, ${d.previous.periodStart} to ${d.previous.periodEnd}`}>
                       {fmtMoney(d.previous.net, d.currencyCode)}
                     </Link>
                   ) : (
@@ -137,7 +137,7 @@ export function DraftReviewTable({ rows, canApprove }: { rows: DraftReviewRow[];
                 </td>
                 <td className="text-xs text-slate-500">{fmtRelative(d.createdAt)}</td>
                 <td className="text-right">
-                  <Link href={`/finance/drafts/${d.id}`} className="text-xs text-brand-700 hover:underline">
+                  <Link href={`/billing/drafts/${d.id}`} className="text-xs text-brand-700 hover:underline">
                     {canApprove ? "Review & approve" : "View"}
                   </Link>
                 </td>

@@ -8,7 +8,7 @@ import { coverageSourceValues, coverageStateValues } from "@/db/schema";
 import { clearServiceCoverage, setServiceCoverage } from "@/services/service-register";
 
 const revalidate = (companyId?: string) => {
-  revalidatePath("/finance", "layout");
+  revalidatePath("/billing", "layout");
   revalidatePath("/integrations", "layout");
   if (companyId) revalidatePath(`/companies/${companyId}`);
 };

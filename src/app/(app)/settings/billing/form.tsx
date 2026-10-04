@@ -70,7 +70,7 @@ export function RunNowButton() {
             <ul className="list-disc pl-5 text-xs">
               {res.prepared.map((p) => (
                 <li key={p.draftId}>
-                  <Link href={`/finance/drafts/${p.draftId}`} className="underline">{p.companyName} · {p.contractName}</Link>
+                  <Link href={`/billing/drafts/${p.draftId}`} className="underline">{p.companyName} · {p.contractName}</Link>
                 </li>
               ))}
             </ul>
@@ -82,7 +82,7 @@ export function RunNowButton() {
               ))}
             </ul>
           )}
-          <p className="mt-1 text-xs">Audited as a billing automation run naming the policy. <Link href="/finance" className="underline">Open Finance</Link>.</p>
+          <p className="mt-1 text-xs">Audited as a billing automation run naming the policy. <Link href="/billing" className="underline">Open Finance</Link>.</p>
         </Alert>
       )}
     </div>

@@ -4,7 +4,7 @@ import { can } from "@/lib/permissions";
 import { getAppSettings } from "@/lib/settings";
 import { serviceRegister, SERVICE_STATE_LABELS } from "@/services/service-register";
 import { matchableLines } from "@/services/pax8";
-import { PageHeader, Card } from "@/components/ui/page";
+import { Card } from "@/components/ui/page";
 import { Input, Select } from "@/components/ui/form";
 import { Button } from "@/components/ui/button";
 import { param } from "@/lib/utils";
@@ -25,11 +25,7 @@ export default async function ServiceCoveragePage({ searchParams }: { searchPara
   if (canEdit) for (const id of companyIds.slice(0, 60)) linesByCompany[id] = await matchableLines(id, ["draft", "active"]);
   return (
     <>
-      <PageHeader
-        breadcrumbs={[{ label: "Finance", href: "/finance" }, { label: "Service coverage" }]}
-        title="Service coverage"
-        description="Every service the integrations say a customer has (Pax8 subscriptions, 20i packages and domains, NinjaOne managed devices) and how it is covered commercially. Only unmapped means possibly missed revenue; everything else is an explicit decision with a reason."
-      />
+      <p className="mb-4 text-sm text-slate-600">Every service the integrations say a customer has (Pax8 subscriptions, 20i packages and domains, NinjaOne managed devices) and how it is covered commercially. Only <strong>unmapped</strong> means possibly missed revenue; everything else is an explicit decision with a reason.</p>
       <Card className="mb-4">
         <RegisterSummaryBar summary={data.summary} />
         <form method="get" className="mt-3 flex flex-wrap items-end gap-2">
@@ -57,7 +53,7 @@ export default async function ServiceCoveragePage({ searchParams }: { searchPara
             Filter
           </Button>
           {(state !== "all" || companyId || q) && (
-            <Link href="/finance/services" className="text-xs text-brand-700 hover:underline">
+            <Link href="/billing/services" className="text-xs text-brand-700 hover:underline">
               clear
             </Link>
           )}

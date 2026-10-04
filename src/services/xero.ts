@@ -748,7 +748,7 @@ export async function approveAndCreateInvoice(id: string, actorUserId: string | 
     const { result, reused } = await runOutbound("xero", `xero:invoice:${id}`, "invoice.create", actorUserId, {
       requestSummary: { reference: d.reference, contactId: link.externalId, lines: d.lines.length, subTotal: d.subTotal },
       perform: async () => {
-        const inv = await resolved.client.createDraftInvoice({ contactId: link.externalId, reference: d.reference, date: d.invoiceDate, dueDate: d.dueDate, currencyCode: d.currencyCode, lineAmountTypes: d.lineAmountTypes as "Exclusive", brandingThemeId: cfg.brandingThemeId || undefined, url: `${process.env.APP_URL ?? ""}/finance/drafts/${id}`, lineItems: d.purchaseOrderRef ? d.lines.map((l, i) => (i === 0 ? { ...l, description: `${l.description} (PO ${d.purchaseOrderRef})` } : l)) : d.lines }, `xero:invoice:${id}`);
+        const inv = await resolved.client.createDraftInvoice({ contactId: link.externalId, reference: d.reference, date: d.invoiceDate, dueDate: d.dueDate, currencyCode: d.currencyCode, lineAmountTypes: d.lineAmountTypes as "Exclusive", brandingThemeId: cfg.brandingThemeId || undefined, url: `${process.env.APP_URL ?? ""}/billing/drafts/${id}`, lineItems: d.purchaseOrderRef ? d.lines.map((l, i) => (i === 0 ? { ...l, description: `${l.description} (PO ${d.purchaseOrderRef})` } : l)) : d.lines }, `xero:invoice:${id}`);
         await upsertInvoice(inv);
         return { externalId: inv.InvoiceID, summary: { invoiceNumber: inv.InvoiceNumber, total: inv.Total } as Record<string, unknown> };
       },

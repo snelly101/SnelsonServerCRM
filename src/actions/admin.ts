@@ -154,7 +154,7 @@ export async function runBillingAutomationAction(): Promise<ActionResult<Automat
     const u = await requireActionPermission("settings.write");
     const r = await runBillingAutomation({ trigger: "manual", actorUserId: u.id });
     revalidatePath("/settings", "layout");
-    revalidatePath("/finance", "layout");
+    revalidatePath("/billing", "layout");
     return r;
   });
 }
