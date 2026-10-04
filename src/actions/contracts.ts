@@ -46,11 +46,12 @@ export async function updateContractAction(id: string, _prev: ActionResult<unkno
   return res;
 }
 
-export async function archiveContractAction(id: string): Promise<ActionResult<undefined>> {
+export async function archiveContractAction(id: string, restore = false): Promise<ActionResult<undefined>> {
   return runAction(async () => {
     const u = await requireActionPermission("contract.write");
-    await archiveContract(z.uuid().parse(id), u.id);
+    await archiveContract(z.uuid().parse(id), u.id, restore);
     revalidatePath("/contracts");
+    revalidatePath(`/contracts/${id}`);
     return undefined;
   });
 }

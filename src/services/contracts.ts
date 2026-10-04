@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNull, sql, count, type SQL, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, isNotNull, sql, count, type SQL, inArray } from "drizzle-orm";
 import { db, type Tx } from "@/db";
 import { companies, contractLineChanges, contractLines, contracts, invoiceDrafts, opportunityLines, sites, tasks, user } from "@/db/schema";
 import { audit, diffFields, logActivity } from "@/lib/audit";
@@ -13,12 +13,14 @@ export type ContractListParams = {
   companyId?: string;
   ownerUserId?: string;
   renewingWithinDays?: number;
+  /** Show only archived contracts instead of hiding them. */
+  archived?: boolean;
   page?: number;
   pageSize?: number;
 };
 
 function where(p: ContractListParams): SQL | undefined {
-  const conds: (SQL | undefined)[] = [isNull(contracts.archivedAt)];
+  const conds: (SQL | undefined)[] = [p.archived ? isNotNull(contracts.archivedAt) : isNull(contracts.archivedAt)];
   if (p.q) conds.push(sql`(${contracts.name} ilike ${"%" + p.q + "%"} or ${companies.name} ilike ${"%" + p.q + "%"} or ${contracts.reference} ilike ${"%" + p.q + "%"})`);
   if (p.status && p.status !== "all") conds.push(eq(contracts.status, p.status as "draft" | "active" | "expired" | "cancelled"));
   if (p.companyId) conds.push(eq(contracts.companyId, p.companyId));
@@ -260,9 +262,14 @@ export async function updateContract(id: string, input: ContractInput, lines: Co
   });
 }
 
-export async function archiveContract(id: string, actorUserId: string) {
-  await db.update(contracts).set({ archivedAt: new Date() }).where(eq(contracts.id, id));
-  await audit({ actorUserId, action: "contract.archive", entityType: "contract", entityId: id });
+export async function archiveContract(id: string, actorUserId: string, restore = false) {
+  await db.transaction(async (tx) => {
+    const [before] = await tx.select({ companyId: contracts.companyId, name: contracts.name }).from(contracts).where(eq(contracts.id, id)).limit(1);
+    if (!before) throw new ActionError("Contract not found.");
+    await tx.update(contracts).set({ archivedAt: restore ? null : new Date(), updatedAt: new Date() }).where(eq(contracts.id, id));
+    await audit({ actorUserId, action: restore ? "contract.restore" : "contract.archive", entityType: "contract", entityId: id }, tx);
+    await logActivity({ type: "contract", companyId: before.companyId, entityType: "contract", entityId: id, title: `${before.name}: ${restore ? "restored" : "archived"}`, actorUserId }, tx);
+  });
 }
 
 /** Builds a draft contract from a won opportunity's lines. Idempotent per opportunity. */

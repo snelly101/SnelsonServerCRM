@@ -28,6 +28,7 @@ import { GlobalSearch } from "./global-search";
 import { signOut } from "@/lib/auth-client";
 import { ROLE_LABELS, type Role } from "@/lib/permissions";
 import { ThemeToggle, ThemeSync } from "./theme-toggle";
+import { ToastProvider } from "./ui/toast";
 import type { ThemePref } from "@/lib/theme";
 
 const NAV = [
@@ -218,7 +219,9 @@ export function AppShell({
           </div>
         )}
         <ThemeSync pref={user.theme} />
-        <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
+        <ToastProvider>
+          <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
+        </ToastProvider>
       </div>
     </div>
   );

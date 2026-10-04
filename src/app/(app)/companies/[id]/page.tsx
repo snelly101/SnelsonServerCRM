@@ -701,6 +701,7 @@ export default async function CompanyPage({
                               action={archiveContactAction.bind(null, c.id, id)}
                               title={`Archive ${fullName(c)}?`}
                               confirmLabel="Archive"
+                              successMessage={`${fullName(c)} archived`}
                             >
                               Archive
                             </ConfirmButton>
@@ -766,6 +767,7 @@ export default async function CompanyPage({
                                 action={archiveSiteAction.bind(null, s.id, id)}
                                 title={`Archive site ${s.name}?`}
                                 confirmLabel="Archive"
+                                successMessage={`Site ${s.name} archived`}
                               >
                                 Archive
                               </ConfirmButton>

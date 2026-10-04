@@ -7,6 +7,7 @@ import { MoreHorizontal, Archive, ArchiveRestore } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogClose } from "@/components/ui/dialog";
 import { archiveCompanyAction } from "@/actions/companies";
+import { useToast } from "@/components/ui/toast";
 
 /**
  * Overflow menu for the company header. Archive / restore live here so the
@@ -18,6 +19,7 @@ export function CompanyHeaderMenu({ companyId, archived, canArchive }: { company
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const router = useRouter();
+  const toast = useToast();
   if (!canArchive) return null;
   const title = archived ? "Restore this company?" : "Archive this company?";
   const description = archived ? undefined : "It will be hidden from lists but nothing is deleted. Linked contacts, opportunities and history are kept and you can restore it later.";
@@ -60,6 +62,7 @@ export function CompanyHeaderMenu({ companyId, archived, canArchive }: { company
                   const res = await archiveCompanyAction(companyId, archived);
                   if (res.ok) {
                     setConfirm(false);
+                    toast(archived ? "Company restored" : "Company archived. It stays open here with an Archived banner; use Restore to bring it back.");
                     router.refresh();
                   } else setError(res.error);
                 })
