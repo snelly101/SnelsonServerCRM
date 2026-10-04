@@ -168,7 +168,7 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
                       </td>
                       <td className="text-xs">
                         {h.settledByDraftId ? (
-                          <Link href={`/finance/drafts/${h.settledByDraftId}`} className="text-brand-700 hover:underline">
+                          <Link href={`/billing/drafts/${h.settledByDraftId}`} className="text-brand-700 hover:underline">
                             {h.draftReference} <span className="text-slate-500">({h.draftStatus})</span>
                           </Link>
                         ) : (

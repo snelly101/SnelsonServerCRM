@@ -88,7 +88,7 @@ export async function billingFindings(opts: { asOf?: string; staleDays?: number 
   const run = await previewBillingRun(asOf);
   for (const r of run) {
     if (r.skipReason || !r.items.length) continue;
-    findings.push({ kind: "expected_missing", severity: r.missedCount ? "red" : "amber", companyId: r.companyId, companyName: r.companyName, title: `${r.contractName}: ${r.items.length} line period${r.items.length === 1 ? "" : "s"} due${r.missedCount ? `, ${r.missedCount} missed` : ""}`, detail: r.period ? `${r.period.periodStart} to ${r.period.periodEnd}` : null, amount: r.net, currency: null, href: `/finance/billing-run?asOf=${asOf}` });
+    findings.push({ kind: "expected_missing", severity: r.missedCount ? "red" : "amber", companyId: r.companyId, companyName: r.companyName, title: `${r.contractName}: ${r.items.length} line period${r.items.length === 1 ? "" : "s"} due${r.missedCount ? `, ${r.missedCount} missed` : ""}`, detail: r.period ? `${r.period.periodStart} to ${r.period.periodEnd}` : null, amount: r.net, currency: null, href: `/billing/run?asOf=${asOf}` });
   }
 
   // 5. Drafts waiting too long.
@@ -97,12 +97,12 @@ export async function billingFindings(opts: { asOf?: string; staleDays?: number 
   for (const d of drafts) {
     if (!["draft", "failed", "approved"].includes(d.status) || d.createdAt.getTime() > cutoff) continue;
     const days = Math.floor((Date.now() - d.createdAt.getTime()) / 86400000);
-    findings.push({ kind: "draft_waiting", severity: d.status === "failed" ? "red" : "amber", companyId: d.companyId, companyName: d.companyName, title: `${d.reference} ${d.status} for ${days} days${d.stale ? ", stale" : ""}`, detail: d.lastError ?? d.description, amount: Number(d.subTotal), currency: d.currencyCode, href: `/finance/drafts/${d.id}` });
+    findings.push({ kind: "draft_waiting", severity: d.status === "failed" ? "red" : "amber", companyId: d.companyId, companyName: d.companyName, title: `${d.reference} ${d.status} for ${days} days${d.stale ? ", stale" : ""}`, detail: d.lastError ?? d.description, amount: Number(d.subTotal), currency: d.currencyCode, href: `/billing/drafts/${d.id}` });
   }
 
   // 6. Customer invoices changed in Xero after approval.
   for (const c of await createdDraftsChangedInXero(100))
-    findings.push({ kind: "invoice_differs", severity: c.diff!.status === "VOIDED" || c.diff!.status === "DELETED" ? "red" : "amber", companyId: c.companyId, companyName: c.companyName, title: `${c.reference} (${c.xeroInvoiceNumber ?? "Xero"}) ${c.diff!.status === "VOIDED" || c.diff!.status === "DELETED" ? c.diff!.status.toLowerCase() : "amount changed"}`, detail: c.diff!.xeroSubTotal === null ? null : `approved ${c.diff!.approvedSubTotal.toFixed(2)}, Xero ${c.diff!.xeroSubTotal.toFixed(2)}`, amount: c.diff!.difference, currency: c.currencyCode, href: `/finance/drafts/${c.id}` });
+    findings.push({ kind: "invoice_differs", severity: c.diff!.status === "VOIDED" || c.diff!.status === "DELETED" ? "red" : "amber", companyId: c.companyId, companyName: c.companyName, title: `${c.reference} (${c.xeroInvoiceNumber ?? "Xero"}) ${c.diff!.status === "VOIDED" || c.diff!.status === "DELETED" ? c.diff!.status.toLowerCase() : "amount changed"}`, detail: c.diff!.xeroSubTotal === null ? null : `approved ${c.diff!.approvedSubTotal.toFixed(2)}, Xero ${c.diff!.xeroSubTotal.toFixed(2)}`, amount: c.diff!.difference, currency: c.currencyCode, href: `/billing/drafts/${c.id}` });
 
   // 7 & 8. Supplier side from the Pax8 reconciliation.
   const recon = await pax8InvoiceReconciliation();

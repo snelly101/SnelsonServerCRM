@@ -12,6 +12,14 @@ const nextConfig: NextConfig = {
     return [
       { source: "/helpdesk/admin", destination: "/settings/helpdesk", permanent: true },
       { source: "/helpdesk/admin/:path*", destination: "/settings/helpdesk/:path*", permanent: true },
+      // Finance, the billing run, findings, service coverage, renewals and price reviews were joined into one Billing area.
+      { source: "/finance", destination: "/billing", permanent: true },
+      { source: "/finance/billing-run", destination: "/billing/run", permanent: true },
+      { source: "/finance/findings", destination: "/billing/exceptions", permanent: true },
+      { source: "/finance/services", destination: "/billing/services", permanent: true },
+      { source: "/finance/drafts/:path*", destination: "/billing/drafts/:path*", permanent: true },
+      { source: "/contracts/renewals", destination: "/billing/renewals", permanent: true },
+      { source: "/contracts/price-reviews", destination: "/billing/renewals?view=pricing", permanent: true },
     ];
   },
   async headers() {

@@ -17,7 +17,7 @@ export default async function BillingAutomationPage() {
     <div className="space-y-4">
       <Card title="Billing automation policy" className="max-w-2xl">
         <p className="mb-4 text-sm text-slate-600">
-          Automation moves in stages, from detecting issues to proposing resolutions to preparing drafts to approving the routine ones, and only as far as this policy allows. Each stage uses the same deterministic rules a person uses on the <Link href="/finance/billing-run" className="text-brand-700 hover:underline">billing run</Link> and the <Link href="/finance" className="text-brand-700 hover:underline">draft review</Link>, and every automated action is audited as a system action naming the policy. The CRM never authorises or sends an invoice; that stays in Xero.
+          Automation moves in stages, from detecting issues to proposing resolutions to preparing drafts to approving the routine ones, and only as far as this policy allows. Each stage uses the same deterministic rules a person uses on the <Link href="/billing/run" className="text-brand-700 hover:underline">billing run</Link> and the <Link href="/billing" className="text-brand-700 hover:underline">draft review</Link>, and every automated action is audited as a system action naming the policy. The CRM never authorises or sends an invoice; that stays in Xero.
         </p>
         <BillingAutomationForm levels={AUTOMATION_LEVELS} settings={settings} readOnly={!canWrite} />
       </Card>

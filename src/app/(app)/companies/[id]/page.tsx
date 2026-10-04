@@ -1135,7 +1135,7 @@ export default async function CompanyPage({
                           className="flex items-center justify-between px-4 py-2"
                         >
                           <Link
-                            href={`/finance/drafts/${d.id}`}
+                            href={`/billing/drafts/${d.id}`}
                             className="text-brand-700 hover:underline"
                           >
                             {d.reference} · {d.description ?? "draft"}
@@ -1398,7 +1398,7 @@ export default async function CompanyPage({
             title={`Services supplied · ${services.summary.total}`}
             padded={false}
             actions={
-              <Link href={`/finance/services?companyId=${id}`} className="text-xs text-brand-700 hover:underline">
+              <Link href={`/billing/services?companyId=${id}`} className="text-xs text-brand-700 hover:underline">
                 all customers
               </Link>
             }

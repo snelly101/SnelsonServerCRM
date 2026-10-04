@@ -130,7 +130,7 @@ export async function resolveDiscrepancyAction(id: string, input: ResolutionInpu
     const r = await resolveDiscrepancy(z.uuid().parse(id), resolutionSchema.parse(input), u.id);
     revalidate();
     revalidatePath("/contracts");
-    revalidatePath("/finance");
+    revalidatePath("/billing");
     return r;
   });
 }

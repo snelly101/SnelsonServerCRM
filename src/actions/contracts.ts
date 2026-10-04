@@ -70,7 +70,7 @@ export async function recordRenewalDecisionAction(id: string, input: { decision:
     const u = await requireActionPermission("contract.write");
     await recordRenewalDecision(z.uuid().parse(id), { decision: z.enum(["renew", "amend", "not_renewing"]).parse(input.decision), note: z.string().trim().max(1000).nullish().parse(input.note) }, u.id);
     revalidatePath("/contracts", "layout");
-    revalidatePath("/finance", "layout");
+    revalidatePath("/billing", "layout");
     return undefined;
   });
 }
@@ -105,7 +105,7 @@ export async function applyPriceReviewAction(input: PriceReviewInput): Promise<A
     const u = await requireActionPermission("contract.write");
     const r = await applyPriceReview(priceReviewSchema.parse(input), u.id);
     revalidatePath("/contracts", "layout");
-    revalidatePath("/finance", "layout");
+    revalidatePath("/billing", "layout");
     return r;
   });
 }

@@ -33,13 +33,13 @@ describe("billing findings", () => {
     expect(acronis).toMatchObject({ severity: "amber", href: `/companies/${dental}?tab=subscriptions` });
     expect(acronis.amount).toBeCloseTo(21.7, 2);
     const due = first.findings.find((f) => f.kind === "expected_missing" && f.companyId === dental)!;
-    expect(due).toMatchObject({ severity: "amber", amount: 168, href: "/finance/billing-run?asOf=2026-10-05" });
+    expect(due).toMatchObject({ severity: "amber", amount: 168, href: "/billing/run?asOf=2026-10-05" });
     // Draft October, then age the draft: it becomes a waiting draft and the expected charge disappears.
     const draftId = await prepareInvoiceDraft({ companyId: dental, contractId, periodStart: "2026-10-01", periodEnd: "2026-10-31" }, admin.id);
     await db.update(invoiceDrafts).set({ createdAt: new Date(Date.now() - 10 * 86400000) }).where(eq(invoiceDrafts.id, draftId));
     const second = await billingFindings({ asOf: "2026-10-05" });
     expect(second.findings.some((f) => f.kind === "expected_missing" && f.companyId === dental)).toBe(false);
-    const waiting = second.findings.find((f) => f.kind === "draft_waiting" && f.href === `/finance/drafts/${draftId}`)!;
+    const waiting = second.findings.find((f) => f.kind === "draft_waiting" && f.href === `/billing/drafts/${draftId}`)!;
     expect(waiting.title).toMatch(/draft for 10 days/);
     // A subscription bundled into a line of a contract that is then cancelled: covered, but nothing can charge it.
     const [std] = await db.select().from(contractLines).where(eq(contractLines.contractId, contractId));

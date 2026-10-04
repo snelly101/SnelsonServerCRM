@@ -16,15 +16,12 @@ import { Badge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
 import { ConfirmButton } from "@/components/ui/confirm-button";
 import { disconnectAction } from "@/actions/integrations";
-import { fmtDate, fmtDateTime, fmtMoney, fmtRelative } from "@/lib/format";
+import { fmtDateTime, fmtMoney, fmtRelative } from "@/lib/format";
 import { DiscrepancyTable } from "@/app/(app)/devices/discrepancies";
 import {
   Pax8ConfigForm,
   Pax8ConnectForm,
-  Pax8ImportForm,
   Pax8MappingTable,
-  Pax8ReconciliationTable,
-  Pax8SupplierForm,
   Pax8SyncButton,
   Pax8TestButton,
   RecheckLicencesButton,
@@ -296,42 +293,13 @@ export default async function Pax8Page() {
           currency={settings.currency}
           kind="licence"
         />
+        <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500">All open licence and device discrepancies, with findings and accepted exceptions, are together in <Link href="/billing/exceptions" className="text-brand-700 hover:underline">Billing → Exceptions</Link>.</p>
       </Card>
 
-      <Card
-        title={`Pax8 invoices vs Xero bills · ${recon.totals.matched} total-matched, ${recon.totals.differs} differ, ${recon.totals.noBill} without a bill${recon.totals.extraBills ? `, ${recon.totals.extraBills} bill${recon.totals.extraBills === 1 ? "" : "s"} without an invoice` : ""}${recon.totals.chargeFindings ? `, ${recon.totals.chargeFindings} charge finding${recon.totals.chargeFindings === 1 ? "" : "s"}` : ""}`}
-        padded={false}
-        className="mt-4"
-      >
-        <div className="border-b border-slate-100 px-4 py-3">
-          <Pax8SupplierForm
-            value={recon.supplier?.contactId ?? null}
-            suppliers={recon.suppliers}
-            readOnly={!canManage || !recon.xeroConfigured}
-          />
-          <p className="mt-2 text-xs text-slate-500">
-            {recon.xeroConfigured
-              ? "Each sync mirrors the recent Pax8 partner invoices and the purchase bills Xero holds for this supplier, then matches them by reference (a bill whose reference or number carries the Pax8 invoice id; strong) or by a unique identical total within ten days (weaker, shown in amber). Finance can match or unmatch by hand; a hand decision is kept. Totals are compared invoice by invoice; charge lines are allocated to customers and subscriptions separately (the Charges column), and a Xero bill with line detail is compared line by line while a one-line bill is reported as total-matched only. Nothing is changed in Xero or at Pax8."
-              : "Connect Xero to compare Pax8 invoices with the bills entered there."}
-          </p>
-          <div className="mt-3 flex flex-wrap items-end justify-between gap-3 border-t border-slate-100 pt-3">
-            <p className="text-xs text-slate-600">
-              <strong>Imported history:</strong>{" "}
-              {recon.coverage.count ? `${recon.coverage.count} Pax8 invoice${recon.coverage.count === 1 ? "" : "s"} from ${fmtDate(recon.coverage.oldest!, settings)} to ${fmtDate(recon.coverage.newest!, settings)}` : "none"}
-              {recon.coverage.lastFetched ? ` · last fetched ${fmtRelative(recon.coverage.lastFetched)}` : ""}
-              {recon.totals.olderBills ? ` · ${recon.totals.olderBills} supplier bill${recon.totals.olderBills === 1 ? "" : "s"} older than the imported history (not a finding until their invoices are imported)` : ""}
-              . The routine sync keeps the last {conn.effectiveConfig.invoiceCount} invoices fresh; older invoices stay once imported.
-            </p>
-            {canManage && conn.configured && <Pax8ImportForm oldest={recon.coverage.oldest} />}
-          </div>
-        </div>
-        <Pax8ReconciliationTable
-          rows={recon.rows}
-          unmatchedBills={recon.unmatchedBills}
-          freeBills={recon.freeBills}
-          canMatch={can(me.role, "invoice.approve") && Boolean(recon.supplier)}
-          settings={settings}
-        />
+      <Card title="Pax8 invoices vs Xero bills" className="mt-4">
+        <p className="text-sm text-slate-700">
+          {recon.totals.matched} total-matched, {recon.totals.differs} differ, {recon.totals.noBill} without a bill{recon.totals.extraBills ? `, ${recon.totals.extraBills} bill${recon.totals.extraBills === 1 ? "" : "s"} without an invoice` : ""}. The reconciliation, supplier contact, hand matches and historical import live in <Link href="/billing/invoices?view=supplier" className="text-brand-700 hover:underline">Billing → Invoices → Supplier bills</Link>.
+        </p>
       </Card>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">

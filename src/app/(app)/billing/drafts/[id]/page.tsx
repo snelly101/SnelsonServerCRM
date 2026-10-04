@@ -31,7 +31,7 @@ export default async function DraftPage({ params }: { params: Promise<{ id: stri
   return (
     <>
       <PageHeader
-        breadcrumbs={[{ label: "Finance", href: "/finance" }, { label: draft.reference }]}
+        breadcrumbs={[{ label: "Monthly run", href: "/billing/run?step=approve" }, { label: draft.reference }]}
         title={
           <span className="flex items-center gap-2">
             Draft invoice {draft.reference} <Badge tone={draft.status === "created" ? "green" : draft.status === "failed" ? "red" : draft.status === "approved" ? "blue" : "slate"}>{draft.status}</Badge>
@@ -122,7 +122,7 @@ export default async function DraftPage({ params }: { params: Promise<{ id: stri
             )}
           </Card>
           {customer.summary && (
-            <Card title="What the customer sees" className="mt-4" actions={<Link href={`/finance/drafts/${draft.id}/schedule`} className="text-xs text-brand-700 hover:underline">Customer schedule (printable)</Link>}>
+            <Card title="What the customer sees" className="mt-4" actions={<Link href={`/billing/drafts/${draft.id}/schedule`} className="text-xs text-brand-700 hover:underline">Customer schedule (printable)</Link>}>
               <p className="text-sm leading-6 text-slate-800">{customer.summary}</p>
               <p className="mt-2 text-xs text-slate-500">Plain-language wording derived from the calculated lines, for the invoice email or notes. The schedule page adds service dates and the licences, devices and domains behind each charge.</p>
             </Card>
