@@ -57,6 +57,7 @@ One codebase, two processes (`web` and `worker`) sharing the same database. Noth
 - **Integration plumbing:** `integration_connections` (encrypted credentials, chosen Xero tenant, status, last sync), `external_links` (provider, entity type, local id ↔ external id, unique both ways, how it was matched), `sync_runs`, `sync_errors`, `inbound_events` (unique provider+event id), `outbound_requests` (unique idempotency key + state machine), `mapping_conflicts`.
 - **Mirrored external data:** `bp_proposals`, `xero_invoices`, `xero_payments`, `ninja_devices`, each with `fetched_at` and `source_updated_at` so the UI can label rows live / cached / stale / unavailable.
 - **Review queue:** `billing_discrepancies` (contracted vs observed quantity, open / accepted / dismissed / resolved).
+- **Service register:** `service_coverage` (source + mirror row id → bundle / commitment / free / internal / investigate, optional contract line, reason, review date, who decided). Charged and unmapped are derived from the mirrors' own billing-line columns.
 - **Operational status (Phase 6):** `system_status` key/value rows for the worker heartbeat and last retention run. Never holds secrets.
 
 ### Data retention and deletion policy

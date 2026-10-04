@@ -64,6 +64,7 @@ import {
   updateConnection,
 } from "./integrations";
 import { listDiscrepancies } from "./ninjaone";
+import { coverageFor, isNonBillable } from "./coverage-lookup";
 
 export type Pax8Subscription = typeof pax8Subscriptions.$inferSelect;
 export type Pax8Company = typeof pax8Companies.$inferSelect;
@@ -1503,12 +1504,16 @@ export async function runLicenceCheck(
   const now = new Date();
   for (const [cid, list] of byCompany) {
     const lines = await matchableLines(cid, ["active"]);
+    const coverage = await coverageFor("pax8_subscription", { companyId: cid });
     const observedByLine = new Map<
       string,
       { line: MatchableLine; observed: number; subscriptionIds: string[] }
     >();
     for (const s of list) {
-      const m = matchLine(s, lines);
+      // Explicit coverage first: a bundled subscription counts toward its bundle line; free, internal and commitment-covered ones count toward nothing.
+      const cov = coverage.get(s.id);
+      if (cov && (isNonBillable(cov) || cov.state === "commitment")) continue;
+      const m = cov?.state === "bundle" && cov.contractLineId ? ((l) => (l ? { line: l, by: "manual" as const } : null))(lines.find((l) => l.id === cov.contractLineId)) : matchLine(s, lines);
       if (!m) continue;
       const cur = observedByLine.get(m.line.id) ?? {
         line: m.line,
@@ -2025,8 +2030,10 @@ export async function companySubscriptionOverview(companyId: string) {
       .orderBy(desc(pax8InvoiceItems.invoiceDate))
       .limit(6),
   ]);
+  const coverage = await coverageFor("pax8_subscription", { companyId });
   const subscriptions = subs.map((s) => {
-    const match = matchLine(s, lines);
+    const cov = coverage.get(s.id) ?? null;
+    const match = cov?.state === "bundle" && cov.contractLineId ? ((l) => (l ? { line: l, by: "manual" as const } : null))(lines.find((l) => l.id === cov.contractLineId)) : matchLine(s, lines);
     const monthly = monthlyUnitCost(s.price, s.billingTerm);
     const lineMonths = match ? LINE_MONTHS[match.line.billingFrequency] : null;
     const lineMonthlyCost =
@@ -2041,6 +2048,8 @@ export async function companySubscriptionOverview(companyId: string) {
         s.externalStatus === "active" && BILLED_STATUSES.includes(s.status),
       line: match?.line ?? null,
       matchedBy: match?.by ?? null,
+      /** Explicit commercial state from the service register, if any (bundle, commitment, free, internal, investigate). */
+      coverage: cov ? { state: cov.state, reason: cov.reason, reviewOn: cov.reviewOn } : null,
       monthlyUnitCost: monthly,
       lineMonthlyCost,
       lineMonthlyPrice,
@@ -2075,7 +2084,7 @@ export async function companySubscriptionOverview(companyId: string) {
         (a, s) => a + (s.monthlyUnitCost ?? 0) * s.quantity,
         0,
       ),
-      unbilled: active.filter((s) => !s.line).length,
+      unbilled: active.filter((s) => !s.line && !s.coverage).length,
       costStale: active.filter((s) => s.costDiffers).length,
       lastFetched: subs.reduce<Date | null>(
         (a, s) => (!a || s.fetchedAt > a ? s.fetchedAt : a),

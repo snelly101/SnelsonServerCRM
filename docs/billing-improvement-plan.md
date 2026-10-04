@@ -38,7 +38,11 @@ Working plan for the billing improvement brief (`billing-improvement-brief-for-c
 
 ## Brief section 3: central service register
 
-Not built. NinjaOne, Pax8 and 20i each map to a contract line independently. Bundles and "intentionally free" are not representable; every unmapped item reads as *not billed*. Release 2. The NinjaOne note about several lines comparing against the same organisation count is a real limitation: lines without a site all compare against the whole organisation.
+**Built in 2A** (`src/services/service-register.ts`, `service_coverage`, migration `0020`): every service the integrations report for a customer (Pax8 subscriptions, 20i packages and domains, NinjaOne managed devices) appears on the company's **Services** tab and on Finance → **Service coverage** with one of seven states. *Charged* and *unmapped* are derived from the existing billing-line mappings; *bundle*, *commitment*, *free* (reason and review date), *internal* and *investigate* are explicit decisions recorded with who made them and why. The engines respect them: a bundled Pax8 subscription counts toward its bundle line in the licence check, free / internal / commitment-covered ones count toward nothing, 20i's "linked but not billed" and Pax8's "not billed" leave decided items out, and devices marked internal or free are left out of the billable count and the device check (per-device control on the Devices tab).
+
+The NinjaOne finding was real: several per-device lines of one contract without a site each compared against the whole organisation count. Lines of one contract that share a scope now compare together (contracted = the sum, one review item naming all of them); items left on the other lines are closed.
+
+Still open from this section: dated mappings (a service moving from one line to another keeps only the current mapping), explicit allocation rules for a resource backing several charges, and renewal-schedule coverage for domains beyond the renewal date shown. Release 2B/2C.
 
 ## Brief section 4: supplier cost through to customer billing
 

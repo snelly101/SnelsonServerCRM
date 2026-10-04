@@ -25,6 +25,8 @@ export type DeviceRow = {
   siteName: string | null;
   freshness: DeviceFreshness;
   active: boolean;
+  /** Explicit commercial state from the service register (internal, free, investigate), if any. */
+  coverage?: { state: string; reason: string | null; reviewOn: string | null } | null;
 };
 
 export const FRESHNESS_TONE: Record<DeviceFreshness, string> = { live: "green", cached: "blue", stale: "amber", unavailable: "slate" };
@@ -35,7 +37,7 @@ export function nodeClassLabel(c: string) {
   return c.toLowerCase().replace(/_/g, " ");
 }
 
-export function DeviceTable({ rows, consoleUrl, showCompany = true }: { rows: DeviceRow[]; consoleUrl?: (id: string) => string; showCompany?: boolean }) {
+export function DeviceTable({ rows, consoleUrl, showCompany = true, renderAction }: { rows: DeviceRow[]; consoleUrl?: (id: string) => string; showCompany?: boolean; renderAction?: (d: DeviceRow) => React.ReactNode }) {
   if (rows.length === 0) return <p className="p-4 text-sm text-slate-500">No devices match.</p>;
   return (
     <table className="tbl">
@@ -48,6 +50,7 @@ export function DeviceTable({ rows, consoleUrl, showCompany = true }: { rows: De
           <th>Last seen</th>
           <th>Health</th>
           <th>Data</th>
+          {renderAction && <th>Billing</th>}
         </tr>
       </thead>
       <tbody>
@@ -98,6 +101,7 @@ export function DeviceTable({ rows, consoleUrl, showCompany = true }: { rows: De
             <td>
               <Badge tone={FRESHNESS_TONE[d.freshness]}>{FRESHNESS_LABEL[d.freshness]}</Badge>
             </td>
+            {renderAction && <td className="text-right">{renderAction(d)}</td>}
           </tr>
         ))}
       </tbody>
