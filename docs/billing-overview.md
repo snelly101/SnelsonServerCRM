@@ -174,6 +174,17 @@ Headline stats: outstanding (authorised) total, overdue total and count, paid in
 
 The company page's **Invoices** tab (hidden from roles without `finance.read`) shows the Xero balances for the contact, 12-month invoiced and paid, invoice history, and pending CRM drafts.
 
+### 5.5 Renewals (Contracts → Renewals)
+
+Every active contract with a renewal date, queued by its **decision deadline**: the notice deadline (renewal date minus the notice period) less the *renewal decision lead* in Settings → General (default 30 days). Statuses are *decision overdue*, *decide now* (inside the lead), *upcoming* and *decided*.
+
+Each row sets the customer's renewal against the **supplier commitments** behind the contract's lines, read from the service register through the lines they are charged on (Pax8 subscription commitment end dates, 20i domain expiries; devices carry no commitment). Two mismatches are named in plain words:
+
+- *The agreement renews on 31 December but the supplier commitment runs to 30 September*: the months beyond the renewal date and, where the partner cost is known, the money that stays payable if the customer does not renew (**exposure**).
+- *The supplier commitment renews before the agreement; the cost may change first*.
+
+Planned quantities and prices (dated line changes after today) are listed, so the next invoice after renewal is already visible. Account managers **record the customer's decision** for that renewal date: renew as is, renew with amendments, or not renewing (with a reason). The decision is audited, posted on the company timeline and cleared automatically when the renewal date moves. **Prepare amendment** opens the contract edit form with *Changes take effect from* set to the renewal date, so the amendment lands as dated history and the *Prepare invoice* preview shows its effect before anything reaches Xero. The contract page carries the same card. The daily reminder job still raises a task at the notice deadline.
+
 ## 6. Xero: the accounting system
 
 **Set-up**: a Xero app (client id and secret in the server environment), a webhook for Contacts and Invoices, then Connect in the CRM, choose the organisation, choose invoice defaults (sales account code, hardware account code, tax rate, payment terms, branding theme, all read live from Xero), and map customers to Xero contacts (accept a suggestion, search, or create in Xero).

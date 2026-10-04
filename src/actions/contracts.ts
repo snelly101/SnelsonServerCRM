@@ -8,6 +8,7 @@ import { runAction, type ActionResult } from "@/lib/action-result";
 import { formToObject } from "@/lib/validation";
 import { contractLineSchema, contractSchema, linesFromForm } from "@/lib/validation-sales";
 import { archiveContract, createContract, generateReminders, updateContract } from "@/services/contracts";
+import { clearRenewalDecision, recordRenewalDecision } from "@/services/renewals";
 
 function readContractForm(fd: FormData) {
   const obj = formToObject(fd);
@@ -60,5 +61,24 @@ export async function runRemindersAction(): Promise<ActionResult<{ created: numb
     revalidatePath("/tasks");
     revalidatePath("/contracts");
     return res;
+  });
+}
+
+export async function recordRenewalDecisionAction(id: string, input: { decision: "renew" | "amend" | "not_renewing"; note?: string | null }): Promise<ActionResult<undefined>> {
+  return runAction(async () => {
+    const u = await requireActionPermission("contract.write");
+    await recordRenewalDecision(z.uuid().parse(id), { decision: z.enum(["renew", "amend", "not_renewing"]).parse(input.decision), note: z.string().trim().max(1000).nullish().parse(input.note) }, u.id);
+    revalidatePath("/contracts", "layout");
+    revalidatePath("/finance", "layout");
+    return undefined;
+  });
+}
+
+export async function clearRenewalDecisionAction(id: string): Promise<ActionResult<undefined>> {
+  return runAction(async () => {
+    const u = await requireActionPermission("contract.write");
+    await clearRenewalDecision(z.uuid().parse(id), u.id);
+    revalidatePath("/contracts", "layout");
+    return undefined;
   });
 }

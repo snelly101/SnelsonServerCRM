@@ -36,6 +36,8 @@ export const appSettings = pgTable("app_settings", {
   taxLabel: text("tax_label").notNull().default("VAT"),
   // Devices not seen for longer than this are excluded from billable counts.
   deviceActiveDays: integer("device_active_days").notNull().default(30),
+  // Renewal decisions are due this many days before the notice deadline (the renewal queue's "decide by").
+  renewalLeadDays: integer("renewal_lead_days").notNull().default(30),
   // Secure Vault behaviour (see docs/secure-vault-plan.md)
   vaultRevealSeconds: integer("vault_reveal_seconds").notNull().default(30),
   vaultClipboardSeconds: integer("vault_clipboard_seconds").notNull().default(20),

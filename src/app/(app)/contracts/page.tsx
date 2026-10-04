@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus, Package, BellRing } from "lucide-react";
+import { Plus, Package, BellRing, CalendarClock } from "lucide-react";
 import { requirePermission } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { contractTotals, listContracts } from "@/services/contracts";
@@ -40,6 +40,9 @@ export default async function ContractsPage({ searchParams }: { searchParams: Pr
         description="Managed service agreements, renewals and the service catalogue."
         actions={
           <>
+            <ButtonLink href="/contracts/renewals" variant="secondary">
+              <CalendarClock className="h-4 w-4" /> Renewals
+            </ButtonLink>
             <ButtonLink href="/contracts/catalogue" variant="secondary">
               <Package className="h-4 w-4" /> Service catalogue
             </ButtonLink>

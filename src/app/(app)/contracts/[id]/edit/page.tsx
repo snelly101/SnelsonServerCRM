@@ -10,15 +10,17 @@ import { ContractForm } from "@/components/contract-form";
 
 export const metadata = { title: "Edit contract" };
 
-export default async function EditContractPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function EditContractPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   await requirePermission("contract.write");
   const { id } = await params;
+  const sp = await searchParams;
+  const effectiveFrom = typeof sp.effectiveFrom === "string" && /^\d{4}-\d{2}-\d{2}$/.test(sp.effectiveFrom) ? sp.effectiveFrom : null;
   const contract = await getContract(id);
   if (!contract) notFound();
   const [owners, products, settings, sites] = await Promise.all([listOwners(), productOptions(), getAppSettings(), siteOptions(contract.companyId)]);
   return (
     <>
-      <PageHeader title={`Edit ${contract.name}`} breadcrumbs={[{ label: "Contracts", href: "/contracts" }, { label: contract.name, href: `/contracts/${id}` }, { label: "Edit" }]} />
+      <PageHeader title={effectiveFrom ? `Amend ${contract.name} from ${effectiveFrom}` : `Edit ${contract.name}`} description={effectiveFrom ? "Changes you make here take effect from the renewal date; the next invoice after it carries them." : undefined} breadcrumbs={[{ label: "Contracts", href: "/contracts" }, { label: contract.name, href: `/contracts/${id}` }, { label: "Edit" }]} />
       <Card className="max-w-7xl">
         <ContractForm
           action={updateContractAction.bind(null, id)}
@@ -30,6 +32,7 @@ export default async function EditContractPage({ params }: { params: Promise<{ i
           products={products}
           currency={settings.currency}
           cancelHref={`/contracts/${id}`}
+          defaultEffectiveFrom={effectiveFrom}
         />
       </Card>
     </>

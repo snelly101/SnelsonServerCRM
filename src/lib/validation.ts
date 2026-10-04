@@ -126,6 +126,7 @@ export const appSettingsSchema = z.object({
   defaultTaxRatePercent: z.coerce.number().min(0).max(100),
   taxLabel: trimmed.min(1).max(20),
   deviceActiveDays: z.coerce.number().int().min(1).max(365),
+  renewalLeadDays: z.coerce.number().int().min(0).max(365).default(30),
   // Vault settings are edited on their own page; absent keys leave the stored values untouched.
   vaultRevealSeconds: z.coerce.number().int().min(5).max(600).optional(),
   vaultClipboardSeconds: z.coerce.number().int().min(0).max(600).optional(),

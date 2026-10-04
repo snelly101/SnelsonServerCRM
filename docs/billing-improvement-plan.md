@@ -77,9 +77,15 @@ Release 3 is complete. Remaining from the brief: sections 7 to 9 (renewal exposu
 | Changes made directly in Xero to a CRM-created invoice are mirrored but not compared with the approved version | Design limitation | 1C, built: the draft page and a Finance card *Changed in Xero after approval* show a changed net amount, currency, or a voided / deleted invoice against the approved version |
 | Credits and corrections are not modelled | Future capability | 2/3 |
 
-## Brief sections 7 to 9
+## Brief section 7: margins before renewals and price changes
 
-Renewal exposure against supplier commitments, price reviews, customer-facing explanations, portal and staged automation: releases 3 and 4. Not started.
+**Built in 4A** (`src/services/renewals.ts`, Contracts → **Renewals**, migration `0022`): every active contract with a renewal date is queued by its **decision deadline**, a configurable lead (Settings → General, *Renewal decision lead*, default 30 days) before the notice deadline. Each row sets the customer's renewal date against the supplier commitments behind its lines, read from the service register (Pax8 commitment end dates, 20i domain expiries, through matched or bundled lines), and names the mismatches in plain words: *the agreement renews on 31 December but the supplier commitment runs to 30 September* (with the months and supplier cost at stake where the cost is known) or *the supplier commitment renews before the agreement; the cost may change first*. Planned quantities and prices (dated changes after today) are shown. Account managers **record the customer's decision** (renew as is, amend, not renewing with a reason) against that renewal date, audited and on the timeline; moving the renewal date reopens it. **Prepare amendment** opens the contract with changes dated from the renewal date, so the invoice preview shows their effect first. The contract page carries the same card.
+
+Still to come in release 4: price reviews with affected customers, projected margin and agreement constraints (4B); the commercial-terms version tied to a signed proposal (4B); customer-facing explanations and consolidation (4C); staged automation (4D). The customer portal stays future work.
+
+## Brief sections 8 and 9
+
+Customer-facing explanations, consolidation, portal and staged automation: release 4, slices C and D.
 
 ## Decisions taken while building
 
