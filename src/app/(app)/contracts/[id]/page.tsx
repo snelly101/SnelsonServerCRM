@@ -57,7 +57,7 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
         actions={
           (canWrite || can(me.role, "invoice.prepare")) && (
             <>
-              {can(me.role, "invoice.prepare") && contract.status === "active" && <PrepareInvoiceButton companyId={contract.companyId} contractId={id} billingFrequency={contract.billingFrequency} />}
+              {can(me.role, "invoice.prepare") && contract.status === "active" && <PrepareInvoiceButton companyId={contract.companyId} contractId={id} billingFrequency={contract.billingFrequency} currency={c} />}
               {canWrite && (
                 <>
                   <ButtonLink href={`/contracts/${id}/edit`} variant="secondary">

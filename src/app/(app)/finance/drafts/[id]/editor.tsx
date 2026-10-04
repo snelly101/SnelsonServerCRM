@@ -6,7 +6,7 @@ import { Plus, Trash2, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea, SubmitButton, FormMessage } from "@/components/ui/form";
 import { ConfirmButton } from "@/components/ui/confirm-button";
-import { approveInvoiceAction, cancelDraftAction, updateDraftAction } from "@/actions/xero";
+import { approveInvoiceAction, cancelDraftAction, reprepareDraftAction, updateDraftAction } from "@/actions/xero";
 import { fmtMoney } from "@/lib/format";
 import type { InvoiceDraftLine } from "@/db/schema";
 
@@ -136,5 +136,30 @@ export function ApproveControls({ id, linked, canCancel }: { id: string; linked:
         )}
       </div>
     </div>
+  );
+}
+
+export function ReprepareButton({ id }: { id: string }) {
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
+  return (
+    <span className="inline-flex flex-col gap-1">
+      <Button
+        size="sm"
+        variant="secondary"
+        loading={pending}
+        onClick={() =>
+          start(async () => {
+            const r = await reprepareDraftAction(id);
+            if (!r.ok) return setError(r.error);
+            router.push(`/finance/drafts/${r.data.draftId}`);
+          })
+        }
+      >
+        Re-prepare from the contract
+      </Button>
+      {error && <span className="text-xs text-red-700">{error}</span>}
+    </span>
   );
 }

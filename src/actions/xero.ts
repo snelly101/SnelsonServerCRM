@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireActionPermission } from "@/lib/session";
-import { runAction, type ActionResult } from "@/lib/action-result";
-import { approveAndCreateInvoice, cancelInvoiceDraft, createXeroContactForCompany, importAllRepeatingInvoices, importRepeatingInvoiceAsContract, importAllXeroCustomers, importXeroContactAsCompany, linkCompanyToXeroContact, prepareInvoiceDraft, pushContactDetailsToXero, selectXeroTenant, syncXero, testXero, updateInvoiceDraft } from "@/services/xero";
+import { ActionError, runAction, type ActionResult } from "@/lib/action-result";
+import { approveAndCreateInvoice, cancelInvoiceDraft, createXeroContactForCompany, importAllRepeatingInvoices, importRepeatingInvoiceAsContract, importAllXeroCustomers, importXeroContactAsCompany, linkCompanyToXeroContact, prepareInvoiceDraft, previewContractInvoice, pushContactDetailsToXero, reprepareInvoiceDraft, selectXeroTenant, syncXero, testXero, updateInvoiceDraft } from "@/services/xero";
 import { removeLink, getLink } from "@/services/integrations";
 import type { InvoiceDraftLine } from "@/db/schema";
 
@@ -100,6 +100,24 @@ export async function updateDraftAction(id: string, _prev: ActionResult<unknown>
     await updateInvoiceDraft(z.uuid().parse(id), { invoiceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).parse(fd.get("invoiceDate")), dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).parse(fd.get("dueDate")), description: String(fd.get("description") ?? "") || null, notes: String(fd.get("notes") ?? "") || null, lines }, u.id);
     revalidateXero();
     return undefined;
+  });
+}
+
+export async function previewInvoiceAction(input: { contractId: string; periodStart: string; periodEnd: string }): Promise<ActionResult<Awaited<ReturnType<typeof previewContractInvoice>>>> {
+  return runAction(async () => {
+    await requireActionPermission("invoice.prepare");
+    const p = z.object({ contractId: z.uuid(), periodStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), periodEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).parse(input);
+    if (p.periodEnd < p.periodStart) throw new ActionError("The period end is before its start.");
+    return previewContractInvoice(p.contractId, p.periodStart, p.periodEnd);
+  });
+}
+
+export async function reprepareDraftAction(id: string): Promise<ActionResult<{ draftId: string }>> {
+  return runAction(async () => {
+    const u = await requireActionPermission("invoice.prepare");
+    const draftId = await reprepareInvoiceDraft(z.uuid().parse(id), u.id);
+    revalidateXero();
+    return { draftId };
   });
 }
 
