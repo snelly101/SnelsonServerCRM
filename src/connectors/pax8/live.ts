@@ -14,6 +14,7 @@ import {
   type Pax8Page,
   type Pax8ProductRaw,
   type Pax8SubscriptionRaw,
+  type Pax8SubscriptionUpdate,
 } from "./types";
 
 export type Pax8Token = { accessToken: string; expiresAt: number };
@@ -183,6 +184,24 @@ export class LivePax8Client implements Pax8Client {
     if (!res.data || typeof res.data.id !== "string" || !res.data.id)
       throw new Error("Pax8 did not return the created company.");
     return res.data;
+  }
+
+  async updateSubscription(subscriptionId: string, input: Pax8SubscriptionUpdate) {
+    try {
+      const res = await this.http.put<Pax8SubscriptionRaw>(
+        `/subscriptions/${encodeURIComponent(subscriptionId)}`,
+        input,
+      );
+      if (!res.data || typeof res.data.id !== "string")
+        throw new Error("Pax8 did not return the updated subscription.");
+      return res.data;
+    } catch (err) {
+      if (err instanceof HttpError && err.status === 404)
+        throw new Error("Pax8 no longer has this subscription (404). Sync and try again.");
+      if (err instanceof HttpError && err.status === 422)
+        throw new Error(`Pax8 refused the change (422): ${describeError(err)}. Future-dated subscriptions and quantities below the product minimum cannot be changed through the API.`);
+      throw err;
+    }
   }
 
   listContacts(companyId: string) {

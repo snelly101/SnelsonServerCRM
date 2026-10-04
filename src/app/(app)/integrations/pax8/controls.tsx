@@ -10,9 +10,12 @@ import {
   Unlink,
   ExternalLink,
   Coins,
+  Pencil,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogClose, DialogContent } from "@/components/ui/dialog";
+import { fmtMoney } from "@/lib/format";
 import {
   Field,
   Select,
@@ -23,6 +26,7 @@ import {
 } from "@/components/ui/form";
 import {
   applyPax8CostAction,
+  changePax8QuantityAction,
   connectPax8Action,
   linkPax8CompanyAction,
   recheckLicencesAction,
@@ -158,9 +162,9 @@ export function Pax8ConnectForm({ keyPresent }: { keyPresent: boolean }) {
         <strong>Settings → Integrations → Pax8 API</strong> → create an API
         client and copy its id and secret. The CRM exchanges them for a token at{" "}
         <code>login.pax8.com</code> and reads companies, subscriptions,
-        products and invoices. Its only write is creating a company for a new
-        customer, and only when that setting is switched on. It never orders,
-        changes quantities or cancels anything.
+        products and invoices. Its only writes are creating a company for a
+        new customer and changing a licence quantity, each only when its
+        setting is switched on. It never orders or cancels anything.
       </p>
       <SubmitButton size="sm">
         {keyPresent ? "Replace credentials" : "Verify and connect"}
@@ -173,11 +177,13 @@ export function Pax8ConfigForm({
   autoLink,
   invoiceCount,
   autoCreateCompanies,
+  allowQuantityChanges,
   readOnly,
 }: {
   autoLink: boolean;
   invoiceCount: number;
   autoCreateCompanies: boolean;
+  allowQuantityChanges: boolean;
   readOnly: boolean;
 }) {
   const [result, formAction] = useActionState(savePax8ConfigAction, null);
@@ -220,6 +226,23 @@ export function Pax8ConfigForm({
             says so and <em>Create in Pax8</em> on its Subscriptions tab runs it
             later. A Pax8 company with the same domain or a similar name raises
             a review item instead. Bill-on-behalf and self-service are left off.
+          </p>
+        </div>
+        <div className="space-y-1">
+          <Checkbox
+            name="allowQuantityChanges"
+            value="true"
+            defaultChecked={allowQuantityChanges}
+            label="Allow licence quantity changes at Pax8 from the company's Subscriptions tab"
+          />
+          <p className="text-xs text-slate-500">
+            Off: the CRM only reads from Pax8. On: people who can edit
+            contracts get a <em>Change</em> button next to each Active
+            subscription&apos;s quantity. Every change is confirmed with a
+            reason, recorded in the audit log and the company timeline, and
+            sent to Pax8 as a quantity update (the customer&apos;s Pax8 bill
+            changes). Cancellations and new orders still happen in the Pax8
+            portal.
           </p>
         </div>
       </fieldset>
@@ -569,6 +592,149 @@ export function ApplyCostButton({
           {msg.text}
         </span>
       )}
+    </span>
+  );
+}
+
+/**
+ * Changes a subscription's licence count at Pax8 behind a confirmation
+ * dialog that shows the cost impact and asks for a reason.
+ */
+export function ChangeQuantityButton({
+  subscriptionId,
+  productName,
+  quantity,
+  monthlyUnitCost,
+  currency,
+}: {
+  subscriptionId: string;
+  productName: string;
+  quantity: number;
+  monthlyUnitCost: number | null;
+  currency: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [next, setNext] = useState(String(quantity));
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  const router = useRouter();
+  const target = Number.parseInt(next, 10);
+  const valid = Number.isInteger(target) && target >= 1 && target !== quantity;
+  const delta = valid ? target - quantity : 0;
+  const costDelta =
+    valid && monthlyUnitCost !== null ? delta * monthlyUnitCost : null;
+  const reset = () => {
+    setNext(String(quantity));
+    setReason("");
+    setError(null);
+  };
+  return (
+    <span className="inline-flex flex-col items-end gap-0.5">
+      <Dialog
+        open={open}
+        onOpenChange={(o) => {
+          setOpen(o);
+          if (o) reset();
+        }}
+      >
+        <Button
+          size="sm"
+          variant="ghost"
+          title="Change the licence count at Pax8"
+          onClick={() => setOpen(true)}
+        >
+          <Pencil className="h-3.5 w-3.5" /> Change
+        </Button>
+        <DialogContent
+          title={`Change licences for ${productName}`}
+          description={`Pax8 currently has ${quantity} licence${quantity === 1 ? "" : "s"}. The new count is sent to Pax8 straight away and changes what Pax8 bills you for this customer; the contract line is not touched.`}
+        >
+          <div className="space-y-3">
+            <Field label="New quantity" htmlFor={`qty-${subscriptionId}`}>
+              <Input
+                id={`qty-${subscriptionId}`}
+                type="number"
+                min={1}
+                step={1}
+                value={next}
+                onChange={(e) => setNext(e.target.value)}
+                className="w-32"
+                autoFocus
+              />
+            </Field>
+            {valid && (
+              <p className="text-sm text-slate-600">
+                {delta > 0 ? "Adds" : "Removes"} {Math.abs(delta)} licence
+                {Math.abs(delta) === 1 ? "" : "s"}
+                {costDelta !== null && (
+                  <>
+                    {" "}
+                    ({costDelta >= 0 ? "+" : "−"}
+                    {fmtMoney(Math.abs(costDelta), currency)}/month partner
+                    cost)
+                  </>
+                )}
+                . Remember to update the contract line so the customer is
+                billed for the new count.
+              </p>
+            )}
+            {Number.isInteger(target) && target < 1 && (
+              <p className="text-sm text-amber-700">
+                Going to zero is a cancellation; do that in the Pax8 portal.
+              </p>
+            )}
+            <Field
+              label="Reason"
+              htmlFor={`qty-reason-${subscriptionId}`}
+              help="Recorded in the audit log and on the company timeline."
+            >
+              <Input
+                id={`qty-reason-${subscriptionId}`}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="e.g. two new starters, requested by Pat on 3 Oct"
+                maxLength={500}
+              />
+            </Field>
+            {error && (
+              <p
+                className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700"
+                role="alert"
+              >
+                {error}
+              </p>
+            )}
+            <div className="flex justify-end gap-2">
+              <DialogClose asChild>
+                <Button variant="secondary">Cancel</Button>
+              </DialogClose>
+              <Button
+                loading={pending}
+                disabled={!valid || reason.trim().length < 3}
+                onClick={() =>
+                  start(async () => {
+                    const r = await changePax8QuantityAction(
+                      subscriptionId,
+                      target,
+                      reason,
+                    );
+                    if (r.ok) {
+                      setOpen(false);
+                      setDone(`now ${r.data.to} at Pax8`);
+                      router.refresh();
+                    } else setError(r.error);
+                  })
+                }
+              >
+                Send to Pax8
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      {done && <span className="text-[11px] text-green-700">{done}</span>}
     </span>
   );
 }

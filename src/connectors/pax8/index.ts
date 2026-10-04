@@ -20,12 +20,15 @@ export type Pax8Config = {
   invoiceCount?: number;
   /** Create a Pax8 company when a CRM company becomes a customer (default false). */
   autoCreateCompanies?: boolean;
+  /** Let people with contract.write change subscription quantities at Pax8 from the CRM (default false). */
+  allowQuantityChanges?: boolean;
 };
 
 export const DEFAULT_PAX8_CONFIG: Required<Pax8Config> = {
   autoLink: true,
   invoiceCount: 3,
   autoCreateCompanies: false,
+  allowQuantityChanges: false,
 };
 
 export async function getPax8Client(): Promise<{
@@ -40,6 +43,8 @@ export async function getPax8Client(): Promise<{
     invoiceCount: raw.invoiceCount ?? DEFAULT_PAX8_CONFIG.invoiceCount,
     autoCreateCompanies:
       raw.autoCreateCompanies ?? DEFAULT_PAX8_CONFIG.autoCreateCompanies,
+    allowQuantityChanges:
+      raw.allowQuantityChanges ?? DEFAULT_PAX8_CONFIG.allowQuantityChanges,
   };
   const creds = await getCredentials<Pax8Credentials>("pax8");
   if (creds?.clientId && creds.clientSecret) {

@@ -9,6 +9,7 @@ import {
   type Pax8InvoiceRaw,
   type Pax8ProductRaw,
   type Pax8SubscriptionRaw,
+  type Pax8SubscriptionUpdate,
 } from "./types";
 
 /**
@@ -301,6 +302,17 @@ export class DemoPax8Client implements Pax8Client {
     for (const c of input.contacts ?? []) await this.createContact(company.id, c);
     return { ...companies.find((c) => c.id === company.id)! };
   }
+  async updateSubscription(subscriptionId: string, input: Pax8SubscriptionUpdate) {
+    const s = subscriptions.find((x) => x.id === subscriptionId);
+    if (!s)
+      throw new Error("Pax8 no longer has this subscription (404). Sync and try again.");
+    if (s.status === "Cancelled" || s.status === "PendingCancel")
+      throw new Error("Pax8 refused the change (422): the subscription is cancelled or cancelling.");
+    if (!Number.isInteger(input.quantity) || input.quantity < 1)
+      throw new Error("Pax8 refused the change (422): quantity must be at least 1.");
+    s.quantity = input.quantity;
+    return { ...s };
+  }
   async listContacts(companyId: string) {
     return (demoContacts.get(companyId) ?? []).map((c) => ({ ...c }));
   }
@@ -323,6 +335,7 @@ export class DemoPax8Client implements Pax8Client {
 }
 
 const BASE_COMPANY_COUNT = companies.length;
+const BASE_QUANTITIES = new Map(subscriptions.map((s) => [s.id, s.quantity]));
 let createdSeq = 0;
 const demoContacts = new Map<string, Pax8ContactRaw[]>();
 /** Drops companies and contacts created through the demo client. */
@@ -330,6 +343,7 @@ export function demoPax8Reset() {
   companies.splice(BASE_COMPANY_COUNT);
   createdSeq = 0;
   demoContacts.clear();
+  for (const s of subscriptions) s.quantity = BASE_QUANTITIES.get(s.id) ?? s.quantity;
 }
 
 /** Test hooks. */

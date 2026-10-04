@@ -10,6 +10,7 @@ import type { DisplaySettings } from "@/lib/format";
 import type { companySubscriptionOverview } from "@/services/pax8";
 import {
   ApplyCostButton,
+  ChangeQuantityButton,
   SubscriptionLineSelect,
 } from "@/app/(app)/integrations/pax8/controls";
 import { DiscrepancyTable } from "@/app/(app)/devices/discrepancies";
@@ -80,6 +81,7 @@ export function SubscriptionsPanel({
     contractStatus: l.contractStatus,
   }));
   const inactive = Boolean(pax8Company.status) && pax8Company.status!.toLowerCase() !== "active";
+  const canChangeQuantity = canEdit && overview.quantityChanges;
   return (
     <div className="space-y-4">
       {inactive && (
@@ -171,10 +173,10 @@ export function SubscriptionsPanel({
             <thead>
               <tr>
                 <th>Product</th>
-                <th className="w-[9%] text-right">Qty</th>
+                <th className="w-[11%] text-right">Qty</th>
                 <th className="w-[17%]">Term</th>
                 <th className="w-[14%] text-right">Cost / unit</th>
-                <th className="w-[32%]">Billed by</th>
+                <th className="w-[30%]">Billed by</th>
               </tr>
             </thead>
             <tbody>
@@ -209,7 +211,20 @@ export function SubscriptionsPanel({
                       {s.endDate && ` · ends ${fmtDate(s.endDate, settings)}`}
                     </div>
                   </td>
-                  <td className="text-right tabular-nums">{s.quantity}</td>
+                  <td className="text-right tabular-nums">
+                    <div>{s.quantity}</div>
+                    {canChangeQuantity &&
+                      s.externalStatus === "active" &&
+                      (s.status === "Active" || s.status === "Activated") && (
+                        <ChangeQuantityButton
+                          subscriptionId={s.id}
+                          productName={s.productName}
+                          quantity={s.quantity}
+                          monthlyUnitCost={s.monthlyUnitCost}
+                          currency={settings.currency}
+                        />
+                      )}
+                  </td>
                   <td className="text-xs">
                     <div>{s.billingTerm ?? "—"}</div>
                     {s.commitmentTerm && (

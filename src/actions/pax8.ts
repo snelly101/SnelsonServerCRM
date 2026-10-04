@@ -6,6 +6,7 @@ import { requireActionPermission } from "@/lib/session";
 import { runAction, type ActionResult } from "@/lib/action-result";
 import {
   applyPax8Cost,
+  changePax8SubscriptionQuantity,
   connectPax8,
   createPax8CompanyForCompany,
   linkPax8Company,
@@ -126,6 +127,31 @@ export async function setSubscriptionBillingLineAction(
   });
 }
 
+export async function changePax8QuantityAction(
+  subscriptionRowId: string,
+  quantity: number,
+  reason: string,
+): Promise<ActionResult<{ from: number; to: number; costDelta: number | null }>> {
+  return runAction(async () => {
+    const u = await requireActionPermission("contract.write");
+    const input = z
+      .object({
+        subscriptionRowId: z.uuid(),
+        quantity: z.number().int().min(1).max(100_000),
+        reason: z.string().trim().min(3).max(500),
+      })
+      .parse({ subscriptionRowId, quantity, reason });
+    const r = await changePax8SubscriptionQuantity(
+      input.subscriptionRowId,
+      input.quantity,
+      input.reason,
+      u.id,
+    );
+    revalidate();
+    return r;
+  });
+}
+
 export async function applyPax8CostAction(
   subscriptionRowId: string,
 ): Promise<ActionResult<{ unitCost: string; from: string | null }>> {
@@ -181,11 +207,13 @@ export async function savePax8ConfigAction(
         autoLink: z.boolean(),
         invoiceCount: z.coerce.number().int().min(0).max(24),
         autoCreateCompanies: z.boolean(),
+        allowQuantityChanges: z.boolean(),
       })
       .parse({
         autoLink: fd.get("autoLink") === "true",
         invoiceCount: fd.get("invoiceCount"),
         autoCreateCompanies: fd.get("autoCreateCompanies") === "true",
+        allowQuantityChanges: fd.get("allowQuantityChanges") === "true",
       });
     await savePax8Config(input, u.id);
     revalidate();

@@ -79,7 +79,7 @@ export default async function Pax8Page() {
             </Badge>
           </span>
         }
-        description="Customer companies, their subscriptions (Microsoft 365 and other cloud licences), the partner cost per licence and recent Pax8 invoices are mirrored hourly, linked to customers, and compared with the contract line that bills them. The CRM never orders or changes anything at Pax8; when switched on below it only creates a company for a new customer."
+        description="Customer companies, their subscriptions (Microsoft 365 and other cloud licences), the partner cost per licence and recent Pax8 invoices are mirrored hourly, linked to customers, and compared with the contract line that bills them. The CRM never orders or cancels anything at Pax8; the two opt-in settings below let it create a company for a new customer and change licence quantities, each behind confirmation and audit."
         actions={
           <>
             {canManage && conn.configured && <Pax8TestButton />}
@@ -201,6 +201,7 @@ export default async function Pax8Page() {
             autoLink={conn.effectiveConfig.autoLink}
             invoiceCount={conn.effectiveConfig.invoiceCount}
             autoCreateCompanies={conn.effectiveConfig.autoCreateCompanies}
+            allowQuantityChanges={conn.effectiveConfig.allowQuantityChanges}
             readOnly={!canManage}
           />
           <div className="mt-4 border-t border-slate-100 pt-4 text-xs text-slate-500">
@@ -228,8 +229,8 @@ export default async function Pax8Page() {
               <li>
                 The Pax8 price is the partner cost. <em>Use as cost</em> on the
                 Subscriptions tab copies it onto the contract line so margin on
-                the Contracts page is real. Ordering, quantity changes and
-                cancellations stay in the{" "}
+                the Contracts page is real. Ordering and cancellations (and
+                quantity changes while that setting is off) stay in the{" "}
                 <Link
                   href="https://app.pax8.com"
                   className="text-brand-700 hover:underline"
