@@ -57,7 +57,9 @@ Still open from this section: dated mappings (a service moving from one line to 
 
 ## Brief section 5: exception-focused workspace
 
-The Findings page (2C) is the exception list; the billing run page lists ready and skipped contracts with a net figure. Still to come in release 3: comparison with the previous comparable invoice per customer with plain-language reasons for the difference, batch approval of unchanged drafts, concrete discrepancy actions with financial impact, owners and expiry on accepted exceptions.
+**Built in 3A** (`src/services/billing-workspace.ts`, Finance → **Billing run**): the run page opens with the brief's one-line summary (contracts ready, needing review, blocked; expected billing; potential missed revenue across unmapped services; renewals and notice deadlines in the next seven days) and each contract is compared with its **previous comparable draft** (the one ending the day before the period, else the latest earlier one). The difference is explained in plain language from the calculated lines, never guessed: quantity and price changes per line, new and removed lines (a re-created line with the same description reads as a change), pro-rated additions, credited reductions, catch-ups, missed periods and lines due on their own cycle. Rows are **ready** (Xero-linked, unchanged, nothing open; ticked by default), **need review** (changed amount, open discrepancies with the unbilled amount, unmapped services with their monthly cost, Pax8 or NinjaOne data older than three hours, missed periods, first invoice) or **blocked** (no Xero contact link; cannot be ticked). The Findings page (2C) remains the cross-cutting exception list.
+
+Still to come in release 3: batch approval of unchanged drafts (3B); concrete discrepancy actions with financial impact, owners and expiry on accepted exceptions (3C).
 
 ## Brief section 6: invoice lifecycle
 
