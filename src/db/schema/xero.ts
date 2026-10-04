@@ -96,6 +96,22 @@ export const xeroPayments = pgTable(
 // ---------------------------------------------------------------------------
 export const invoiceDraftStatusEnum = pgEnum("invoice_draft_status", ["draft", "approved", "created", "failed", "cancelled"]);
 
+/** The inputs behind a calculated draft line, kept with the line so the invoice stays explainable after the contract changes. */
+export type InvoiceLineCalc = {
+  kind: "period" | "prorata" | "increase" | "catchup";
+  quantity: number;
+  unitPerPeriod: number;
+  from: string;
+  to: string;
+  days?: number;
+  fullDays?: number;
+  /** Catch-up only: what the previous period should have cost and what its invoice carried for this line. */
+  expected?: number;
+  billedBefore?: number;
+  /** contract_line_changes rows that produced this line. */
+  changeIds?: string[];
+};
+
 export type InvoiceDraftLine = {
   description: string;
   quantity: number;
@@ -105,6 +121,8 @@ export type InvoiceDraftLine = {
   accountCode: string;
   taxType: string;
   itemCode?: string | null;
+  /** Present on lines the billing engine produced; absent on hand-typed lines. */
+  calc?: InvoiceLineCalc | null;
 };
 
 export const invoiceDrafts = pgTable(

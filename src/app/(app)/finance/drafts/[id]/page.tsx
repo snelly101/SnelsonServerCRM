@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
 import { DraftEditor, ApproveControls } from "./editor";
 import { fmtDate, fmtDateTime, fmtMoney } from "@/lib/format";
+import { explainLineCalc } from "@/lib/billing";
 
 export default async function DraftPage({ params }: { params: Promise<{ id: string }> }) {
   const me = await requirePermission("finance.read");
@@ -83,6 +84,32 @@ export default async function DraftPage({ params }: { params: Promise<{ id: stri
               </table>
             )}
           </Card>
+          {draft.lines.some((l) => l.calc) && (
+            <Card title="How these amounts were calculated" className="mt-4">
+              <ol className="space-y-2 text-sm text-slate-700">
+                {draft.lines.map((l, i) => {
+                  const edited = l.calc && (l.calc.kind === "period" ? l.quantity !== l.calc.quantity : l.quantity !== 1);
+                  return (
+                    <li key={i} className="flex gap-2">
+                      <span className="w-5 shrink-0 text-right text-xs text-slate-400">{i + 1}.</span>
+                      <span>
+                        <span className="font-medium">{l.description}</span>
+                        <span className="text-slate-500"> · {fmtMoney(l.quantity * l.unitAmount, draft.currencyCode)}</span>
+                        <br />
+                        {l.calc ? explainLineCalc(l.calc, (n) => fmtMoney(n, draft.currencyCode)) : "Entered by hand."}
+                        {edited && <span className="ml-1 text-amber-700">Edited after it was calculated.</span>}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ol>
+              {draft.contractId && (
+                <p className="mt-3 text-xs text-slate-500">
+                  Quantities come from the <Link href={`/contracts/${draft.contractId}`} className="text-brand-700 hover:underline">contract</Link> and its dated change history as they stood when this draft was prepared.
+                </p>
+              )}
+            </Card>
+          )}
         </div>
         <div className="space-y-4">
           <Card title="Details">

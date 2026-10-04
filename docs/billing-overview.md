@@ -34,7 +34,7 @@ A contract is the billing agreement for one company:
 
 - **Header**: name, status (`draft`, `active`, `expired`, `cancelled`), start date, optional end date, renewal date, notice period, auto-renew flag, **billing frequency** (`monthly`, `quarterly`, `annual`), optional **billing day** (1 to 28; empty means periods are anchored on the start date), review date and interval, owner, linked opportunity, external proposal id.
 - **Lines**: description, product (optional), revenue type, pricing model, billing frequency of the line itself, **contracted quantity**, unit price, optional unit cost, optional site restriction (for per-device lines at one location), "compare with NinjaOne" flag. Lines keep their ids across edits, so history attached to a line survives.
-- **Pending quantity change** on a line of an active contract: `previous_quantity` and `quantity_changed_on`. These are set when someone edits quantities on an active contract (the form asks "Quantity changes take effect from", default today) and are cleared once an invoice covering that date is prepared. This is what drives pro-rating of mid-period changes (see 4.3).
+- **Change history** (`contract_line_changes`): every quantity or unit-price change on a line of an active contract, every recurring line added or removed, with the value before and after, the day it takes effect (the form asks "Changes take effect from", default today), who recorded it, a reason, and the draft invoice that first accounted for it. This history is what drives pro-rating (see 4.3); it is never cleared, and cancelling a draft hands its changes back to the next one. The contract page lists it in a **Change history** card and shows pending changes under each quantity.
 
 The contract page shows a **Contracted services** table (service, type, pricing, site, contracted qty, unit price, per period), the **device count check** against NinjaOne, terms and tasks. The line editor on the contract form is one row per line (product search, qty, unit price, total) with a details toggle for the less-used fields.
 
@@ -53,7 +53,7 @@ A CRM-side invoice draft: company, contract or opportunity, status (`draft`, `ap
 
 The CRM keeps read-only copies of what the integrations report, each stamped with when it was fetched so the UI can say "cached", "stale" or "live":
 
-- `xero_contacts`, `xero_invoices` (sales invoices, ACCREC only), `xero_payments`
+- `xero_contacts`, `xero_invoices` (sales invoices, plus the purchase bills of the Xero contact chosen as the Pax8 supplier, kept apart by `type`), `xero_payments`
 - `ninja_organizations`, `ninja_locations`, `ninja_devices`
 - `pax8_companies`, `pax8_products`, `pax8_subscriptions`, `pax8_invoice_items`
 - `hosting_items` (20i packages, domains, mailboxes)
@@ -85,15 +85,18 @@ For each recurring line (one-off lines are skipped here):
 - A **full period** produces `quantity × unit per period`, described as "Service (2026-10-01 to 2026-10-31)".
 - A **partial period** (stub start or an end date inside the period) produces one line with quantity 1 and amount `quantity × unit per period × days covered ÷ days in full period`, described as "Service (dates): 14 × 9.40, 17 of 31 days (pro rata)".
 
-### 4.3 Quantity changes mid-period (pro-rating)
+### 4.3 Quantity and price changes mid-period (pro-rating)
 
-When a line on an active contract has a pending change (`previous_quantity`, `quantity_changed_on`):
+The engine reconstructs the quantity on any day from the line's dated history:
 
-- If the change date falls **inside the period being invoiced**: bill the old quantity for the whole period, plus a separate line for the **increase** for the remaining days ("Service: 2 added from 2026-10-14, 18 of 31 days (pro rata)"). **Decreases are never credited**; the lower quantity simply applies from the next period.
-- If the change date fell **inside the previous period, which was already invoiced** before the change was entered: the next invoice carries a **catch-up** line for the increase over the rest of that previous period, using the quantity the previous invoice actually billed (read back from that draft's lines via the contract line id).
-- Once a draft covering the change date is prepared, the pending change is cleared from the line.
+- A period is charged at the quantity in force on its first day (whole or pro-rated as above).
+- Each **increase** inside the period is added for its own remaining days: `increase × unit per period × days remaining ÷ days in full period`, one line per change day ("Service: 2 added from 2026-10-14, 18 of 31 days (pro rata)"). Several changes in one period each count for their own days. A change recorded with a reason keeps it.
+- **Decreases are never credited** inside the period; the lower quantity applies from the next period.
+- **Unit price changes** apply from the first period that starts on or after their effective day and are never pro-rated.
+- **Catch-up**: if a change fell inside the previous, already invoiced, period and that invoice did not reflect it, the next invoice carries one line for the difference between what that period should have cost and what its draft actually billed for the line. A draft prepared after the change therefore never double-bills.
+- Every engine-produced line carries its calculation inputs, shown on the draft page under **How these amounts were calculated**; hand-edited lines are flagged there.
 
-Example: a 14-seat Microsoft 365 line at £9.40 per month, billed monthly on the 1st. On 14 October the customer adds two users, entered that day. The October invoice was already prepared on 1 October at 14 seats. The November invoice carries: "14 → 16: 2 added from 2026-10-14, 18 of 31 days (pro rata, previous period)" for 2 × 9.40 × 18/31 = £10.92, plus the normal November line at 16 × £9.40.
+Example: a 14-seat Microsoft 365 line at £9.40 per month, billed monthly on the 1st. The customer adds two users on 8 October, three more on 17 October and drops one on 25 October, all entered as they happen; the October invoice was prepared on 1 October at 14 seats. The November invoice carries one adjustment line for October (2 × 9.40 × 24/31 + 3 × 9.40 × 15/31 = £28.19, the drop is not credited) plus the November line at 18 × £9.40.
 
 ## 5. Producing invoices
 
@@ -193,7 +196,8 @@ Proposals are built and signed in Better Proposals. The CRM creates the proposal
 
 | Area | Files |
 |---|---|
-| Billing maths (periods, pro-rata, line building) | `src/lib/billing.ts` |
+| Billing maths (periods, history, pro-rata, line building, explanations) | `src/lib/billing.ts` |
+| Improvement plan against the brief | `docs/billing-improvement-plan.md` |
 | Billing run | `src/services/billing-run.ts`, `src/app/(app)/finance/billing-run/` |
 | Draft invoices and Xero | `src/services/xero.ts`, `src/connectors/xero/`, `src/app/(app)/finance/` |
 | Contracts and revenue summaries | `src/services/contracts.ts`, `src/lib/money.ts`, `src/components/lines-editor.tsx` |

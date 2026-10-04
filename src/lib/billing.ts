@@ -1,5 +1,5 @@
 import { addMonths, differenceInCalendarDays, format, parseISO, subDays } from "date-fns";
-import type { InvoiceDraftLine } from "@/db/schema";
+import type { InvoiceDraftLine, InvoiceLineCalc } from "@/db/schema";
 import { monthlyValue } from "@/lib/money";
 
 /**
@@ -10,12 +10,22 @@ import { monthlyValue } from "@/lib/money";
  * date to the day before the next anchor and is pro-rated; later periods are
  * whole. Pro-rating is by calendar days against the length of the full period.
  *
- * Quantity changes: a line carries `previousQuantity` and `quantityChangedOn`
- * while a change is waiting to be invoiced. Billing in advance means the
- * period in which the change falls is billed at the old quantity for the whole
- * period plus the increase for the remaining days; a decrease is not credited.
- * When that period was already invoiced before the change, the next invoice
- * carries a catch-up line for the increase over the rest of that period.
+ * Changes: every dated change to a line (quantity, unit price) is kept as a
+ * `LineChange` with the value before and after and the day it took effect, so
+ * any number of changes can fall inside one period and the quantity on any
+ * day can be reconstructed. Billing in advance means a period is charged at
+ * the quantity in force on its first day; each increase inside the period is
+ * added for the days it covers; a decrease is not credited inside the period
+ * (it applies from the next one). Unit price changes apply from the first
+ * period that starts on or after their effective date (never pro-rated).
+ *
+ * Catch-up: when the previous, already invoiced, period had a change inside it
+ * that the invoice did not carry (it was prepared before the change was
+ * entered), the difference between what that period should have cost and
+ * what was actually billed for the line is added once, as its own line.
+ *
+ * Every line produced carries `calc`, the inputs behind the amount, so an
+ * invoice can be explained later even if the contract has moved on.
  */
 export const PERIOD_MONTHS: Record<string, number | undefined> = { monthly: 1, quarterly: 3, annual: 12 };
 const iso = (d: Date) => format(d, "yyyy-MM-dd");
@@ -66,18 +76,111 @@ export function manualPeriod(periodStart: string, periodEnd: string): BillingPer
   return { periodStart, periodEnd, fullDays: d, days: d };
 }
 
+/** One dated change to a contract line, as kept in `contract_line_changes`. */
+export type LineChange = {
+  id?: string | null;
+  field: "quantity" | "unit_price";
+  previousValue: number | string | null;
+  newValue: number | string | null;
+  /** YYYY-MM-DD the new value applies from. */
+  effectiveFrom: string;
+};
+
 export type BillableLine = {
   id: string;
   description: string;
   revenueType: string;
   billingFrequency: string;
+  /** The quantity and price in force today. */
   quantity: number | string;
   unitPrice: number | string;
-  previousQuantity?: number | string | null;
-  quantityChangedOn?: string | null;
+  /** Dated history; any order. */
+  changes?: LineChange[] | null;
 };
 
 export type PreviousInvoice = { period: { periodStart: string; periodEnd: string; fullDays: number }; lines: InvoiceDraftLine[] };
+
+const num = (v: number | string | null | undefined, fallback = 0) => (v === null || v === undefined || v === "" ? fallback : Number(v));
+const sortedChanges = (l: BillableLine, field: LineChange["field"]) => (l.changes ?? []).filter((c) => c.field === field).slice().sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom) || String(a.id ?? "").localeCompare(String(b.id ?? "")));
+
+/**
+ * The value of a field on a given day, walking back from today's value through
+ * the changes that took effect after that day. Anchoring on today's value
+ * (rather than the oldest change) keeps the answer right even when a line was
+ * edited without history, e.g. while the contract was still a draft.
+ */
+export function valueOn(l: BillableLine, field: LineChange["field"], date: string): number {
+  let v = num(field === "quantity" ? l.quantity : l.unitPrice);
+  const list = sortedChanges(l, field);
+  for (let i = list.length - 1; i >= 0; i--) {
+    const c = list[i];
+    if (c.effectiveFrom > date) v = num(c.previousValue, v);
+    else break;
+  }
+  return v;
+}
+
+export const quantityOn = (l: BillableLine, date: string) => valueOn(l, "quantity", date);
+export const unitPriceOn = (l: BillableLine, date: string) => valueOn(l, "unit_price", date);
+
+/** The per-period unit price of a line on a date, normalised from the line's own frequency to a `months`-long period. */
+function unitPerPeriodOn(l: BillableLine, months: number, date: string) {
+  const unit = unitPriceOn(l, date);
+  const perMonth = monthlyValue({ quantity: 1, unitPrice: unit, revenueType: l.revenueType as "recurring", billingFrequency: l.billingFrequency as "monthly" });
+  return round2(perMonth * months);
+}
+
+export type ChargeSegment = {
+  kind: "period" | "prorata" | "increase";
+  quantity: number;
+  unitPerPeriod: number;
+  from: string;
+  to: string;
+  days: number;
+  fullDays: number;
+  amount: number;
+  changeIds: string[];
+};
+
+/**
+ * What one line costs for one period under the advance-billing rules above:
+ * the quantity on the first day for the whole (or partial) period, plus each
+ * increase inside the period for its remaining days. Decreases inside the
+ * period are not credited.
+ */
+export function chargeSegments(l: BillableLine, period: BillingPeriod, months: number): ChargeSegment[] {
+  const out: ChargeSegment[] = [];
+  const unitPerPeriod = unitPerPeriodOn(l, months, period.periodStart);
+  const startQty = quantityOn(l, period.periodStart);
+  const partial = period.days < period.fullDays;
+  if (startQty > 0) {
+    const amount = partial ? round2(startQty * unitPerPeriod * (period.days / period.fullDays)) : round2(startQty * unitPerPeriod);
+    out.push({ kind: partial ? "prorata" : "period", quantity: startQty, unitPerPeriod, from: period.periodStart, to: period.periodEnd, days: period.days, fullDays: period.fullDays, amount, changeIds: [] });
+  }
+  let level = startQty;
+  const inside = sortedChanges(l, "quantity").filter((c) => c.effectiveFrom > period.periodStart && c.effectiveFrom <= period.periodEnd);
+  // Several changes on one day collapse to the last of them.
+  const byDay = new Map<string, LineChange[]>();
+  for (const c of inside) byDay.set(c.effectiveFrom, [...(byDay.get(c.effectiveFrom) ?? []), c]);
+  for (const [day, cs] of byDay) {
+    const q = quantityOn(l, day);
+    if (q > level) {
+      const n = days(day, period.periodEnd);
+      out.push({ kind: "increase", quantity: q - level, unitPerPeriod, from: day, to: period.periodEnd, days: n, fullDays: period.fullDays, amount: round2((q - level) * unitPerPeriod * (n / period.fullDays)), changeIds: cs.map((c) => c.id ?? "").filter(Boolean) });
+    }
+    level = Math.max(level, q);
+  }
+  return out;
+}
+
+const label = (p: { periodStart: string; periodEnd: string }) => `${p.periodStart} to ${p.periodEnd}`;
+
+function toLine(l: BillableLine, s: ChargeSegment, accountCode: string, taxType: string): InvoiceDraftLine {
+  const base = { accountCode, taxType, contractLineId: l.id };
+  if (s.kind === "period") return { ...base, description: `${l.description} (${label({ periodStart: s.from, periodEnd: s.to })})`, quantity: s.quantity, unitAmount: s.unitPerPeriod, calc: { kind: "period", quantity: s.quantity, unitPerPeriod: s.unitPerPeriod, from: s.from, to: s.to, days: s.days, fullDays: s.fullDays, changeIds: s.changeIds } };
+  if (s.kind === "prorata") return { ...base, description: `${l.description} (${label({ periodStart: s.from, periodEnd: s.to })}): ${s.quantity} × ${s.unitPerPeriod.toFixed(2)}, ${s.days} of ${s.fullDays} days (pro rata)`, quantity: 1, unitAmount: s.amount, calc: { kind: "prorata", quantity: s.quantity, unitPerPeriod: s.unitPerPeriod, from: s.from, to: s.to, days: s.days, fullDays: s.fullDays, changeIds: s.changeIds } };
+  return { ...base, description: `${l.description}: ${s.quantity} added from ${s.from}, ${s.days} of ${s.fullDays} days (pro rata)`, quantity: 1, unitAmount: s.amount, calc: { kind: "increase", quantity: s.quantity, unitPerPeriod: s.unitPerPeriod, from: s.from, to: s.to, days: s.days, fullDays: s.fullDays, changeIds: s.changeIds } };
+}
 
 /**
  * Builds the draft lines for one contract period. `months` is the contract's
@@ -88,44 +191,45 @@ export type PreviousInvoice = { period: { periodStart: string; periodEnd: string
 export function buildContractInvoiceLines(input: { lines: BillableLine[]; period: BillingPeriod; months: number; previous?: PreviousInvoice | null; accountCode: string; taxType: string }): InvoiceDraftLine[] {
   const { period, months, previous, accountCode, taxType } = input;
   const out: InvoiceDraftLine[] = [];
-  const within = (d: string | null | undefined, p: { periodStart: string; periodEnd: string }) => Boolean(d && d >= p.periodStart && d <= p.periodEnd);
-  const label = `${period.periodStart} to ${period.periodEnd}`;
   for (const l of input.lines) {
     if (l.revenueType !== "recurring" || l.billingFrequency === "one_off") continue;
-    const qty = Number(l.quantity);
-    const perMonthUnit = qty ? monthlyValue({ quantity: l.quantity, unitPrice: l.unitPrice, revenueType: l.revenueType, billingFrequency: l.billingFrequency as "monthly" }) / qty : 0;
-    const unitPerPeriod = round2(perMonthUnit * months);
-    const fraction = period.days / period.fullDays;
-    const prev = l.previousQuantity === null || l.previousQuantity === undefined ? null : Number(l.previousQuantity);
-    const changed = l.quantityChangedOn ?? null;
 
-    // Catch-up for a change that fell inside the previous, already invoiced, period.
-    if (previous && prev !== null && changed && within(changed, previous.period)) {
-      const billedBefore = previous.lines.find((x) => x.contractLineId === l.id)?.quantity ?? prev;
-      const delta = qty - billedBefore;
-      if (delta > 0) {
-        const n = days(changed, previous.period.periodEnd);
-        out.push({ description: `${l.description}: ${delta} added from ${changed}, ${n} of ${previous.period.fullDays} days (pro rata, previous period)`, quantity: 1, unitAmount: round2(delta * unitPerPeriod * (n / previous.period.fullDays)), accountCode, taxType, contractLineId: l.id });
+    // Catch-up: a quantity change inside the previous, already invoiced, period that its invoice did not reflect.
+    if (previous) {
+      const prevPeriod: BillingPeriod = { ...previous.period, days: days(previous.period.periodStart, previous.period.periodEnd) };
+      const changed = sortedChanges(l, "quantity").filter((c) => c.effectiveFrom > prevPeriod.periodStart && c.effectiveFrom <= prevPeriod.periodEnd);
+      if (changed.length) {
+        const segments = chargeSegments(l, prevPeriod, months);
+        const expected = round2(segments.reduce((a, s) => a + s.amount, 0));
+        const billedLines = previous.lines.filter((x) => x.contractLineId === l.id);
+        const billed = round2(billedLines.reduce((a, x) => a + x.quantity * x.unitAmount, 0));
+        const diff = round2(expected - billed);
+        if (diff > 0.005) {
+          const increases = segments.filter((s) => s.kind === "increase");
+          const detail = increases.length === 1 ? `${increases[0].quantity} added from ${increases[0].from}, ${increases[0].days} of ${prevPeriod.fullDays} days (pro rata, previous period)` : `adjustment for ${label(prevPeriod)} (${increases.length} changes, previous period)`;
+          out.push({ description: `${l.description}: ${detail}`, quantity: 1, unitAmount: diff, accountCode, taxType, contractLineId: l.id, calc: { kind: "catchup", quantity: increases.reduce((a, s) => a + s.quantity, 0), unitPerPeriod: unitPerPeriodOn(l, months, prevPeriod.periodStart), from: prevPeriod.periodStart, to: prevPeriod.periodEnd, days: prevPeriod.days, fullDays: prevPeriod.fullDays, expected, billedBefore: billed, changeIds: changed.map((c) => c.id ?? "").filter(Boolean) } });
+        }
       }
     }
 
-    if (prev !== null && changed && within(changed, period)) {
-      // Old quantity for the whole period, plus the increase for the rest of it. Decreases are not credited.
-      const base = Math.max(prev, 0);
-      if (base > 0) out.push(baseLine(l, base, unitPerPeriod, fraction, period, label, accountCode, taxType));
-      const delta = qty - prev;
-      if (delta > 0) {
-        const n = days(changed, period.periodEnd);
-        out.push({ description: `${l.description}: ${delta} added from ${changed}, ${n} of ${period.fullDays} days (pro rata)`, quantity: 1, unitAmount: round2(delta * unitPerPeriod * (n / period.fullDays)), accountCode, taxType, contractLineId: l.id });
-      }
-      continue;
-    }
-    out.push(baseLine(l, qty, unitPerPeriod, fraction, period, label, accountCode, taxType));
+    for (const s of chargeSegments(l, period, months)) out.push(toLine(l, s, accountCode, taxType));
   }
   return out;
 }
 
-function baseLine(l: BillableLine, qty: number, unitPerPeriod: number, fraction: number, period: BillingPeriod, label: string, accountCode: string, taxType: string): InvoiceDraftLine {
-  if (fraction >= 1) return { description: `${l.description} (${label})`, quantity: qty, unitAmount: unitPerPeriod, accountCode, taxType, contractLineId: l.id };
-  return { description: `${l.description} (${label}): ${qty} × ${unitPerPeriod.toFixed(2)}, ${period.days} of ${period.fullDays} days (pro rata)`, quantity: 1, unitAmount: round2(qty * unitPerPeriod * fraction), accountCode, taxType, contractLineId: l.id };
+/** Plain-language account of how a draft line's amount was arrived at, for the invoice explanation view. */
+export function explainLineCalc(c: InvoiceLineCalc, money: (n: number) => string): string {
+  const unit = money(c.unitPerPeriod);
+  switch (c.kind) {
+    case "period":
+      return `${c.quantity} × ${unit} for ${c.from} to ${c.to}, a whole period.`;
+    case "prorata":
+      return `${c.quantity} × ${unit} for ${c.days} of the ${c.fullDays} days in the period (${c.from} to ${c.to}), pro rata.`;
+    case "increase":
+      return `${c.quantity} more from ${c.from}: ${c.quantity} × ${unit} × ${c.days}/${c.fullDays} days to ${c.to}.`;
+    case "catchup":
+      return `The previous period (${c.from} to ${c.to}) should have cost ${money(c.expected ?? 0)} once the change inside it is counted; ${money(c.billedBefore ?? 0)} was invoiced, so the difference is added here.`;
+    default:
+      return "";
+  }
 }

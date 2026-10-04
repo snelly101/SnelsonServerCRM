@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, isNull, sql, count, type SQL, inArray } from "drizzle-orm";
 import { db, type Tx } from "@/db";
-import { companies, contractLines, contracts, opportunityLines, sites, tasks, user } from "@/db/schema";
+import { companies, contractLineChanges, contractLines, contracts, invoiceDrafts, opportunityLines, sites, tasks, user } from "@/db/schema";
 import { audit, diffFields, logActivity } from "@/lib/audit";
 import { ActionError } from "@/lib/action-result";
 import { summariseLines, type RevenueSummary } from "@/lib/money";
@@ -98,7 +98,32 @@ export async function getContract(id: string) {
     .leftJoin(sites, eq(sites.id, contractLines.siteId))
     .where(eq(contractLines.contractId, id))
     .orderBy(asc(contractLines.sortOrder));
-  return { ...withSummary(row), lines: lines.map((l) => ({ ...l.line, siteName: l.siteName })) };
+  const history = await listContractLineChanges(id);
+  // Per line: the changes no invoice has accounted for yet, oldest first.
+  const pending = new Map<string, typeof history>();
+  for (const h of history) if (h.contractLineId && !h.settledByDraftId) pending.set(h.contractLineId, [...(pending.get(h.contractLineId) ?? []), h].sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom)));
+  return { ...withSummary(row), lines: lines.map((l) => ({ ...l.line, siteName: l.siteName, pendingChanges: pending.get(l.line.id) ?? [] })), history };
+}
+
+/** Dated change history of a contract's lines, newest first, with who recorded each change and the draft that accounted for it. */
+export async function listContractLineChanges(contractId: string) {
+  const rows = await db
+    .select({ c: contractLineChanges, actorName: user.name, draftReference: invoiceDrafts.reference, draftStatus: invoiceDrafts.status })
+    .from(contractLineChanges)
+    .leftJoin(user, eq(user.id, contractLineChanges.actorUserId))
+    .leftJoin(invoiceDrafts, eq(invoiceDrafts.id, contractLineChanges.settledByDraftId))
+    .where(eq(contractLineChanges.contractId, contractId))
+    .orderBy(desc(contractLineChanges.recordedAt), desc(contractLineChanges.effectiveFrom));
+  return rows.map((r) => ({ ...r.c, actorName: r.actorName, draftReference: r.draftReference, draftStatus: r.draftStatus }));
+}
+
+/** The change rows of a set of contracts, keyed by contract line id, in the shape the billing engine takes. */
+export async function lineChangesFor(contractIds: string[]) {
+  if (!contractIds.length) return new Map<string, { id: string; field: "quantity" | "unit_price"; previousValue: string | null; newValue: string | null; effectiveFrom: string }[]>();
+  const rows = await db.select().from(contractLineChanges).where(and(inArray(contractLineChanges.contractId, contractIds), sql`${contractLineChanges.contractLineId} is not null`));
+  const out = new Map<string, { id: string; field: "quantity" | "unit_price"; previousValue: string | null; newValue: string | null; effectiveFrom: string }[]>();
+  for (const r of rows) out.set(r.contractLineId!, [...(out.get(r.contractLineId!) ?? []), { id: r.id, field: r.field as "quantity" | "unit_price", previousValue: r.previousValue, newValue: r.newValue, effectiveFrom: r.effectiveFrom }]);
+  return out;
 }
 
 /**
@@ -166,34 +191,41 @@ function lineValues(contractId: string, l: ContractLineInput, i: number) {
  * Brings the stored lines in step with the form. Lines that still carry their
  * id are updated in place so their id (and the invoice history hanging off it)
  * survives; lines missing from the form are deleted; the rest are inserted.
- * When `effectiveFrom` is given, a quantity change on an existing recurring
- * line (or a brand-new recurring line) is remembered as pending pro-rating:
- * `previousQuantity` keeps the quantity before the first change, and
- * `quantityChangedOn` the day it took effect, until an invoice covers that day.
+ * When `effectiveFrom` is given (active contracts), every quantity or unit
+ * price change on a recurring line, every recurring line added (from 0) and
+ * every recurring line removed (to 0) is written to `contract_line_changes`
+ * with the value before and after, the effective day, the actor and the
+ * reason, so the billing engine can reconstruct the quantity on any day.
  */
-async function syncLines(tx: Tx, contractId: string, lines: ContractLineInput[], effectiveFrom: string | null) {
+async function syncLines(tx: Tx, contractId: string, lines: ContractLineInput[], effectiveFrom: string | null, actorUserId: string | null = null, reason: string | null = null) {
   const existing = await tx.select().from(contractLines).where(eq(contractLines.contractId, contractId));
   const byId = new Map(existing.map((l) => [l.id, l]));
   const keep = new Set<string>();
+  const changes: (typeof contractLineChanges.$inferInsert)[] = [];
+  const record = (lineId: string | null, description: string, field: "quantity" | "unit_price", prev: number | string | null, next: number | string | null) => {
+    if (!effectiveFrom) return;
+    changes.push({ contractId, contractLineId: lineId, lineDescription: description, field, previousValue: prev === null ? null : String(Number(prev)), newValue: next === null ? null : String(Number(next)), effectiveFrom, reason, actorUserId });
+  };
   for (const [i, l] of lines.entries()) {
     const values = lineValues(contractId, l, i);
     const current = l.id ? byId.get(l.id) : undefined;
     if (current) {
       keep.add(current.id);
-      let history: { previousQuantity: string | null; quantityChangedOn: string | null } | null = null;
-      if (effectiveFrom && values.revenueType === "recurring" && Number(current.quantity) !== Number(l.quantity)) {
-        const original = current.previousQuantity ?? current.quantity;
-        // Back to the quantity already invoiced: nothing is pending any more.
-        history = Number(original) === Number(l.quantity) ? { previousQuantity: null, quantityChangedOn: null } : { previousQuantity: String(original), quantityChangedOn: current.quantityChangedOn ?? effectiveFrom };
+      if (values.revenueType === "recurring") {
+        if (Number(current.quantity) !== Number(l.quantity)) record(current.id, values.description, "quantity", current.quantity, l.quantity);
+        if (Number(current.unitPrice) !== Number(l.unitPrice)) record(current.id, values.description, "unit_price", current.unitPrice, l.unitPrice);
       }
-      await tx.update(contractLines).set({ ...values, ...(history ?? {}), updatedAt: new Date() }).where(eq(contractLines.id, current.id));
+      await tx.update(contractLines).set({ ...values, updatedAt: new Date() }).where(eq(contractLines.id, current.id));
     } else {
-      const [row] = await tx.insert(contractLines).values({ ...values, ...(effectiveFrom && values.revenueType === "recurring" ? { previousQuantity: "0", quantityChangedOn: effectiveFrom } : {}) }).returning({ id: contractLines.id });
+      const [row] = await tx.insert(contractLines).values(values).returning({ id: contractLines.id });
       keep.add(row.id);
+      if (values.revenueType === "recurring") record(row.id, values.description, "quantity", 0, l.quantity);
     }
   }
-  const gone = existing.filter((l) => !keep.has(l.id)).map((l) => l.id);
-  if (gone.length) await tx.delete(contractLines).where(inArray(contractLines.id, gone));
+  const gone = existing.filter((l) => !keep.has(l.id));
+  for (const g of gone) if (g.revenueType === "recurring") record(null, g.description, "quantity", g.quantity, 0);
+  if (gone.length) await tx.delete(contractLines).where(inArray(contractLines.id, gone.map((l) => l.id)));
+  if (changes.length) await tx.insert(contractLineChanges).values(changes);
 }
 
 export async function createContract(input: ContractInput, lines: ContractLineInput[], actorUserId: string) {
@@ -206,15 +238,15 @@ export async function createContract(input: ContractInput, lines: ContractLineIn
   });
 }
 
-export async function updateContract(id: string, input: ContractInput, lines: ContractLineInput[] | null, actorUserId: string, opts?: { quantityEffectiveFrom?: string | null }) {
+export async function updateContract(id: string, input: ContractInput, lines: ContractLineInput[] | null, actorUserId: string, opts?: { quantityEffectiveFrom?: string | null; changeReason?: string | null }) {
   const [before] = await db.select().from(contracts).where(eq(contracts.id, id)).limit(1);
   if (!before) throw new ActionError("Contract not found.");
   const next = toValues(input);
   const changes = diffFields(before as unknown as Record<string, unknown>, next as unknown as Record<string, unknown>);
   await db.transaction(async (tx) => {
     await tx.update(contracts).set({ ...next, updatedAt: new Date() }).where(eq(contracts.id, id));
-    // Quantity changes on an active contract are dated so the next invoice can pro-rate them; drafts have never been invoiced, so nothing is pending.
-    if (lines) await syncLines(tx, id, lines, before.status === "active" ? (opts?.quantityEffectiveFrom ?? new Date().toISOString().slice(0, 10)) : null);
+    // Changes on an active contract are dated history the next invoice pro-rates from; a draft contract has never been invoiced, so its edits are not history.
+    if (lines) await syncLines(tx, id, lines, before.status === "active" ? (opts?.quantityEffectiveFrom ?? new Date().toISOString().slice(0, 10)) : null, actorUserId, opts?.changeReason?.trim() || null);
     await audit({ actorUserId, action: "contract.update", entityType: "contract", entityId: id, details: { changes, linesReplaced: Boolean(lines) } }, tx);
     if (changes.status) await logActivity({ type: "contract", companyId: before.companyId, entityType: "contract", entityId: id, title: `${before.name}: ${changes.status.from} → ${changes.status.to}`, actorUserId }, tx);
   });

@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { contractLines, invoiceDrafts } from "@/db/schema";
 import { createCompany } from "@/services/companies";
 import { companySchema } from "@/lib/validation";
-import { createContract, getContract, updateContract } from "@/services/contracts";
+import { createContract, getContract, listContractLineChanges, updateContract } from "@/services/contracts";
 import { contractSchema } from "@/lib/validation-sales";
 import { currentBillingPeriod, previewBillingRun, runBillingRun } from "@/services/billing-run";
 import { cancelInvoiceDraft } from "@/services/xero";
@@ -84,7 +84,7 @@ describe("billing run (demo adapter)", () => {
     expect((await previewBillingRun("2026-10-20")).find((r) => r.contractId === quarterly)!.skipReason).toMatch(/already drafted/);
   });
 
-  it("pro-rates: a billing-day contract starting mid-month bills the stub first; a quantity change keeps its line id, is dated, billed pro rata, caught up next period, then cleared", async () => {
+  it("pro-rates: a billing-day contract starting mid-month bills the stub first; quantity changes keep the line id, are kept as dated history, billed pro rata, caught up next period, marked as accounted for, and handed back when the draft is cancelled", async () => {
     // Starts on the 20th, bills on the 1st: September is a 11-day stub.
     const id = await createContract(
       contractSchema.parse({ companyId, name: "Anchored MSA", startDate: "2026-09-20", status: "active", billingFrequency: "monthly", billingDay: "1" }),
@@ -111,20 +111,43 @@ describe("billing run (demo adapter)", () => {
       { quantityEffectiveFrom: "2026-10-12" },
     );
     const [changed] = await db.select().from(contractLines).where(eq(contractLines.contractId, id));
-    expect(changed).toMatchObject({ id: lineId, quantity: "13.00", previousQuantity: "10.00", quantityChangedOn: "2026-10-12" });
-    // A second change before invoicing keeps the original "was" and date.
-    await updateContract(id, contractSchema.parse({ companyId, name: "Anchored MSA", startDate: "2026-09-20", status: "active", billingFrequency: "monthly", billingDay: "1" }), [line({ id: lineId, description: "Users", quantity: 14, unitPrice: 30 })], admin.id, { quantityEffectiveFrom: "2026-10-20" });
-    expect((await db.select().from(contractLines).where(eq(contractLines.id, lineId)))[0]).toMatchObject({ quantity: "14.00", previousQuantity: "10.00", quantityChangedOn: "2026-10-12" });
+    expect(changed).toMatchObject({ id: lineId, quantity: "13.00" });
+    let history = await listContractLineChanges(id);
+    expect(history).toHaveLength(1);
+    expect(history[0]).toMatchObject({ contractLineId: lineId, field: "quantity", previousValue: "10.00", newValue: "13.00", effectiveFrom: "2026-10-12", settledByDraftId: null });
+    // A second change before invoicing is its own dated row, with the reason kept.
+    await updateContract(id, contractSchema.parse({ companyId, name: "Anchored MSA", startDate: "2026-09-20", status: "active", billingFrequency: "monthly", billingDay: "1" }), [line({ id: lineId, description: "Users", quantity: 14, unitPrice: 30 })], admin.id, { quantityEffectiveFrom: "2026-10-20", changeReason: "one more starter" });
+    history = await listContractLineChanges(id);
+    expect(history.map((h) => [h.previousValue, h.newValue, h.effectiveFrom, h.reason])).toEqual([
+      ["13.00", "14.00", "2026-10-20", "one more starter"],
+      ["10.00", "13.00", "2026-10-12", null],
+    ]);
+    expect((await getContract(id))!.lines[0].pendingChanges.map((h) => h.effectiveFrom)).toEqual(["2026-10-12", "2026-10-20"]);
 
-    // November's run: catch-up for 4 users over the 20 remaining October days, plus November at 14. Then the pending change is cleared.
+    // November's run: catch-up for 3 users over 20 October days plus 1 user over 12, then November at 14. The changes are marked as accounted for by that draft.
     const nov = (await previewBillingRun("2026-11-01")).find((r) => r.contractId === id)!;
-    expect(nov.net).toBe(420 + 77.42);
+    expect(nov.net).toBe(420 + 69.67); // 3×30×20/31 = 58.06, 1×30×12/31 = 11.61
     const run = await runBillingRun("2026-11-01", [id], admin.id);
     const novDraft = (await db.select().from(invoiceDrafts).where(eq(invoiceDrafts.id, run.created[0].draftId)))[0];
     expect(novDraft.lines.map((l) => [l.description, l.quantity, l.unitAmount])).toEqual([
-      ["Users: 4 added from 2026-10-12, 20 of 31 days (pro rata, previous period)", 1, 77.42],
+      ["Users: adjustment for 2026-10-01 to 2026-10-31 (2 changes, previous period)", 1, 69.67],
       ["Users (2026-11-01 to 2026-11-30)", 14, 30],
     ]);
-    expect((await db.select().from(contractLines).where(eq(contractLines.id, lineId)))[0]).toMatchObject({ previousQuantity: null, quantityChangedOn: null });
+    expect(novDraft.lines[0].calc).toMatchObject({ kind: "catchup", expected: 369.67, billedBefore: 300 });
+    history = await listContractLineChanges(id);
+    expect(history.every((h) => h.settledByDraftId === novDraft.id)).toBe(true);
+    expect((await getContract(id))!.lines[0].pendingChanges).toEqual([]);
+    // Cancelling that draft hands the changes back, and the next run carries the same catch-up again: nothing lost, nothing doubled.
+    await cancelInvoiceDraft(novDraft.id, admin.id);
+    expect((await listContractLineChanges(id)).every((h) => h.settledByDraftId === null)).toBe(true);
+    const again = await runBillingRun("2026-11-01", [id], admin.id);
+    const redo = (await db.select().from(invoiceDrafts).where(eq(invoiceDrafts.id, again.created[0].draftId)))[0];
+    expect(redo.lines.map((l) => l.unitAmount)).toEqual([69.67, 30]);
+    expect((await listContractLineChanges(id)).every((h) => h.settledByDraftId === redo.id)).toBe(true);
+    // Removing the line on the active contract keeps its history with the description.
+    await updateContract(id, contractSchema.parse({ companyId, name: "Anchored MSA", startDate: "2026-09-20", status: "active", billingFrequency: "monthly", billingDay: "1" }), [], admin.id, { quantityEffectiveFrom: "2026-12-01", changeReason: "service ended" });
+    const after = await listContractLineChanges(id);
+    expect(after[0]).toMatchObject({ contractLineId: null, lineDescription: "Users", previousValue: "14.00", newValue: "0.00", reason: "service ended" });
+    expect(after).toHaveLength(3);
   });
 });

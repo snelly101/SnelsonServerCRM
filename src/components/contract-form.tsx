@@ -149,9 +149,14 @@ export function ContractForm({
         <p className="mb-3 text-xs text-slate-500">Quantity is the <strong>contracted</strong> (billable) amount. Per-device lines marked for comparison are checked against NinjaOne device counts (Phase 5) and discrepancies are flagged for review, never billed automatically.</p>
         <LinesEditor initial={lines} products={products} currency={currency} showSite sites={sites} quantityLabel="Contracted qty" />
         {initial.status === "active" && (
-          <Field label="Quantity changes take effect from" htmlFor="quantityEffectiveFrom" className="mt-3 max-w-xs" help="The next invoice bills the old quantity for the period and the increase pro rata from this day. Decreases apply from the next period.">
-            <Input id="quantityEffectiveFrom" name="quantityEffectiveFrom" type="date" defaultValue={today} />
-          </Field>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <Field label="Changes take effect from" htmlFor="quantityEffectiveFrom" help="The next invoice bills the old quantity for the period and any increase pro rata from this day. Decreases apply from the next period. Price changes apply from the next period that starts on or after this day.">
+              <Input id="quantityEffectiveFrom" name="quantityEffectiveFrom" type="date" defaultValue={today} />
+            </Field>
+            <Field label="Reason for the change" htmlFor="changeReason" help="Kept with the change in the contract's history and the audit log.">
+              <Input id="changeReason" name="changeReason" placeholder="e.g. two new starters, requested by Pat on 3 Oct" maxLength={500} />
+            </Field>
+          </div>
         )}
       </section>
 
