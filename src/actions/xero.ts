@@ -5,6 +5,8 @@ import { z } from "zod";
 import { requireActionPermission } from "@/lib/session";
 import { ActionError, runAction, type ActionResult } from "@/lib/action-result";
 import { approveAndCreateInvoice, cancelInvoiceDraft, createXeroContactForCompany, importAllRepeatingInvoices, importRepeatingInvoiceAsContract, importAllXeroCustomers, importXeroContactAsCompany, linkCompanyToXeroContact, prepareInvoiceDraft, previewContractInvoice, pushContactDetailsToXero, reprepareInvoiceDraft, selectXeroTenant, syncXero, testXero, updateInvoiceDraft } from "@/services/xero";
+import { approveUnchangedDrafts, type BatchApprovalResult } from "@/services/draft-review";
+import { getAppSettings } from "@/lib/settings";
 import { removeLink, getLink } from "@/services/integrations";
 import type { InvoiceDraftLine } from "@/db/schema";
 
@@ -174,5 +176,16 @@ export async function importAllRepeatingInvoicesAction(): Promise<ActionResult<{
     revalidateXero();
     revalidatePath("/contracts", "layout");
     return { created: r.created, productsCreated: r.productsCreated, skipped: r.skipped.map((s) => ({ reference: s.reference, reason: s.reason })) };
+  });
+}
+
+export async function approveUnchangedDraftsAction(ids: string[]): Promise<ActionResult<BatchApprovalResult>> {
+  return runAction(async () => {
+    const u = await requireActionPermission("invoice.approve");
+    const parsed = z.array(z.uuid()).min(1).max(200).parse(ids);
+    const settings = await getAppSettings();
+    const r = await approveUnchangedDrafts(parsed, u.id, settings.currency);
+    revalidateXero();
+    return r;
   });
 }
