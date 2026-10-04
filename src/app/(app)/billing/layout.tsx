@@ -12,7 +12,7 @@ export default async function BillingLayout({ children }: { children: React.Reac
   const me = await requirePermission("finance.read");
   const items = [
     { href: "/billing", label: "Overview" },
-    ...(can(me.role, "invoice.prepare") ? [{ href: "/billing/run", label: "Monthly run" }] : []),
+    ...(can(me.role, "invoice.prepare") ? [{ href: "/billing/run", label: "Monthly run", also: ["/billing/drafts"] }] : []),
     { href: "/billing/exceptions", label: "Exceptions" },
     { href: "/billing/services", label: "Services" },
     { href: "/billing/renewals", label: "Renewals & pricing" },
