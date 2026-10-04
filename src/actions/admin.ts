@@ -1,11 +1,15 @@
 "use server";
 
+import { runBillingAutomation, type AutomationRunResult } from "@/services/billing-automation";
+import { updateBillingAutomationSettings } from "@/services/settings";
+
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireActionPermission } from "@/lib/session";
 import { runAction, type ActionResult } from "@/lib/action-result";
 import {
   appSettingsSchema,
+  billingAutomationSchema,
   customFieldDefSchema,
   formToObject,
   savedViewSchema,
@@ -132,5 +136,25 @@ export async function deleteViewAction(id: string, page: string): Promise<Action
     await deleteSavedView(z.uuid().parse(id), u.id);
     revalidatePath(`/${page}`);
     return undefined;
+  });
+}
+
+export async function updateBillingAutomationAction(_prev: ActionResult<undefined> | null, fd: FormData): Promise<ActionResult<undefined>> {
+  return runAction(async () => {
+    const u = await requireActionPermission("settings.write");
+    const input = billingAutomationSchema.parse({ billingAutomationLevel: fd.get("billingAutomationLevel"), billingAutomationDay: fd.get("billingAutomationDay"), billingAutomationConsolidate: fd.get("billingAutomationConsolidate") === "true" });
+    await updateBillingAutomationSettings(input, u.id);
+    revalidatePath("/settings", "layout");
+    return undefined;
+  });
+}
+
+export async function runBillingAutomationAction(): Promise<ActionResult<AutomationRunResult>> {
+  return runAction(async () => {
+    const u = await requireActionPermission("settings.write");
+    const r = await runBillingAutomation({ trigger: "manual", actorUserId: u.id });
+    revalidatePath("/settings", "layout");
+    revalidatePath("/finance", "layout");
+    return r;
   });
 }

@@ -38,6 +38,10 @@ export const appSettings = pgTable("app_settings", {
   deviceActiveDays: integer("device_active_days").notNull().default(30),
   // Renewal decisions are due this many days before the notice deadline (the renewal queue's "decide by").
   renewalLeadDays: integer("renewal_lead_days").notNull().default(30),
+  // Staged billing automation: 0 detect only (default), 1 prepare drafts for ready contracts on the run day, 2 also approve unchanged drafts.
+  billingAutomationLevel: integer("billing_automation_level").notNull().default(0),
+  billingAutomationDay: integer("billing_automation_day").notNull().default(1),
+  billingAutomationConsolidate: boolean("billing_automation_consolidate").notNull().default(true),
   // Secure Vault behaviour (see docs/secure-vault-plan.md)
   vaultRevealSeconds: integer("vault_reveal_seconds").notNull().default(30),
   vaultClipboardSeconds: integer("vault_clipboard_seconds").notNull().default(20),

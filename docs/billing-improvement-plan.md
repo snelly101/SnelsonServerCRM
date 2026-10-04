@@ -85,11 +85,13 @@ Release 3 is complete. Remaining from the brief: sections 7 to 9 (renewal exposu
 
 **Built in 4C** (`src/lib/customer-explanation.ts`, `src/services/customer-schedule.ts`, migration `0024`): the brief's customer-facing explanation (*Your November charge includes 16 Microsoft licences, plus £10.92 for two licences added on 14 October*) is produced from the calculated lines on every draft, with a printable **customer schedule** (charges grouped by agreement with service dates, the supporting list of licences, devices and domains behind each charge from the register, renewal information). A contract's **purchase order reference** is carried onto its drafts and the first Xero line. The billing run can prepare **one consolidated draft per customer** across several agreements; coverage, change settlement, staleness, re-preparation, cancellation and the Finance review all understand consolidated drafts.
 
-Still to come in release 4: staged automation (4D). The customer portal stays future work.
+**Built in 4D** (`src/services/billing-automation.ts`, Settings → **Billing automation**, migration `0025`, worker queue `billing.automation`): a three-level policy, default *detect only*. Level 1 prepares drafts for the contracts the workspace rates ready on the run day each month (consolidated per customer when the policy says so); level 2 then creates in Xero the drafts the review finds unchanged, through the normal approval path, leaving every exception for a person. Scheduled daily, acting once a month; runnable by hand by an administrator; every run audited as a system action naming the policy, with the last run's summary on the page. Nothing is ever authorised or sent from Xero by the CRM.
+
+Release 4 is complete. The customer portal and the further billing models in brief section 9 (usage in arrears, allowances and overages, deposits and milestones, delivery-triggered hardware, per-customer currency and tax mappings) remain future work, to be added when the business needs them on the same register, engine and reconciliation.
 
 ## Brief sections 8 and 9
 
-Customer-facing explanations, consolidation, portal and staged automation: release 4, slices C and D.
+Customer-facing explanations and consolidation: 4C (above). Staged automation: 4D (above). Portal and further billing models: future.
 
 ## Decisions taken while building
 

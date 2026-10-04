@@ -176,6 +176,13 @@
       "when": 1791136215729,
       "tag": "0024_customer_invoices",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1791137143463,
+      "tag": "0025_billing_automation",
+      "breakpoints": true
     }
   ]
 }
