@@ -46,6 +46,8 @@ import { companyHostingOverview } from "@/services/twentyi";
 import { HostingPanel } from "@/components/hosting-panel";
 import { companySubscriptionOverview } from "@/services/pax8";
 import { companyServiceRegister } from "@/services/service-register";
+import { companyBilling } from "@/services/company-billing";
+import { CompanyBillingTab } from "./billing-tab";
 import { DeviceCoverageControl, RegisterSummaryBar, ServiceRegisterTable } from "@/components/service-register";
 import { companyTicketSummary, listTickets } from "@/services/helpdesk";
 import { TicketTable } from "@/components/helpdesk/ticket-table";
@@ -129,6 +131,8 @@ export default async function CompanyPage({
     }),
   ]);
   if (!company) notFound();
+  // The Billing tab joins this customer's slice of the Billing area; computed only when it is shown or its count is wanted.
+  const billing = can(me.role, "contract.read") ? await companyBilling(id) : null;
   const vaultCaps = await resolveCapabilities(me.id, me.role, id);
   const vault = vaultCaps.list
     ? await listVaultItems({ id: me.id, name: me.name, role: me.role }, id, {
@@ -197,6 +201,16 @@ export default async function CompanyPage({
       href: `${base}?tab=contracts`,
       count: activeContracts.length,
     },
+    ...(can(me.role, "contract.read")
+      ? [
+          {
+            key: "billing",
+            label: "Billing",
+            href: `${base}?tab=billing`,
+            count: billing ? billing.next.filter((n) => n.tone !== "slate").length || undefined : undefined,
+          },
+        ]
+      : []),
     {
       key: "invoices",
       label: "Invoices",
@@ -840,6 +854,9 @@ export default async function CompanyPage({
           </>
         )}
 
+        {tab === "billing" && billing && (
+          <CompanyBillingTab companyId={id} data={billing} finance={finance} settings={settings} canApprove={can(me.role, "invoice.approve")} canReview={can(me.role, "discrepancy.review")} canWrite={can(me.role, "contract.write")} />
+        )}
         {tab === "contracts" && (
           <>
             <Card

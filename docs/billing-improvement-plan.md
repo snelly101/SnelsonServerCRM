@@ -95,7 +95,7 @@ Customer-facing explanations and consolidation: 4C (above). Staged automation: 4
 
 ## Billing area (structure)
 
-Built after release 4: the eleven billing entry points spread over Finance, Contracts, Devices, the Pax8 page and Settings were joined into one **Billing** sidebar section with a fixed sub-navigation in the order the work flows (Overview with a "what to do next" list; Monthly run as Prepare / Approve / Issued; Exceptions; Services; Renewals & pricing; Invoices with customer and supplier tabs; Automation). No data or calculation changed; old addresses redirect.
+Built after release 4: the eleven billing entry points spread over Finance, Contracts, Devices, the Pax8 page and Settings were joined into one **Billing** sidebar section with a fixed sub-navigation in the order the work flows (Overview with a "what to do next" list; Monthly run as Prepare / Approve / Issued; Exceptions; Services; Renewals & pricing; Invoices with customer and supplier tabs; Automation). No data or calculation changed; old addresses redirect. Each company page gained a **Billing** tab with the same picture narrowed to that customer and its own "what to do next" list.
 
 ## Decisions taken while building
 
