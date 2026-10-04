@@ -45,6 +45,8 @@ import { companyDeviceOverview } from "@/services/ninjaone";
 import { companyHostingOverview } from "@/services/twentyi";
 import { HostingPanel } from "@/components/hosting-panel";
 import { companySubscriptionOverview } from "@/services/pax8";
+import { companyServiceRegister } from "@/services/service-register";
+import { DeviceCoverageControl, RegisterSummaryBar, ServiceRegisterTable } from "@/components/service-register";
 import { companyTicketSummary, listTickets } from "@/services/helpdesk";
 import { TicketTable } from "@/components/helpdesk/ticket-table";
 import { SubscriptionsPanel } from "@/components/subscriptions-panel";
@@ -91,6 +93,7 @@ export default async function CompanyPage({
     devices,
     hosting,
     subscriptions,
+    services,
     ticketSummary,
     companyTickets,
     notes,
@@ -114,6 +117,7 @@ export default async function CompanyPage({
       : Promise.resolve(null),
     companyHostingOverview(id),
     companySubscriptionOverview(id),
+    companyServiceRegister(id),
     can(me.role, "helpdesk.read")
       ? companyTicketSummary(id)
       : Promise.resolve(null),
@@ -216,6 +220,12 @@ export default async function CompanyPage({
       label: "Subscriptions",
       href: `${base}?tab=subscriptions`,
       count: subscriptions?.totals.subscriptions,
+    },
+    {
+      key: "services",
+      label: "Services",
+      href: `${base}?tab=services`,
+      count: services.summary.unmapped + services.summary.investigate + services.summary.reviewOverdue || undefined,
     },
     ...(ticketSummary
       ? [
@@ -1305,7 +1315,16 @@ export default async function CompanyPage({
                   </Card>
                 )}
                 <Card padded={false}>
-                  <DeviceTable rows={devices.devices} showCompany={false} />
+                  <DeviceTable
+                    rows={devices.devices}
+                    showCompany={false}
+                    renderAction={
+                      can(me.role, "contract.write")
+                        ? (d) => <DeviceCoverageControl device={{ id: d.id, companyId: id, name: d.displayName ?? d.systemName ?? d.deviceId, nodeClass: d.nodeClass, coverage: d.coverage ?? null }} />
+                        : undefined
+                    }
+                  />
+                  <p className="px-4 py-2 text-[11px] text-slate-500">A device marked internal or free is left out of the billable count and the device count check.</p>
                 </Card>
               </div>
             )}
@@ -1373,6 +1392,25 @@ export default async function CompanyPage({
             settings={settings}
             companyId={id}
           />
+        )}
+        {tab === "services" && (
+          <Card
+            title={`Services supplied · ${services.summary.total}`}
+            padded={false}
+            actions={
+              <Link href={`/finance/services?companyId=${id}`} className="text-xs text-brand-700 hover:underline">
+                all customers
+              </Link>
+            }
+          >
+            <div className="border-b border-slate-100 px-4 py-3">
+              <RegisterSummaryBar summary={services.summary} />
+              <p className="mt-2 text-xs text-slate-500">
+                Everything Pax8, 20i and NinjaOne say this customer has, and how each is covered commercially. <strong>Unmapped</strong> is the only state that may mean missed revenue: choose the billing line on the Subscriptions or Hosting tab, or record here that it is bundled, covered by a commitment, intentionally free or internal.
+              </p>
+            </div>
+            <ServiceRegisterTable rows={services.rows} linesByCompany={{ [id]: services.lines }} canEdit={can(me.role, "contract.write")} settings={settings} showCompany={false} />
+          </Card>
         )}
         {tab === "vault" && vaultCaps.list && vault && (
           <VaultPanel

@@ -61,7 +61,23 @@ The CRM keeps read-only copies of what the integrations report, each stamped wit
 
 Rows that disappear upstream are marked deleted or archived, never removed.
 
-### 3.7 Review queue (`billing_discrepancies`)
+### 3.7 Service register (`service_coverage`)
+
+Every service the integrations report for a customer (Pax8 subscriptions, 20i packages and domains, NinjaOne managed devices) has a commercial state, shown on the company's **Services** tab and across customers on Finance → **Service coverage**:
+
+| State | Meaning | Effect |
+|---|---|---|
+| Charged on a line | its own contract line bills it (the billing line chosen on the Subscriptions or Hosting tab, or a Pax8 SKU / name match) | counted against that line |
+| Included in a bundle | part of another line (e.g. Microsoft 365 seats inside a per-user managed package) | counted toward the bundle line in the licence check |
+| Covered by commitment | paid for by a minimum-commitment line | counted against nothing |
+| Intentionally free | not charged, with a reason and a review date | counted against nothing; flagged when the review date passes |
+| Internal / non-billable | the MSP's own, a test tenant, an engineer's laptop | left out of counts and checks |
+| Needs investigation | flagged with a note | shown first until decided |
+| Unmapped | nobody has said | the only state that may mean missed revenue |
+
+Decisions are audited and posted on the company timeline. Nothing in the register changes a contract or an invoice.
+
+### 3.8 Review queue (`billing_discrepancies`)
 
 Every automatic comparison between contract and reality lands here rather than changing anything: company, contract, contract line, source (`ninjaone` or `pax8`), contracted quantity, observed quantity, difference, estimated unbilled or over-billed amount per period, status (`open`, `accepted`, `dismissed`, `resolved`), who reviewed and why. Accepting or dismissing is audited and noted on the company timeline. **Nothing in this queue ever edits a contract or an invoice**; a person does that.
 
@@ -169,7 +185,7 @@ NinjaOne is the RMM. The CRM reads organisations, locations and devices (name, c
 
 **Counting rules** (Settings and the NinjaOne page): a device is **active** if it contacted NinjaOne within the active window (default 30 days); **billable** if active, of a billable node class (default workstations, servers, VM guests) and, optionally, approved.
 
-**Device count check**: every contract line marked "compare with NinjaOne" on an active contract is compared with the billable count at the linked organisation, or at the linked location when the line names a site. Differences become review items with `source = ninjaone` on the Devices page, the company's Devices tab and the contract page, with the estimated unbilled or over-billed amount per period. Re-checked after every sync, link change and rule change; matched counts resolve the item; accepted items re-open only if the gap grows.
+**Device count check**: every contract line marked "compare with NinjaOne" on an active contract is compared with the billable count at the linked organisation, or at the linked location when the line names a site. Lines of one contract that share a scope are compared together (contracted = their sum, one review item naming all of them). Devices marked internal or free in the service register are left out. Differences become review items with `source = ninjaone` on the Devices page, the company's Devices tab and the contract page, with the estimated unbilled or over-billed amount per period. Re-checked after every sync, link change and rule change; matched counts resolve the item; accepted items re-open only if the gap grows.
 
 NinjaOne has no pricing, so it only informs quantities, never cost.
 

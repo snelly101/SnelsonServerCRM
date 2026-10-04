@@ -13,3 +13,4 @@ export * from "./helpdesk";
 export * from "./mailbox";
 export * from "./helpdesk-sla";
 export * from "./helpdesk-kb";
+export * from "./coverage";

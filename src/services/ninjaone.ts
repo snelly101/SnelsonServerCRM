@@ -12,6 +12,10 @@ import { getNinjaOneClient, type NinjaConfig, type NinjaCredentials } from "@/co
 import { LiveNinjaOneClient, NINJA_SCOPES, ninjaTime } from "@/connectors/ninjaone/live";
 import type { NinjaDeviceRaw, NinjaRegion } from "@/connectors/ninjaone/types";
 import { createLink, getConnection, getLink, listLinks, raiseConflict, removeLink, runOutbound, runSync, setConnectionConfig, setCredentials, updateConnection } from "./integrations";
+import { NON_BILLABLE_STATES } from "./coverage-lookup";
+
+/** SQL fragment: the device has no coverage row marking it free or internal. */
+const notMarkedNonBillable = sql`not exists (select 1 from service_coverage sc where sc.source = 'ninja_device' and sc.source_row_id = ${ninjaDevices.id} and sc.state in (${sql.join(NON_BILLABLE_STATES.map((x) => sql`${x}`), sql`, `)}))`;
 
 // ---------------------------------------------------------------------------
 // Connection (credentials entered in the UI, verified before storage)
@@ -297,7 +301,8 @@ export async function listDevices(p: { q?: string; companyId?: string; orgId?: s
     base().where(where).orderBy(asc(ninjaOrganizations.name), asc(ninjaDevices.displayName)).limit(pageSize).offset((page - 1) * pageSize),
     db.select({ total: sql<number>`count(*)`.mapWith(Number) }).from(ninjaDevices).leftJoin(ninjaOrganizations, eq(ninjaOrganizations.orgId, ninjaDevices.orgId)).where(where),
   ]);
-  return { rows: rows.map((r) => ({ ...r.d, orgName: r.orgName, locationName: r.locationName, companyName: r.companyName, siteName: r.siteName, freshness: deviceFreshness(r.d.fetchedAt), active: Boolean(r.d.lastContact && r.d.lastContact >= activeCutoff) })), total, page, pageSize, pageCount: Math.max(1, Math.ceil(total / pageSize)), activeCutoff };
+  const coverage = rows.length ? await (await import("./coverage-lookup")).coverageFor("ninja_device", { rowIds: rows.map((r) => r.d.id) }) : new Map();
+  return { rows: rows.map((r) => ({ ...r.d, orgName: r.orgName, locationName: r.locationName, companyName: r.companyName, siteName: r.siteName, freshness: deviceFreshness(r.d.fetchedAt), active: Boolean(r.d.lastContact && r.d.lastContact >= activeCutoff), coverage: ((c) => (c ? { state: c.state, reason: c.reason, reviewOn: c.reviewOn } : null))(coverage.get(r.d.id)) })), total, page, pageSize, pageCount: Math.max(1, Math.ceil(total / pageSize)), activeCutoff };
 }
 
 export async function deviceTotals(companyId?: string) {
@@ -310,7 +315,8 @@ export async function deviceTotals(companyId?: string) {
       total: sql<number>`count(*)`.mapWith(Number),
       active: sql<number>`count(*) filter (where last_contact >= ${cutoff})`.mapWith(Number),
       online: sql<number>`count(*) filter (where offline = false)`.mapWith(Number),
-      billable: sql<number>`count(*) filter (where last_contact >= ${cutoff} and node_class in ${classes.length ? sql`(${sql.join(classes.map((c) => sql`${c}`), sql`, `)})` : sql`('__none__')`} and (approval_status = 'APPROVED' or approval_status is null))`.mapWith(Number),
+      billable: sql<number>`count(*) filter (where last_contact >= ${cutoff} and node_class in ${classes.length ? sql`(${sql.join(classes.map((c) => sql`${c}`), sql`, `)})` : sql`('__none__')`} and (approval_status = 'APPROVED' or approval_status is null) and ${notMarkedNonBillable})`.mapWith(Number),
+      nonBillable: sql<number>`count(*) filter (where exists (select 1 from service_coverage sc where sc.source = 'ninja_device' and sc.source_row_id = ninja_devices.id))`.mapWith(Number),
       servers: sql<number>`count(*) filter (where node_class like '%SERVER%' and last_contact >= ${cutoff})`.mapWith(Number),
       workstations: sql<number>`count(*) filter (where node_class in ('WINDOWS_WORKSTATION','MAC','LINUX_WORKSTATION') and last_contact >= ${cutoff})`.mapWith(Number),
       needsAttention: sql<number>`count(*) filter (where health_status is not null and health_status <> 'HEALTHY' and last_contact >= ${cutoff})`.mapWith(Number),
@@ -339,10 +345,20 @@ export async function runDiscrepancyCheck(actorUserId: string | null, companyId?
   let open = 0;
   let resolvedCount = 0;
   const now = new Date();
+  // Lines of one contract that share a scope (whole organisation, or the same site) describe one pool of devices,
+  // so they are compared together: contracted = the sum of their quantities, one review item on the first line.
+  const groups = new Map<string, { contract: (typeof lines)[number]["contract"]; lines: (typeof lines)[number]["line"][] }>();
   for (const { line, contract } of lines) {
+    const key = `${contract.id}:${line.siteId ?? "org"}`;
+    const g = groups.get(key) ?? { contract, lines: [] };
+    g.lines.push(line);
+    groups.set(key, g);
+  }
+  for (const { contract, lines: groupLines } of groups.values()) {
+    const line = groupLines[0];
     const link = await getLink("ninjaone", "company", contract.companyId);
     if (!link) continue; // observed count unavailable: nothing to compare
-    const scope = [eq(ninjaDevices.companyId, contract.companyId), eq(ninjaDevices.externalStatus, "active"), sql`${ninjaDevices.lastContact} >= ${cutoff}`, classes.length ? inArray(ninjaDevices.nodeClass, classes) : sql`false`];
+    const scope = [eq(ninjaDevices.companyId, contract.companyId), eq(ninjaDevices.externalStatus, "active"), sql`${ninjaDevices.lastContact} >= ${cutoff}`, classes.length ? inArray(ninjaDevices.nodeClass, classes) : sql`false`, notMarkedNonBillable];
     if (approvedOnly) scope.push(or(eq(ninjaDevices.approvalStatus, "APPROVED"), isNull(ninjaDevices.approvalStatus))!);
     if (line.siteId) {
       const siteLink = await getLink("ninjaone", "site", line.siteId);
@@ -350,10 +366,13 @@ export async function runDiscrepancyCheck(actorUserId: string | null, companyId?
       scope.push(eq(ninjaDevices.siteId, line.siteId));
     }
     const [{ observed }] = await db.select({ observed: sql<number>`count(*)`.mapWith(Number) }).from(ninjaDevices).where(and(...scope));
-    const contracted = Number(line.quantity);
+    const contracted = groupLines.reduce((a, l) => a + Number(l.quantity), 0);
+    const description = groupLines.map((l) => l.description).join(" + ");
     const diff = observed - contracted;
     const [existing] = await db.select().from(billingDiscrepancies).where(and(eq(billingDiscrepancies.source, "ninjaone"), eq(billingDiscrepancies.contractLineId, line.id), inArray(billingDiscrepancies.status, ["open", "accepted"]))).orderBy(desc(billingDiscrepancies.detectedAt)).limit(1);
-    const basis = { activeDays: settings.deviceActiveDays, billableNodeClasses: classes, approvedOnly, siteScoped: Boolean(line.siteId), checkedAt: now.toISOString() };
+    // Items left on the other lines of the group from before they were compared together are closed.
+    if (groupLines.length > 1) await db.update(billingDiscrepancies).set({ status: "resolved", note: "Now compared together with the other lines of this contract", updatedAt: now }).where(and(eq(billingDiscrepancies.source, "ninjaone"), inArray(billingDiscrepancies.contractLineId, groupLines.slice(1).map((l) => l.id)), inArray(billingDiscrepancies.status, ["open", "accepted"])));
+    const basis = { activeDays: settings.deviceActiveDays, billableNodeClasses: classes, approvedOnly, siteScoped: Boolean(line.siteId), lineIds: groupLines.map((l) => l.id), checkedAt: now.toISOString() };
     if (diff === 0) {
       if (existing) {
         await db.update(billingDiscrepancies).set({ status: "resolved", observedQty: observed, difference: "0", note: "Counts now match", lastSeenAt: now, updatedAt: now }).where(eq(billingDiscrepancies.id, existing.id));
@@ -364,11 +383,11 @@ export async function runDiscrepancyCheck(actorUserId: string | null, companyId?
     if (existing) {
       // Same or changed difference: keep the review item current; an accepted one re-opens if the gap grows.
       const changed = existing.observedQty !== observed;
-      await db.update(billingDiscrepancies).set({ observedQty: observed, contractedQty: String(contracted), difference: String(diff), lastSeenAt: now, basis, status: existing.status === "accepted" && changed && Math.abs(diff) > Math.abs(Number(existing.difference)) ? "open" : existing.status, updatedAt: now }).where(eq(billingDiscrepancies.id, existing.id));
+      await db.update(billingDiscrepancies).set({ observedQty: observed, contractedQty: String(contracted), difference: String(diff), lineDescription: description, lastSeenAt: now, basis, status: existing.status === "accepted" && changed && Math.abs(diff) > Math.abs(Number(existing.difference)) ? "open" : existing.status, updatedAt: now }).where(eq(billingDiscrepancies.id, existing.id));
       if (existing.status === "open") open++;
     } else {
-      await db.insert(billingDiscrepancies).values({ companyId: contract.companyId, contractId: contract.id, contractLineId: line.id, siteId: line.siteId, lineDescription: line.description, contractedQty: String(contracted), observedQty: observed, difference: String(diff), unitPrice: line.unitPrice, basis });
-      await logActivity({ type: "device", companyId: contract.companyId, entityType: "contract", entityId: contract.id, title: `Device count discrepancy: ${line.description} contracted ${contracted}, observed ${observed} (${diff > 0 ? "+" : ""}${diff})`, actorUserId, source: "ninjaone" });
+      await db.insert(billingDiscrepancies).values({ companyId: contract.companyId, contractId: contract.id, contractLineId: line.id, siteId: line.siteId, lineDescription: description, contractedQty: String(contracted), observedQty: observed, difference: String(diff), unitPrice: line.unitPrice, basis });
+      await logActivity({ type: "device", companyId: contract.companyId, entityType: "contract", entityId: contract.id, title: `Device count discrepancy: ${description} contracted ${contracted}, observed ${observed} (${diff > 0 ? "+" : ""}${diff})`, actorUserId, source: "ninjaone" });
       open++;
     }
   }

@@ -7,6 +7,7 @@ import { DEFAULT_TWENTYI_CONFIG, getTwentyIClient, type TwentyIConfig, type Twen
 import { LiveTwentyIClient } from "@/connectors/twentyi/live";
 import { registrableDomain, twentyIDate, twentyITime, type TwentyIDomainRaw, type TwentyIMailboxRaw } from "@/connectors/twentyi/types";
 import { getConnection, runSync, setConnectionConfig, setCredentials, updateConnection } from "./integrations";
+import { coverageFor } from "./coverage-lookup";
 import { createTask } from "./tasks";
 
 export type HostingItem = typeof hostingItems.$inferSelect;
@@ -331,7 +332,7 @@ export async function hostingTotals(companyId?: string) {
       expiring30: sql<number>`count(*) filter (where expires_on is not null and expires_on <= current_date + 30)`.mapWith(Number),
       expired: sql<number>`count(*) filter (where expires_on is not null and expires_on < current_date)`.mapWith(Number),
       unlinked: sql<number>`count(*) filter (where company_id is null and kind in ('package','domain'))`.mapWith(Number),
-      unbilled: sql<number>`count(*) filter (where company_id is not null and contract_line_id is null and kind in ('package','domain'))`.mapWith(Number),
+      unbilled: sql<number>`count(*) filter (where company_id is not null and contract_line_id is null and kind in ('package','domain') and not exists (select 1 from service_coverage sc where sc.source = 'hosting_item' and sc.source_row_id = hosting_items.id))`.mapWith(Number),
       lastFetched: sql<Date | null>`max(fetched_at)`,
     })
     .from(hostingItems)
@@ -384,7 +385,11 @@ export async function companyHostingOverview(companyId: string) {
     .where(and(eq(contracts.companyId, companyId), isNull(contracts.archivedAt), inArray(contracts.status, ["draft", "active"])))
     .orderBy(asc(contracts.name), asc(contractLines.sortOrder));
   const lineById = new Map(lineRows.map((l) => [l.id, l]));
-  const decorate = (i: HostingItem) => ({ ...i, billingLine: i.contractLineId ? (lineById.get(i.contractLineId) ?? null) : null, freshness: hostingFreshness(i.fetchedAt), consoleUrl: i.kind === "package" || i.kind === "domain" ? (resolved?.client.consoleUrl(i.kind, i.externalId) ?? null) : null });
+  const coverage = await coverageFor("hosting_item", { companyId });
+  const decorate = (i: HostingItem) => {
+    const cov = coverage.get(i.id) ?? null;
+    return { ...i, billingLine: i.contractLineId ? (lineById.get(i.contractLineId) ?? null) : null, coverage: cov ? { state: cov.state, reason: cov.reason, reviewOn: cov.reviewOn, line: cov.contractLineId ? (lineById.get(cov.contractLineId) ?? null) : null } : null, freshness: hostingFreshness(i.fetchedAt), consoleUrl: i.kind === "package" || i.kind === "domain" ? (resolved?.client.consoleUrl(i.kind, i.externalId) ?? null) : null };
+  };
   const packages = items.filter((i) => i.kind === "package").map((p) => ({ ...decorate(p), mailboxes: items.filter((m) => m.kind === "mailbox" && m.parentExternalId === p.externalId).map(decorate), domains: items.filter((d) => d.kind === "domain" && d.parentExternalId === p.externalId).map(decorate) }));
   const attachedDomainIds = new Set(packages.flatMap((p) => p.domains.map((d) => d.id)));
   const looseDomains = items.filter((i) => i.kind === "domain" && !attachedDomainIds.has(i.id)).map(decorate);

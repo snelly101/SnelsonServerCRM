@@ -49,6 +49,9 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
                 <FileCheck2 className="h-4 w-4" /> Billing run
               </ButtonLink>
             )}
+            <ButtonLink href="/finance/services" variant="secondary">
+              Service coverage
+            </ButtonLink>
             <ButtonLink href="/integrations/xero" variant="secondary">
               Connection
             </ButtonLink>
