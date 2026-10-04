@@ -196,7 +196,7 @@ async function upsertContact(c: XeroContactRaw): Promise<"created" | "updated" |
   return changed ? "updated" : "unchanged";
 }
 
-async function upsertInvoice(inv: XeroInvoiceRaw): Promise<"created" | "updated" | "unchanged"> {
+export async function upsertInvoice(inv: XeroInvoiceRaw): Promise<"created" | "updated" | "unchanged"> {
   const [existing] = await db.select().from(xeroInvoices).where(eq(xeroInvoices.invoiceId, inv.InvoiceID)).limit(1);
   const contactId = inv.Contact?.ContactID ?? null;
   const link = contactId ? await getLinkByExternal("xero", "company", contactId) : null;

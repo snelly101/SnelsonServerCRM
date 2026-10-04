@@ -130,7 +130,7 @@ Ideas and requests not yet scheduled. Each item states what it is, why, and the 
 
 ## Pax8 integration (Microsoft 365 and other cloud subscriptions)
 
-**Status:** built (Phase 12, see `docs/phases.md`): read-only mirror of companies, subscriptions, products and recent invoices; company linking; line matching by choice / SKU / name; licence discrepancies; Pax8 price as line cost. Quantity changes from the CRM are built (opt-in setting, confirmation with reason, audit, timeline, licence re-check; `PUT /subscriptions/{id}`). Remaining from the plan: Pax8 invoice vs Xero bill reconciliation.
+**Status:** built (Phase 12, see `docs/phases.md`): read-only mirror of companies, subscriptions, products and recent invoices; company linking; line matching by choice / SKU / name; licence discrepancies; Pax8 price as line cost. Quantity changes from the CRM are built (opt-in setting, confirmation with reason, audit, timeline, licence re-check; `PUT /subscriptions/{id}`). Pax8 invoice vs Xero bill reconciliation is built (supplier contact chosen on the Pax8 page, ACCPAY bills mirrored, matched by reference or unique total, hand match/unmatch). Nothing remains from the original plan; see `docs/integrations.md`.
 
 **What:** connect the Pax8 Partner API so each customer's subscriptions (Microsoft 365 licences, Acronis, security add-ons) are mirrored against the CRM company, with quantities, unit cost, billing term and renewal dates.
 
@@ -142,7 +142,8 @@ Ideas and requests not yet scheduled. Each item states what it is, why, and the 
 - Compare subscription quantity with the matching per-user contract line (product matched by SKU) and raise review items for differences, reusing the discrepancy engine; billing is never changed automatically.
 - Cost side: Pax8 partner cost per licence feeds contract line unit cost so margin on the Contracts page is real, not the catalogue estimate.
 - Write actions from the CRM (increase or decrease a licence quantity) behind confirmation and audit: built. Who may adjust: an admin turns the setting on under Integrations → Pax8; then anyone with `contract.write` (admin, account manager, finance). Cancelling and ordering stay in the Pax8 portal.
-- Decisions: which subscriptions are in scope (all vs Microsoft only), whether Pax8 invoices should be reconciled against Xero bills.
+- Pax8 invoices vs Xero bills: built (read-only comparison; paying and entering bills stay in Xero).
+- Decisions: which subscriptions are in scope (all vs Microsoft only).
 
 ## Dark mode
 

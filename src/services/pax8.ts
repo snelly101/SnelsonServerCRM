@@ -17,11 +17,21 @@ import {
   contracts,
   pax8Companies,
   pax8InvoiceItems,
+  pax8Invoices,
   pax8Products,
   pax8Subscriptions,
   products,
   user,
+  xeroContacts,
+  xeroInvoices,
 } from "@/db/schema";
+import { getXeroClient } from "@/connectors/xero";
+import { upsertInvoice as upsertXeroInvoice } from "./xero";
+import {
+  matchPax8Bills,
+  reconcileState,
+  type ReconcileState,
+} from "@/lib/pax8-reconcile";
 import { audit, logActivity } from "@/lib/audit";
 import { ActionError } from "@/lib/action-result";
 import { logger } from "@/lib/logger";
@@ -386,6 +396,36 @@ export async function syncPax8(
             continue;
           }
           invoiceCount++;
+          const itemsTotal = items.reduce(
+            (a, it) => a + (pax8Number(it.total) ?? 0),
+            0,
+          );
+          const invValues = {
+            pax8InvoiceId: inv.id,
+            status: inv.status ?? null,
+            invoiceDate: pax8Date(inv.invoiceDate),
+            dueDate: pax8Date(inv.dueDate),
+            total:
+              pax8Number(inv.total) === null
+                ? null
+                : String(Math.round(pax8Number(inv.total)! * 100) / 100),
+            balance:
+              pax8Number(inv.balance) === null
+                ? null
+                : String(Math.round(pax8Number(inv.balance)! * 100) / 100),
+            itemsTotal: String(Math.round(itemsTotal * 100) / 100),
+            currency: inv.currency ?? null,
+            partnerName: inv.partnerName ?? null,
+            externalId: inv.externalId ?? null,
+            raw: inv as Record<string, unknown>,
+          };
+          await db
+            .insert(pax8Invoices)
+            .values({ ...invValues, fetchedAt: now })
+            .onConflictDoUpdate({
+              target: pax8Invoices.pax8InvoiceId,
+              set: { ...invValues, fetchedAt: now, updatedAt: now },
+            });
           for (const it of items) {
             counters.fetched++;
             itemCount++;
@@ -434,11 +474,25 @@ export async function syncPax8(
         );
       }
 
+      // Xero purchase bills for the Pax8 supplier, then match them to the invoices above.
+      let billNote = "";
+      try {
+        const bills = await syncPax8SupplierBills(config.xeroSupplierContactId);
+        if (bills !== null) {
+          const rec = await reconcilePax8Invoices();
+          billNote = `; ${bills} Xero bills, ${rec.matched} invoices matched`;
+        }
+      } catch (err) {
+        await fail(
+          `Xero bills unavailable: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+
       const auto = config.autoLink
         ? await autoLinkPax8Companies(actorUserId ?? null)
         : { linked: 0 };
       const check = await runLicenceCheck(actorUserId ?? null);
-      return `${seenCompanies.size} companies, ${seenSubs.size} subscriptions, ${itemCount} charge lines on ${invoiceCount} invoices${resolved.mode === "demo" ? " (DEMO data)" : ""}; ${auto.linked} auto-linked; ${check.open} open licence discrepancies`;
+      return `${seenCompanies.size} companies, ${seenSubs.size} subscriptions, ${itemCount} charge lines on ${invoiceCount} invoices${billNote}${resolved.mode === "demo" ? " (DEMO data)" : ""}; ${auto.linked} auto-linked; ${check.open} open licence discrepancies`;
     },
     actorUserId,
   );
@@ -1569,6 +1623,258 @@ export function pax8Freshness(
   if (age < 5 * 60_000) return "live";
   if (age < 3 * pollMinutes * 60_000) return "cached";
   return "stale";
+}
+
+// ---------------------------------------------------------------------------
+// Pax8 invoices vs Xero bills. The Pax8 supplier is a Xero contact chosen on
+// the Pax8 page; its ACCPAY bills are mirrored into xero_invoices (type
+// ACCPAY, never shown among sales invoices) and matched to the mirrored
+// Pax8 invoices by reference, then by unique total within ten days. People
+// can match or unmatch by hand; a hand decision is never overridden.
+// ---------------------------------------------------------------------------
+const BILL_DEAD = ["VOIDED", "DELETED"] as const;
+
+/** Mirrors every purchase bill of the supplier contact. Returns the count, or null when no supplier is set or Xero is not available. */
+export async function syncPax8SupplierBills(
+  supplierContactId: string | null | undefined,
+): Promise<number | null> {
+  if (!supplierContactId) return null;
+  const xero = await getXeroClient();
+  if (!xero) return null;
+  let count = 0;
+  for (let page = 1; page <= 20; page++) {
+    const batch = await xero.client.listInvoices({
+      page,
+      contactIds: [supplierContactId],
+    });
+    for (const inv of batch) {
+      if (inv.Type !== "ACCPAY") continue;
+      await upsertXeroInvoice(inv);
+      count++;
+    }
+    if (batch.length < 100) break;
+  }
+  return count;
+}
+
+async function supplierBills(supplierContactId: string) {
+  return db
+    .select({
+      invoiceId: xeroInvoices.invoiceId,
+      invoiceNumber: xeroInvoices.invoiceNumber,
+      reference: xeroInvoices.reference,
+      status: xeroInvoices.status,
+      date: xeroInvoices.date,
+      dueDate: xeroInvoices.dueDate,
+      total: xeroInvoices.total,
+      amountDue: xeroInvoices.amountDue,
+      currencyCode: xeroInvoices.currencyCode,
+    })
+    .from(xeroInvoices)
+    .where(
+      and(
+        eq(xeroInvoices.type, "ACCPAY"),
+        eq(xeroInvoices.contactId, supplierContactId),
+        notInArray(xeroInvoices.status, [...BILL_DEAD]),
+      ),
+    )
+    .orderBy(desc(xeroInvoices.date));
+}
+
+async function pax8SupplierId() {
+  const conn = await getConnection("pax8");
+  return ((conn.config ?? {}) as Pax8Config).xeroSupplierContactId ?? null;
+}
+
+/** Auto-matches unmatched Pax8 invoices to the supplier's bills; hand decisions (match_source = manual) are left alone. */
+export async function reconcilePax8Invoices() {
+  const supplier = await pax8SupplierId();
+  if (!supplier) return { matched: 0 };
+  const invoices = await db
+    .select()
+    .from(pax8Invoices)
+    .where(isNull(pax8Invoices.xeroInvoiceId));
+  const candidates = invoices.filter((i) => i.matchSource !== "manual");
+  const taken = new Set(
+    (
+      await db
+        .select({ x: pax8Invoices.xeroInvoiceId })
+        .from(pax8Invoices)
+        .where(sql`${pax8Invoices.xeroInvoiceId} is not null`)
+    ).map((r) => r.x!),
+  );
+  const bills = (await supplierBills(supplier)).filter(
+    (b) => !taken.has(b.invoiceId),
+  );
+  const matches = matchPax8Bills(
+    candidates.map((i) => ({
+      id: i.id,
+      pax8InvoiceId: i.pax8InvoiceId,
+      externalId: i.externalId,
+      total: pax8Number(i.total),
+      invoiceDate: i.invoiceDate,
+    })),
+    bills.map((b) => ({
+      invoiceId: b.invoiceId,
+      invoiceNumber: b.invoiceNumber,
+      reference: b.reference,
+      total: pax8Number(b.total),
+      date: b.date,
+    })),
+  );
+  for (const [rowId, billId] of matches)
+    await db
+      .update(pax8Invoices)
+      .set({ xeroInvoiceId: billId, matchSource: "auto", updatedAt: new Date() })
+      .where(eq(pax8Invoices.id, rowId));
+  return { matched: matches.size };
+}
+
+/** Chooses the Xero contact that is the Pax8 supplier, re-mirrors its bills and re-runs the matcher. Auto matches from a previous supplier are dropped; hand matches are kept. */
+export async function setPax8Supplier(
+  contactId: string | null,
+  actorUserId: string,
+) {
+  if (contactId) {
+    const [c] = await db
+      .select({ id: xeroContacts.contactId, name: xeroContacts.name })
+      .from(xeroContacts)
+      .where(eq(xeroContacts.contactId, contactId))
+      .limit(1);
+    if (!c) throw new ActionError("That Xero contact is not in the mirror. Sync Xero first.");
+  }
+  await setConnectionConfig("pax8", { xeroSupplierContactId: contactId }, actorUserId);
+  await db
+    .update(pax8Invoices)
+    .set({ xeroInvoiceId: null, matchSource: null, updatedAt: new Date() })
+    .where(eq(pax8Invoices.matchSource, "auto"));
+  if (!contactId) return { bills: 0, matched: 0 };
+  const bills = (await syncPax8SupplierBills(contactId)) ?? 0;
+  const rec = await reconcilePax8Invoices();
+  return { bills, matched: rec.matched };
+}
+
+/** A person matches a Pax8 invoice to a bill, or clears the match (remembered, so the matcher leaves it alone). */
+export async function matchPax8Invoice(
+  pax8InvoiceRowId: string,
+  xeroInvoiceId: string | null,
+  actorUserId: string,
+) {
+  const [inv] = await db
+    .select()
+    .from(pax8Invoices)
+    .where(eq(pax8Invoices.id, pax8InvoiceRowId))
+    .limit(1);
+  if (!inv) throw new ActionError("Pax8 invoice not found.");
+  if (xeroInvoiceId) {
+    const supplier = await pax8SupplierId();
+    if (!supplier) throw new ActionError("Choose the Pax8 supplier contact first.");
+    const bill = (await supplierBills(supplier)).find((b) => b.invoiceId === xeroInvoiceId);
+    if (!bill) throw new ActionError("That bill is not one of the Pax8 supplier's bills.");
+    const [other] = await db
+      .select({ id: pax8Invoices.id, pax8InvoiceId: pax8Invoices.pax8InvoiceId })
+      .from(pax8Invoices)
+      .where(and(eq(pax8Invoices.xeroInvoiceId, xeroInvoiceId), sql`${pax8Invoices.id} <> ${inv.id}`))
+      .limit(1);
+    if (other)
+      throw new ActionError(`That bill is already matched to Pax8 invoice ${other.pax8InvoiceId}. Unmatch it there first.`);
+  }
+  await db
+    .update(pax8Invoices)
+    .set({ xeroInvoiceId, matchSource: "manual", updatedAt: new Date() })
+    .where(eq(pax8Invoices.id, inv.id));
+  await audit({
+    actorUserId,
+    action: "pax8.invoice.match",
+    entityType: "integration",
+    entityId: "pax8",
+    details: { pax8InvoiceId: inv.pax8InvoiceId, xeroInvoiceId, previous: inv.xeroInvoiceId },
+  });
+}
+
+export type Pax8ReconciliationRow = {
+  id: string;
+  pax8InvoiceId: string;
+  status: string | null;
+  invoiceDate: string | null;
+  dueDate: string | null;
+  total: number | null;
+  itemsTotal: number | null;
+  currency: string | null;
+  matchSource: string | null;
+  bill: {
+    invoiceId: string;
+    invoiceNumber: string | null;
+    reference: string | null;
+    status: string;
+    date: string | null;
+    total: number | null;
+    amountDue: number | null;
+  } | null;
+  difference: number | null;
+  state: ReconcileState;
+};
+
+/** Everything the Pax8 page needs for the invoices-vs-bills card. */
+export async function pax8InvoiceReconciliation() {
+  const supplierId = await pax8SupplierId();
+  const suppliers = await db
+    .select({ contactId: xeroContacts.contactId, name: xeroContacts.name })
+    .from(xeroContacts)
+    .where(and(eq(xeroContacts.isSupplier, true), sql`coalesce(${xeroContacts.contactStatus}, 'ACTIVE') <> 'ARCHIVED'`))
+    .orderBy(asc(xeroContacts.name));
+  const supplier = supplierId
+    ? ((await db.select({ contactId: xeroContacts.contactId, name: xeroContacts.name }).from(xeroContacts).where(eq(xeroContacts.contactId, supplierId)).limit(1))[0] ?? { contactId: supplierId, name: supplierId })
+    : null;
+  const invoices = await db.select().from(pax8Invoices).orderBy(desc(pax8Invoices.invoiceDate), desc(pax8Invoices.pax8InvoiceId));
+  const bills = supplierId ? await supplierBills(supplierId) : [];
+  const byId = new Map(bills.map((b) => [b.invoiceId, b]));
+  const usedBills = new Set<string>();
+  const rows: Pax8ReconciliationRow[] = invoices.map((i) => {
+    const b = i.xeroInvoiceId ? (byId.get(i.xeroInvoiceId) ?? null) : null;
+    if (b) usedBills.add(b.invoiceId);
+    const total = pax8Number(i.total);
+    const bill = b
+      ? { invoiceId: b.invoiceId, invoiceNumber: b.invoiceNumber, reference: b.reference, status: b.status, date: b.date, total: pax8Number(b.total), amountDue: pax8Number(b.amountDue) }
+      : null;
+    return {
+      id: i.id,
+      pax8InvoiceId: i.pax8InvoiceId,
+      status: i.status,
+      invoiceDate: i.invoiceDate,
+      dueDate: i.dueDate,
+      total,
+      itemsTotal: pax8Number(i.itemsTotal),
+      currency: i.currency,
+      matchSource: i.matchSource,
+      bill,
+      difference: bill && total !== null && bill.total !== null ? Math.round((bill.total - total) * 100) / 100 : null,
+      state: reconcileState(total, bill),
+    };
+  });
+  const oldestPax8 = invoices.reduce<string | null>((a, i) => (i.invoiceDate && (!a || i.invoiceDate < a) ? i.invoiceDate : a), null);
+  // Bills nobody matched, within the window the Pax8 mirror covers (older bills predate the mirror and are not a finding).
+  const unmatchedBills = bills
+    .filter((b) => !usedBills.has(b.invoiceId) && (!oldestPax8 || !b.date || b.date >= oldestPax8))
+    .map((b) => ({ invoiceId: b.invoiceId, invoiceNumber: b.invoiceNumber, reference: b.reference, status: b.status, date: b.date, total: pax8Number(b.total), amountDue: pax8Number(b.amountDue), currencyCode: b.currencyCode }));
+  const freeBills = bills
+    .filter((b) => !usedBills.has(b.invoiceId))
+    .map((b) => ({ invoiceId: b.invoiceId, label: `${b.invoiceNumber ?? b.invoiceId}${b.reference ? ` · ${b.reference}` : ""} · ${b.date ?? "no date"} · ${b.total ?? "?"}` }));
+  return {
+    supplier,
+    suppliers,
+    rows,
+    unmatchedBills,
+    freeBills,
+    totals: {
+      invoices: rows.length,
+      matched: rows.filter((r) => r.state === "matched").length,
+      differs: rows.filter((r) => r.state === "amount_differs").length,
+      noBill: rows.filter((r) => r.state === "no_bill").length,
+      extraBills: unmatchedBills.length,
+    },
+    xeroConfigured: Boolean(await getXeroClient()),
+  };
 }
 
 export async function pax8Totals(companyId?: string) {

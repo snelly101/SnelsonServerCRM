@@ -9,6 +9,7 @@ import {
   pax8InvoiceItems,
   pax8Subscriptions,
   products,
+  xeroInvoices,
 } from "@/db/schema";
 import { createCompany, updateCompany } from "@/services/companies";
 import { createContact } from "@/services/contacts";
@@ -24,6 +25,9 @@ import {
   applyPax8Cost,
   autoLinkPax8Companies,
   changePax8SubscriptionQuantity,
+  matchPax8Invoice,
+  pax8InvoiceReconciliation,
+  setPax8Supplier,
   companySubscriptionOverview,
   createPax8CompanyForCompany,
   linkPax8Company,
@@ -40,6 +44,8 @@ import {
   type MatchableLine,
 } from "@/services/pax8";
 import { listOpenConflicts, setConnectionConfig } from "@/services/integrations";
+import { syncXero } from "@/services/xero";
+import { demoPax8InvoiceSummary } from "@/connectors/pax8/demo";
 import { listDiscrepancies, reviewDiscrepancy } from "@/services/ninjaone";
 import { ActionError } from "@/lib/action-result";
 import { makeUser } from "./helpers";
@@ -768,6 +774,53 @@ describe("Pax8 sync, matching, licence check and costs (demo adapter)", () => {
       expect(back.to).toBe(14);
     } finally {
       await setConnectionConfig("pax8", { allowQuantityChanges: false }, admin.id);
+    }
+  });
+
+  it("invoice reconciliation: nothing until a supplier is chosen; then the supplier's Xero bills are mirrored as ACCPAY, matched by reference, differences and missing bills are reported, hand matches stick and a bill cannot be matched twice", async () => {
+    const before = await pax8InvoiceReconciliation();
+    expect(before.supplier).toBeNull();
+    expect(before.rows.length).toBe(3); // the three demo Pax8 invoices are mirrored at invoice level
+    expect(before.rows.every((r) => r.state === "no_bill")).toBe(true);
+    expect(before.suppliers.length).toBe(0); // Xero contacts are not mirrored until Xero syncs
+    await syncXero("manual", admin.id);
+    const mid = await pax8InvoiceReconciliation();
+    const pax8Supplier = mid.suppliers.find((s) => /pax8/i.test(s.name))!;
+    expect(pax8Supplier).toBeTruthy();
+    await expect(setPax8Supplier("not-a-contact", admin.id)).rejects.toThrow(/not in the mirror/);
+    try {
+      const r = await setPax8Supplier(pax8Supplier.contactId, admin.id);
+      expect(r.bills).toBe(3);
+      expect(r.matched).toBe(2);
+      const after = await pax8InvoiceReconciliation();
+      const [cur, last, older] = demoPax8InvoiceSummary();
+      const row = (id: string) => after.rows.find((x) => x.pax8InvoiceId === id)!;
+      expect(row(cur.id).state).toBe("no_bill");
+      expect(row(last.id).state).toBe("matched");
+      expect(row(last.id).matchSource).toBe("auto");
+      expect(row(last.id).difference).toBe(0);
+      expect(row(older.id).state).toBe("amount_differs");
+      expect(row(older.id).difference).toBeCloseTo(12.5, 2);
+      expect(after.totals).toMatchObject({ invoices: 3, matched: 1, differs: 1, noBill: 1, extraBills: 0 }); // the £49.99 bill predates the mirrored window
+      // Bills never leak into the sales side.
+      const sales = await db.select({ type: xeroInvoices.type }).from(xeroInvoices).where(eq(xeroInvoices.contactId, pax8Supplier.contactId));
+      expect(sales.length).toBe(3);
+      expect(sales.every((s) => s.type === "ACCPAY")).toBe(true);
+      // Hand decisions: unmatch the differing one and the matcher leaves it alone on the next sync; a used bill is refused elsewhere.
+      await matchPax8Invoice(row(older.id).id, null, admin.id);
+      await expect(matchPax8Invoice(row(cur.id).id, row(last.id).bill!.invoiceId, admin.id)).rejects.toThrow(/already matched/);
+      await expect(matchPax8Invoice(row(cur.id).id, "demo-i-1", admin.id)).rejects.toThrow(/not one of the Pax8 supplier/);
+      await syncPax8("manual", admin.id);
+      const again = await pax8InvoiceReconciliation();
+      const olderAgain = again.rows.find((x) => x.pax8InvoiceId === older.id)!;
+      expect(olderAgain.state).toBe("no_bill");
+      expect(olderAgain.matchSource).toBe("manual");
+      expect(again.freeBills.some((b) => b.invoiceId === "demo-b-2")).toBe(true);
+      await matchPax8Invoice(olderAgain.id, "demo-b-2", admin.id);
+      expect(again.rows.find((x) => x.pax8InvoiceId === last.id)!.state).toBe("matched");
+      expect((await pax8InvoiceReconciliation()).rows.find((x) => x.pax8InvoiceId === older.id)!.bill?.invoiceId).toBe("demo-b-2");
+    } finally {
+      await setPax8Supplier(null, admin.id);
     }
   });
 });

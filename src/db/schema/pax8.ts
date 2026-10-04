@@ -140,6 +140,44 @@ export const pax8Subscriptions = pgTable(
   ],
 );
 
+/**
+ * Partner invoices from Pax8 (invoice level), mirrored for reconciliation
+ * against the Xero purchase bills raised for the Pax8 supplier contact.
+ * `xero_invoice_id` is the matched ACCPAY bill; `match_source` says whether a
+ * person chose it (`manual`, also used with a null bill to mean "no match,
+ * leave it") or the matcher did (`auto`).
+ */
+export const pax8Invoices = pgTable(
+  "pax8_invoices",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    pax8InvoiceId: text("pax8_invoice_id").notNull(),
+    status: text("status"),
+    invoiceDate: date("invoice_date"),
+    dueDate: date("due_date"),
+    total: numeric("total", { precision: 14, scale: 2 }),
+    balance: numeric("balance", { precision: 14, scale: 2 }),
+    /** Sum of the mirrored charge lines, to show when it disagrees with the invoice total. */
+    itemsTotal: numeric("items_total", { precision: 14, scale: 2 }),
+    currency: text("currency"),
+    partnerName: text("partner_name"),
+    externalId: text("external_id"),
+    xeroInvoiceId: text("xero_invoice_id"),
+    /** auto | manual */
+    matchSource: text("match_source"),
+    raw: jsonb("raw").$type<Record<string, unknown>>(),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("pax8_invoices_pax8_invoice_id_unique").on(t.pax8InvoiceId),
+    index("pax8_invoices_date_idx").on(t.invoiceDate),
+    index("pax8_invoices_xero_idx").on(t.xeroInvoiceId),
+  ],
+);
+
 export const pax8InvoiceItems = pgTable(
   "pax8_invoice_items",
   {

@@ -334,6 +334,11 @@ export class DemoPax8Client implements Pax8Client {
   }
 }
 
+/** Invoice ids, dates and totals, so the Xero demo can raise matching supplier bills. */
+export function demoPax8InvoiceSummary() {
+  return invoices.map((i) => ({ id: i.id, invoiceDate: String(i.invoiceDate), total: Number(i.total) }));
+}
+
 const BASE_COMPANY_COUNT = companies.length;
 const BASE_QUANTITIES = new Map(subscriptions.map((s) => [s.id, s.quantity]));
 let createdSeq = 0;

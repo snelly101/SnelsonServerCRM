@@ -5,6 +5,7 @@ import { getAppSettings } from "@/lib/settings";
 import {
   pax8ConnectionSummary,
   pax8MappingOverview,
+  pax8InvoiceReconciliation,
   pax8Totals,
 } from "@/services/pax8";
 import { listDiscrepancies } from "@/services/ninjaone";
@@ -21,6 +22,8 @@ import {
   Pax8ConfigForm,
   Pax8ConnectForm,
   Pax8MappingTable,
+  Pax8ReconciliationTable,
+  Pax8SupplierForm,
   Pax8SyncButton,
   Pax8TestButton,
   RecheckLicencesButton,
@@ -40,6 +43,7 @@ export default async function Pax8Page() {
     totals,
     discrepancies,
     resolved,
+    recon,
   ] = await Promise.all([
     pax8ConnectionSummary(),
     getAppSettings(),
@@ -49,6 +53,7 @@ export default async function Pax8Page() {
     pax8Totals(),
     listDiscrepancies({ status: "open", source: "pax8" }),
     getPax8Client(),
+    pax8InvoiceReconciliation(),
   ]);
   const live = conn.mode === "live";
 
@@ -289,6 +294,32 @@ export default async function Pax8Page() {
           canReview={can(me.role, "discrepancy.review")}
           currency={settings.currency}
           kind="licence"
+        />
+      </Card>
+
+      <Card
+        title={`Pax8 invoices vs Xero bills · ${recon.totals.matched} matched, ${recon.totals.differs} differ, ${recon.totals.noBill} without a bill${recon.totals.extraBills ? `, ${recon.totals.extraBills} bill${recon.totals.extraBills === 1 ? "" : "s"} without an invoice` : ""}`}
+        padded={false}
+        className="mt-4"
+      >
+        <div className="border-b border-slate-100 px-4 py-3">
+          <Pax8SupplierForm
+            value={recon.supplier?.contactId ?? null}
+            suppliers={recon.suppliers}
+            readOnly={!canManage || !recon.xeroConfigured}
+          />
+          <p className="mt-2 text-xs text-slate-500">
+            {recon.xeroConfigured
+              ? "Each sync mirrors the Pax8 partner invoices and the purchase bills Xero holds for this supplier, then matches them by reference (a bill whose reference or number carries the Pax8 invoice id) or by a unique identical total within ten days. Finance can match or unmatch by hand; a hand decision is kept. Nothing is changed in Xero or at Pax8."
+              : "Connect Xero to compare Pax8 invoices with the bills entered there."}
+          </p>
+        </div>
+        <Pax8ReconciliationTable
+          rows={recon.rows}
+          unmatchedBills={recon.unmatchedBills}
+          freeBills={recon.freeBills}
+          canMatch={can(me.role, "invoice.approve") && Boolean(recon.supplier)}
+          settings={settings}
         />
       </Card>
 

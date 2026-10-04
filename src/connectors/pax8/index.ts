@@ -22,6 +22,8 @@ export type Pax8Config = {
   autoCreateCompanies?: boolean;
   /** Let people with contract.write change subscription quantities at Pax8 from the CRM (default false). */
   allowQuantityChanges?: boolean;
+  /** Xero contact id of the Pax8 supplier; its purchase bills are mirrored and reconciled with Pax8 invoices. */
+  xeroSupplierContactId?: string | null;
 };
 
 export const DEFAULT_PAX8_CONFIG: Required<Pax8Config> = {
@@ -29,6 +31,7 @@ export const DEFAULT_PAX8_CONFIG: Required<Pax8Config> = {
   invoiceCount: 3,
   autoCreateCompanies: false,
   allowQuantityChanges: false,
+  xeroSupplierContactId: null,
 };
 
 export async function getPax8Client(): Promise<{
@@ -45,6 +48,7 @@ export async function getPax8Client(): Promise<{
       raw.autoCreateCompanies ?? DEFAULT_PAX8_CONFIG.autoCreateCompanies,
     allowQuantityChanges:
       raw.allowQuantityChanges ?? DEFAULT_PAX8_CONFIG.allowQuantityChanges,
+    xeroSupplierContactId: raw.xeroSupplierContactId ?? null,
   };
   const creds = await getCredentials<Pax8Credentials>("pax8");
   if (creds?.clientId && creds.clientSecret) {
