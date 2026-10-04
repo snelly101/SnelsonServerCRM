@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { billingPeriodFor, buildContractInvoiceLines, chargeSegments, explainLineCalc, manualPeriod, quantityOn, unitPriceOn, type LineChange } from "@/lib/billing";
+import { billingPeriodFor, billingQuantityOn, buildContractInvoiceLines, chargeSegments, explainLineCalc, manualPeriod, quantityOn, unitPriceOn, type LineChange } from "@/lib/billing";
 
 const line = (over: Record<string, unknown> = {}) => ({ id: "L1", description: "Users", revenueType: "recurring", billingFrequency: "monthly", quantity: 10, unitPrice: 40, changes: [] as LineChange[], ...over });
 const qty = (previousValue: number, newValue: number, effectiveFrom: string, id = `${effectiveFrom}:${newValue}`): LineChange => ({ id, field: "quantity", previousValue, newValue, effectiveFrom });
@@ -110,5 +110,33 @@ describe("contract invoice lines", () => {
     expect(two[0]).toMatchObject({ description: "Users: adjustment for 2026-09-01 to 2026-09-30 (2 changes, previous period)", unitAmount: 93.33 }); // 3×40×20/30 + 1×40×10/30
     // A decrease in the previous period never produces a credit line.
     expect(buildContractInvoiceLines({ ...ctx, period: oct, previous, lines: [line({ quantity: 8, changes: [qty(10, 8, "2026-09-21")] })] })).toHaveLength(1);
+  });
+
+  it("reduction policies: next period ignores the drop, immediate credits the unused days (and catches up a credit), at renewal keeps the old quantity until the renewal date", () => {
+    const drop = (over: Record<string, unknown> = {}) => line({ quantity: 7, changes: [qty(10, 7, "2026-10-11")], ...over });
+    expect(chargeSegments(drop(), oct, 1).map((s) => [s.kind, s.amount])).toEqual([["period", 400]]);
+    const credit = chargeSegments(drop({ reductionPolicy: "immediate" }), oct, 1);
+    expect(credit.map((s) => [s.kind, s.quantity, s.days, s.amount])).toEqual([
+      ["period", 10, 31, 400],
+      ["decrease", 3, 21, -81.29], // 3 × 40 × 21/31
+    ]);
+    const lines = buildContractInvoiceLines({ ...ctx, period: oct, lines: [drop({ reductionPolicy: "immediate" })] });
+    expect(strip(lines)[1]).toEqual({ description: "Users: 3 removed from 2026-10-11, 21 of 31 days (credit)", quantity: 1, unitAmount: -81.29, accountCode: "200", taxType: "OUTPUT2", contractLineId: "L1" });
+    // A drop inside the previous, already invoiced, period: credited on this invoice only under the immediate policy.
+    const previous = { period: { periodStart: "2026-09-01", periodEnd: "2026-09-30", fullDays: 30 }, lines: [{ description: "Users (2026-09-01 to 2026-09-30)", quantity: 10, unitAmount: 40, accountCode: "200", taxType: "OUTPUT2", contractLineId: "L1" }] };
+    const prevDrop = { quantity: 7, changes: [qty(10, 7, "2026-09-21")] };
+    expect(buildContractInvoiceLines({ ...ctx, period: oct, previous, lines: [line(prevDrop)] })).toHaveLength(1);
+    const credited = buildContractInvoiceLines({ ...ctx, period: oct, previous, lines: [line({ ...prevDrop, reductionPolicy: "immediate" })] });
+    expect(strip(credited)[0]).toMatchObject({ description: "Users: 3 removed from 2026-09-21, 10 of 30 days (credit, previous period)", unitAmount: -40 });
+    expect(explainLineCalc(credited[0].calc!, (n) => `£${n.toFixed(2)}`)).toMatch(/credited here/);
+    // At renewal: the drop on 11 October is ignored until the renewal date; a later rise counts from the kept level; after renewal the real quantity applies.
+    const renewal = line({ quantity: 9, reductionPolicy: "at_renewal", decreasesFrom: "2026-12-01", changes: [qty(10, 7, "2026-10-11"), qty(7, 9, "2026-10-21")] });
+    expect(billingQuantityOn(renewal, "2026-10-01")).toBe(10);
+    expect(billingQuantityOn(renewal, "2026-10-15")).toBe(10);
+    expect(billingQuantityOn(renewal, "2026-10-25")).toBe(10);
+    expect(billingQuantityOn(renewal, "2026-12-01")).toBe(9);
+    expect(chargeSegments(renewal, oct, 1).map((s) => [s.kind, s.quantity, s.amount])).toEqual([["period", 10, 400]]);
+    const dec = { periodStart: "2026-12-01", periodEnd: "2026-12-31", fullDays: 31, days: 31 };
+    expect(chargeSegments(renewal, dec, 1).map((s) => [s.kind, s.quantity, s.amount])).toEqual([["period", 9, 360]]);
   });
 });

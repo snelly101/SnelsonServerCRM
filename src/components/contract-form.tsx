@@ -21,6 +21,7 @@ export type ContractFormValues = {
   autoRenew?: boolean;
   billingFrequency?: string;
   billingDay?: number | null;
+  billingFrom?: string | null;
   nextReviewDate?: string | null;
   reviewIntervalMonths?: number;
   ownerUserId?: string | null;
@@ -132,6 +133,9 @@ export function ContractForm({
               </option>
             ))}
           </Select>
+        </Field>
+        <Field label="Bill from (CRM)" htmlFor="billingFrom" error={e("billingFrom")} help="Billing commencement in the CRM. Periods from this date that have no draft invoice are proposed by the billing run as missed. Leave empty to only ever propose the current period (nothing earlier is back-billed).">
+          <Input id="billingFrom" name="billingFrom" type="date" defaultValue={initial.billingFrom ?? ""} />
         </Field>
         <div className="flex items-end pb-2">
           <Checkbox label="Auto-renews at the renewal date" checked={autoRenew} onChange={(ev) => setAutoRenew(ev.target.checked)} />

@@ -7,7 +7,7 @@ import { Input, Select } from "@/components/ui/form";
 import { Badge } from "@/components/ui/badge";
 import { fmtMoney, fmtPercent } from "@/lib/format";
 import { summariseLines } from "@/lib/money";
-import { CATEGORY_LABELS, FREQUENCY_LABELS, PRICING_LABELS, REVENUE_LABELS, billingFrequencyValues, pricingModelValues, revenueTypeValues } from "@/lib/validation-sales";
+import { CATEGORY_LABELS, FREQUENCY_LABELS, INVOICE_SCHEDULE_LABELS, PRICING_LABELS, REDUCTION_POLICY_LABELS, REVENUE_LABELS, billingFrequencyValues, invoiceScheduleValues, pricingModelValues, reductionPolicyValues, revenueTypeValues } from "@/lib/validation-sales";
 
 export type EditableLine = {
   key: string;
@@ -21,6 +21,10 @@ export type EditableLine = {
   unitCost: number | null;
   siteId?: string;
   countsAsManagedDevice?: boolean;
+  /** Contracts only: invoiced with the contract's periods or on the line's own cycle. */
+  invoiceSchedule?: (typeof invoiceScheduleValues)[number];
+  /** Contracts only: what a mid-period decrease does. */
+  reductionPolicy?: (typeof reductionPolicyValues)[number];
 };
 
 export type ProductOption = {
@@ -116,6 +120,8 @@ export function LinesEditor({
             showSite ? (siteName ?? "all sites") : null,
             l.unitCost !== null ? `cost ${fmtMoney(l.unitCost, currency)}` : "cost unknown",
             showSite && l.pricingModel === "per_device" && l.countsAsManagedDevice ? "checked against NinjaOne" : null,
+            showSite && l.revenueType === "recurring" && l.invoiceSchedule === "own" ? `invoiced ${FREQUENCY_LABELS[l.billingFrequency].toLowerCase()} on its own cycle` : null,
+            showSite && l.revenueType === "recurring" && l.reductionPolicy && l.reductionPolicy !== "next_period" ? REDUCTION_POLICY_LABELS[l.reductionPolicy].toLowerCase() : null,
           ]
             .filter(Boolean)
             .join(" · ");
@@ -130,6 +136,8 @@ export function LinesEditor({
               <input type="hidden" name={`lines[${i}][productId]`} value={l.productId} />
               {/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(l.key) && <input type="hidden" name={`lines[${i}][id]`} value={l.key} />}
               {showSite && <input type="hidden" name={`lines[${i}][countsAsManagedDevice]`} value={l.pricingModel === "per_device" && l.countsAsManagedDevice ? "true" : "false"} />}
+              {showSite && <input type="hidden" name={`lines[${i}][invoiceSchedule]`} value={l.revenueType === "recurring" ? (l.invoiceSchedule ?? "contract") : "contract"} />}
+              {showSite && <input type="hidden" name={`lines[${i}][reductionPolicy]`} value={l.reductionPolicy ?? "next_period"} />}
               {l.revenueType !== "recurring" && <input type="hidden" name={`lines[${i}][billingFrequency]`} value="one_off" />}
               {/* Fields that stay in the form even while the details panel is closed. */}
               {!open && (
@@ -216,6 +224,30 @@ export function LinesEditor({
                         </Select>,
                       )}
                     {field("Unit cost", <Input aria-label="Unit cost" name={`lines[${i}][unitCost]`} type="number" min={0} step="0.01" value={l.unitCost ?? ""} placeholder="unknown" onChange={(e) => update(l.key, { unitCost: e.target.value === "" ? null : Number(e.target.value) })} />)}
+                    {showSite &&
+                      l.revenueType === "recurring" &&
+                      field(
+                        "Invoiced",
+                        <Select aria-label="Invoice schedule" value={l.invoiceSchedule ?? "contract"} onChange={(e) => update(l.key, { invoiceSchedule: e.target.value as EditableLine["invoiceSchedule"] })} title="With the contract: the price is spread over the contract's invoices (an annual price on a monthly contract bills a twelfth a month). Own cycle: invoiced once per its own period, e.g. a domain once a year.">
+                          {invoiceScheduleValues.map((v) => (
+                            <option key={v} value={v}>
+                              {INVOICE_SCHEDULE_LABELS[v]}
+                            </option>
+                          ))}
+                        </Select>,
+                      )}
+                    {showSite &&
+                      l.revenueType === "recurring" &&
+                      field(
+                        "If quantity goes down",
+                        <Select aria-label="Reduction policy" value={l.reductionPolicy ?? "next_period"} onChange={(e) => update(l.key, { reductionPolicy: e.target.value as EditableLine["reductionPolicy"] })} title="Mid-period decreases: apply from the next period (no credit), credit the unused days on the next invoice, or keep billing the old quantity until the contract's renewal date.">
+                          {reductionPolicyValues.map((v) => (
+                            <option key={v} value={v}>
+                              {REDUCTION_POLICY_LABELS[v]}
+                            </option>
+                          ))}
+                        </Select>,
+                      )}
                     {showSite && l.pricingModel === "per_device" && (
                       <label className="flex items-end gap-2 pb-2 text-xs text-slate-600">
                         <input type="checkbox" className="h-3.5 w-3.5 accent-brand-600" checked={Boolean(l.countsAsManagedDevice)} onChange={(e) => update(l.key, { countsAsManagedDevice: e.target.checked })} /> Compare with NinjaOne device count

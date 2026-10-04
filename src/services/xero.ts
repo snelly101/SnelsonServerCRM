@@ -1,18 +1,17 @@
 import { randomBytes } from "node:crypto";
 import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { companies, contractLineChanges, contractLines, contracts, invoiceDrafts, opportunityLines, opportunities, user, xeroContacts, xeroInvoices, xeroPayments, type InvoiceDraftLine } from "@/db/schema";
+import { companies, contractLineChanges, contracts, invoiceDrafts, opportunityLines, opportunities, user, xeroContacts, xeroInvoices, xeroPayments, type InvoiceDraftLine } from "@/db/schema";
 import { audit, logActivity } from "@/lib/audit";
 import { logger } from "@/lib/logger";
 import { ActionError } from "@/lib/action-result";
 import { getAppSettings } from "@/lib/settings";
 import { extractDomain, normalizeCompanyName } from "@/lib/utils";
-import { billingPeriodFor, buildContractInvoiceLines, manualPeriod, PERIOD_MONTHS, type PreviousInvoice } from "@/lib/billing";
-import { differenceInCalendarDays, parseISO, subDays } from "date-fns";
+import { billingPeriodFor } from "@/lib/billing";
 import { getXeroClient, type XeroConfig, type XeroCredentials } from "@/connectors/xero";
 import { buildAuthorizeUrl, exchangeCode, listTenants, xeroAppConfig, xeroDate, xeroDateOnly } from "@/connectors/xero/live";
 import type { XeroContactRaw, XeroInvoiceRaw, XeroItemRaw, XeroPaymentRaw, XeroRepeatingInvoiceRaw } from "@/connectors/xero/types";
-import { lineChangesFor } from "./contracts";
+import { buildLinesForItems, contractWithLines, draftLineEntries, itemsSpan, planManualItems, type PlannedItem } from "./billing-coverage";
 import { createLink, getConnection, getCredentials, getLink, getLinkByExternal, listLinks, markEventProcessed, raiseConflict, recordInboundEvent, runOutbound, runSync, setConnectionConfig, setCredentials, updateConnection } from "./integrations";
 import { companySchema, contactSchema } from "@/lib/validation";
 import { createCompany, findDuplicateCompanies } from "./companies";
@@ -515,7 +514,18 @@ function draftReference(id: string) {
   return `CRM-${id.slice(0, 8).toUpperCase()}`;
 }
 
-export async function prepareInvoiceDraft(input: { companyId: string; contractId?: string | null; opportunityId?: string | null; periodStart?: string | null; periodEnd?: string | null; description?: string | null }, actorUserId: string) {
+export type PrepareInvoiceInput = {
+  companyId: string;
+  contractId?: string | null;
+  opportunityId?: string | null;
+  periodStart?: string | null;
+  periodEnd?: string | null;
+  description?: string | null;
+  /** From the billing run: exactly these line periods. Otherwise the period above (or today's) decides. */
+  items?: PlannedItem[] | null;
+};
+
+export async function prepareInvoiceDraft(input: PrepareInvoiceInput, actorUserId: string) {
   const conn = await getConnection("xero");
   const cfg = conn.config as XeroConfig;
   const settings = await getAppSettings();
@@ -525,29 +535,27 @@ export async function prepareInvoiceDraft(input: { companyId: string; contractId
   let description = input.description ?? null;
   let settledPeriodEnd: string | null = null;
   if (input.contractId) {
-    const [c] = await db.select().from(contracts).where(eq(contracts.id, input.contractId)).limit(1);
-    if (!c) throw new ActionError("Contract not found.");
-    const cl = await db.select().from(contractLines).where(eq(contractLines.contractId, input.contractId)).orderBy(contractLines.sortOrder);
-    const history = await lineChangesFor([input.contractId]);
-    const months = PERIOD_MONTHS[c.billingFrequency] ?? 1;
-    // The anchored period (so a mid-period start is pro-rated); a hand-typed period that is not an anchored one is billed whole.
-    const today = new Date().toISOString().slice(0, 10);
-    const anchored = billingPeriodFor(c.startDate, c.billingFrequency, input.periodStart ?? today, c.endDate, c.billingDay);
-    const period = input.periodStart && input.periodEnd ? (anchored && anchored.periodStart === input.periodStart && anchored.periodEnd === input.periodEnd ? anchored : manualPeriod(input.periodStart, input.periodEnd)) : anchored;
-    if (!period) throw new ActionError("This contract has no billing period for today: it has not started, has ended, or does not recur. Enter a period.");
-    // The invoice covering the period just before this one, so a quantity change inside it can be caught up.
-    const dayBefore = subDays(parseISO(period.periodStart), 1).toISOString().slice(0, 10);
-    const [prevDraft] = await db
-      .select({ periodStart: invoiceDrafts.periodStart, periodEnd: invoiceDrafts.periodEnd, lines: invoiceDrafts.lines })
-      .from(invoiceDrafts)
-      .where(and(eq(invoiceDrafts.contractId, input.contractId), eq(invoiceDrafts.periodEnd, dayBefore), sql`${invoiceDrafts.status} <> 'cancelled'`))
-      .orderBy(desc(invoiceDrafts.createdAt))
-      .limit(1);
-    const previous: PreviousInvoice | null = prevDraft?.periodStart && prevDraft.periodEnd ? { period: { periodStart: prevDraft.periodStart, periodEnd: prevDraft.periodEnd, fullDays: Math.max(1, differenceInCalendarDays(parseISO(prevDraft.periodEnd), parseISO(prevDraft.periodStart)) + 1) }, lines: prevDraft.lines } : null;
-    lines = buildContractInvoiceLines({ lines: cl.map((l) => ({ ...l, changes: history.get(l.id) ?? [] })), period, months, previous, accountCode, taxType });
-    description ??= `${c.name} — ${c.billingFrequency} billing`;
-    settledPeriodEnd = period.periodEnd;
-    input = { ...input, periodStart: period.periodStart, periodEnd: period.periodEnd };
+    const found = await contractWithLines(input.contractId);
+    if (!found) throw new ActionError("Contract not found.");
+    const { contract: c, lines: cl } = found;
+    const entries = (await draftLineEntries([c.id])).get(c.id) ?? [];
+    let items: PlannedItem[];
+    if (input.items?.length) items = input.items;
+    else if (input.periodStart && input.periodEnd) items = planManualItems(c, cl, input.periodStart, input.periodEnd);
+    else {
+      // No period given: the contract's current period for every recurring line, whether or not it was invoiced (a deliberate manual action).
+      const today = new Date().toISOString().slice(0, 10);
+      const current = billingPeriodFor(c.startDate, c.billingFrequency, today, c.endDate, c.billingDay);
+      if (!current) throw new ActionError("This contract has no billing period for today: it has not started, has ended, or does not recur. Enter a period.");
+      items = planManualItems(c, cl, current.periodStart, current.periodEnd);
+    }
+    if (!items.length) throw new ActionError("Nothing to invoice for that period: no recurring line is due in it.");
+    lines = await buildLinesForItems(c, cl, items, entries, accountCode, taxType);
+    const span = itemsSpan(items)!;
+    const missed = items.filter((i) => i.missed).length;
+    description ??= `${c.name} — ${c.billingFrequency} billing${missed ? ` (includes ${missed} missed period${missed === 1 ? "" : "s"})` : ""}`;
+    settledPeriodEnd = span.periodEnd;
+    input = { ...input, periodStart: span.periodStart, periodEnd: span.periodEnd };
   } else if (input.opportunityId) {
     const [o] = await db.select().from(opportunities).where(eq(opportunities.id, input.opportunityId)).limit(1);
     if (!o) throw new ActionError("Opportunity not found.");

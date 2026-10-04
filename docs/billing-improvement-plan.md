@@ -21,14 +21,16 @@ Working plan for the billing improvement brief (`billing-improvement-brief-for-c
 | Price changes were silent (no history, applied to whatever period came next) | Design limitation | 1A, built: dated, applied from the next period starting on or after the effective day |
 | Backdated change more than one period back is not caught up automatically | Design limitation | later: needs coverage per period (1B) to know which invoice to adjust |
 
+**Built in 1B** (`src/services/billing-coverage.ts`): planning of what each contract owes on a run date, per line and per period; the billing run and *Prepare invoice* both build from it, so a manual period that is not an anchored one is now pro-rated like any other partial period rather than billed whole. The draft's period columns span the items it carries; its description says when missed periods are included.
+
 **Built in 1A:** `contract_line_changes` (value before and after, effective day, actor, reason, the draft that first accounted for it). The engine reconstructs the quantity on any day and charges each increase for its own days; decreases are still not credited in-period (policy work is 1B). Catch-up is the difference between what the previous period should have cost and what its draft billed for the line, so a draft prepared after the change never double-bills. Every engine-produced draft line carries `calc`, shown on the draft page as *How these amounts were calculated*. The contract page shows pending changes per line and a *Change history* card. Cancelling a draft hands its changes back. Existing pending changes were migrated into the history (`0018`).
 
 ## Brief section 2: commitment, price basis, invoice schedule
 
 | Finding | Status | Release |
 |---|---|---|
-| Lines are converted to the contract's frequency (an annual domain on a monthly contract bills a twelfth each month) while the headline figures describe lines billed on their own cycle | **Confirmed inconsistency** | 1B |
-| One global rule for decreases (never credited in-period) | Design limitation | 1B: per-line reduction policy (next period, immediate credit, at renewal) with next period as the migrated default |
+| Lines are converted to the contract's frequency (an annual domain on a monthly contract bills a twelfth each month) while the headline figures describe lines billed on their own cycle | **Confirmed inconsistency** | 1B, built: each line has an **invoice schedule**. *With the contract* (the migrated default, so existing agreements are unchanged) keeps spreading the price over the contract's invoices; *own cycle* invoices the line once per its own period, anchored like the contract. The brief's "£120 a year, invoiced £10 monthly" is the first; a domain renewed yearly is the second |
+| One global rule for decreases (never credited in-period) | Design limitation | 1B, built: per-line **reduction policy**: lower quantity from the next period (migrated default), credit the unused days (negative line, also as a catch-up), old quantity until the contract's renewal date |
 | Separate customer and supplier commitment, charging in advance or arrears | Future capability | 4 |
 | Month-end anchors, leap years, rounding | Covered by tests; leap-day test added in 1A | — |
 
@@ -48,9 +50,10 @@ The billing run page lists ready and skipped contracts with a net figure. No com
 
 | Finding | Status | Release |
 |---|---|---|
-| No billing commencement / cutover date; only the current period is proposed, so earlier missed periods are invisible | Design limitation | 1B |
+| No billing commencement / cutover date; only the current period is proposed, so earlier missed periods are invisible | Design limitation | 1B, built: `contracts.billing_from` (*Bill from (CRM)*). With it, every line period from that date with no draft is proposed by the run and flagged **missed**; without it only the current period is proposed, as before |
+| Coverage was per draft and per contract period (skip if any draft had that period start) | Design limitation | 1B, built: coverage is per **line period** (`calc.from` of a period or pro-rata line in a non-cancelled draft; older drafts cover their own period), so a run after a cancelled draft, a mixed-cycle contract and a missed-period catch-up all work from the same rule |
 | Drafts are not marked stale when the contract changes after preparation | **Confirmed gap** | 1C |
-| A hand-typed period that is not an anchored one is billed whole, not pro-rated | **Confirmed defect** | 1C |
+| A hand-typed period that is not an anchored one is billed whole, not pro-rated | **Confirmed defect** | 1B, built (the manual path goes through the same planner; a partial period is pro-rated) |
 | Approval sets `approved` before the outbound call without an atomic claim; the outbound ledger's row lock stops a true duplicate, but two clicks can both reach the ledger | Design limitation | 1C: claim the row (`draft`/`failed` → `approved`) in one statement |
 | Changes made directly in Xero to a CRM-created invoice are mirrored but not compared with the approved version | Design limitation | 1C |
 | Credits and corrections are not modelled | Future capability | 2/3 |

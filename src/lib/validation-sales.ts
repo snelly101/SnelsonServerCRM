@@ -116,6 +116,8 @@ export const contractSchema = z.object({
   billingFrequency: z.enum(billingFrequencyValues).default("monthly"),
   /** 1–28 anchors billing periods to that day of the month; empty anchors them to the start date. */
   billingDay: z.preprocess((v) => (v === "" || v === undefined || v === null ? null : v), z.coerce.number().int().min(1).max(28).nullable()).default(null),
+  /** Billing commencement in the CRM: uninvoiced periods from this date are proposed as missed. Empty = only the current period. */
+  billingFrom: optionalDate,
   nextReviewDate: optionalDate,
   reviewIntervalMonths: z.coerce.number().int().min(1).max(36).default(6),
   ownerUserId: optionalUserId,
@@ -123,11 +125,22 @@ export const contractSchema = z.object({
 });
 export type ContractInput = z.infer<typeof contractSchema>;
 
+export const invoiceScheduleValues = ["contract", "own"] as const;
+export const reductionPolicyValues = ["next_period", "immediate", "at_renewal"] as const;
+export const INVOICE_SCHEDULE_LABELS: Record<(typeof invoiceScheduleValues)[number], string> = { contract: "With the contract's invoices", own: "On its own cycle" };
+export const REDUCTION_POLICY_LABELS: Record<(typeof reductionPolicyValues)[number], string> = { next_period: "Lower quantity from the next period", immediate: "Credit the unused days", at_renewal: "Old quantity until renewal" };
+
 export const contractLineSchema = lineSchema.extend({
   siteId: optionalUuid,
   countsAsManagedDevice: boolish,
+  invoiceSchedule: z.enum(invoiceScheduleValues).default("contract"),
+  reductionPolicy: z.enum(reductionPolicyValues).default("next_period"),
 });
-export type ContractLineInput = z.infer<typeof contractLineSchema>;
+/** Schedule and reduction policy are optional for callers that build lines in code (imports, tests); the form always sends them. */
+export type ContractLineInput = Omit<z.infer<typeof contractLineSchema>, "invoiceSchedule" | "reductionPolicy"> & {
+  invoiceSchedule?: (typeof invoiceScheduleValues)[number];
+  reductionPolicy?: (typeof reductionPolicyValues)[number];
+};
 
 export const taskSchema = z.object({
   title: trimmed.min(1, "Title is required").max(200),

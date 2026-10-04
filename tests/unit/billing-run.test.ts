@@ -5,6 +5,7 @@ import { contractLines, invoiceDrafts } from "@/db/schema";
 import { createCompany } from "@/services/companies";
 import { companySchema } from "@/lib/validation";
 import { createContract, getContract, listContractLineChanges, updateContract } from "@/services/contracts";
+import { prepareInvoiceDraft } from "@/services/xero";
 import { contractSchema } from "@/lib/validation-sales";
 import { currentBillingPeriod, previewBillingRun, runBillingRun } from "@/services/billing-run";
 import { cancelInvoiceDraft } from "@/services/xero";
@@ -149,5 +150,72 @@ describe("billing run (demo adapter)", () => {
     const after = await listContractLineChanges(id);
     expect(after[0]).toMatchObject({ contractLineId: null, lineDescription: "Users", previousValue: "14.00", newValue: "0.00", reason: "service ended" });
     expect(after).toHaveLength(3);
+  });
+
+  it("lines on their own cycle: an annual domain on a monthly contract is invoiced once a year, not a twelfth a month, and the run never proposes a covered period again", async () => {
+    const id = await createContract(
+      contractSchema.parse({ companyId, name: "Mixed cycles", startDate: "2026-03-10", status: "active", billingFrequency: "monthly" }),
+      [line({ description: "Support", quantity: 5, unitPrice: 20 }), line({ description: "Domain", pricingModel: "fixed", billingFrequency: "annual", quantity: 1, unitPrice: 120, invoiceSchedule: "own" }), line({ description: "Spread licence", pricingModel: "fixed", billingFrequency: "annual", quantity: 1, unitPrice: 240 })],
+      admin.id,
+    );
+    // First run in the first month: support for the month, the domain for the year, the spread licence as a twelfth.
+    const first = (await previewBillingRun("2026-03-12")).find((r) => r.contractId === id)!;
+    expect(first.items.map((i) => [i.description, i.period.periodStart, i.period.periodEnd, i.months])).toEqual([
+      ["Support", "2026-03-10", "2026-04-09", 1],
+      ["Domain", "2026-03-10", "2027-03-09", 12],
+      ["Spread licence", "2026-03-10", "2026-04-09", 1],
+    ]);
+    expect(first.net).toBe(100 + 120 + 20);
+    const run = await runBillingRun("2026-03-12", [id], admin.id);
+    const draft = (await db.select().from(invoiceDrafts).where(eq(invoiceDrafts.id, run.created[0].draftId)))[0];
+    expect(draft).toMatchObject({ periodStart: "2026-03-10", periodEnd: "2027-03-09" });
+    expect(draft.lines.map((l) => [l.description, l.unitAmount])).toEqual([
+      ["Support (2026-03-10 to 2026-04-09)", 20],
+      ["Spread licence (2026-03-10 to 2026-04-09)", 20],
+      ["Domain (2026-03-10 to 2027-03-09)", 120],
+    ]);
+    // Next month: the domain's year is covered, only the monthly items are due.
+    const second = (await previewBillingRun("2026-04-12")).find((r) => r.contractId === id)!;
+    expect(second.items.map((i) => i.description)).toEqual(["Support", "Spread licence"]);
+    expect(second.net).toBe(120);
+    // Next year's first month: the domain is due again.
+    const year = (await previewBillingRun("2027-03-12")).find((r) => r.contractId === id)!;
+    expect(year.items.map((i) => [i.description, i.period.periodStart])).toContainEqual(["Domain", "2027-03-10"]);
+    // Manual preparation for the April period picks up the monthly lines only; the domain's own period does not start inside it.
+    const manual = await prepareInvoiceDraft({ companyId, contractId: id, periodStart: "2026-04-10", periodEnd: "2026-05-09" }, admin.id);
+    const manualDraft = (await db.select().from(invoiceDrafts).where(eq(invoiceDrafts.id, manual)))[0];
+    expect(manualDraft.lines.map((l) => l.description)).toEqual(["Support (2026-04-10 to 2026-05-09)", "Spread licence (2026-04-10 to 2026-05-09)"]);
+    expect((await previewBillingRun("2026-04-12")).find((r) => r.contractId === id)!.skipReason).toMatch(/already drafted/);
+  });
+
+  it("missed periods: with a billing-from date, earlier uncovered periods are proposed and flagged; without one only the current period is", async () => {
+    const id = await createContract(
+      contractSchema.parse({ companyId, name: "Imported mid-life", startDate: "2025-01-01", status: "active", billingFrequency: "monthly", billingDay: "1" }),
+      [line({ description: "Users", quantity: 4, unitPrice: 25 })],
+      admin.id,
+    );
+    const quiet = (await previewBillingRun("2026-10-05")).find((r) => r.contractId === id)!;
+    expect(quiet.items).toHaveLength(1);
+    expect(quiet.missedCount).toBe(0);
+    // Billing in the CRM began on 1 August: August and September were never drafted.
+    await updateContract(id, contractSchema.parse({ companyId, name: "Imported mid-life", startDate: "2025-01-01", status: "active", billingFrequency: "monthly", billingDay: "1", billingFrom: "2026-08-01" }), null, admin.id);
+    const row = (await previewBillingRun("2026-10-05")).find((r) => r.contractId === id)!;
+    expect(row.items.map((i) => [i.period.periodStart, i.missed])).toEqual([
+      ["2026-08-01", true],
+      ["2026-09-01", true],
+      ["2026-10-01", false],
+    ]);
+    expect(row.missedCount).toBe(2);
+    expect(row.net).toBe(300);
+    const run = await runBillingRun("2026-10-05", [id], admin.id);
+    expect(run.created[0].missed).toBe(2);
+    const draft = (await db.select().from(invoiceDrafts).where(eq(invoiceDrafts.id, run.created[0].draftId)))[0];
+    expect(draft).toMatchObject({ periodStart: "2026-08-01", periodEnd: "2026-10-31" });
+    expect(draft.description).toMatch(/includes 2 missed periods/);
+    expect(draft.lines.map((l) => l.description)).toEqual(["Users (2026-08-01 to 2026-08-31)", "Users (2026-09-01 to 2026-09-30)", "Users (2026-10-01 to 2026-10-31)"]);
+    // Everything up to October is covered now; November is the only thing due next month.
+    expect((await previewBillingRun("2026-10-20")).find((r) => r.contractId === id)!.skipReason).toMatch(/already drafted/);
+    const nov = (await previewBillingRun("2026-11-03")).find((r) => r.contractId === id)!;
+    expect(nov.items.map((i) => [i.period.periodStart, i.missed])).toEqual([["2026-11-01", false]]);
   });
 });

@@ -96,6 +96,10 @@ export type BillableLine = {
   unitPrice: number | string;
   /** Dated history; any order. */
   changes?: LineChange[] | null;
+  /** next_period (default): decreases apply from the next period. immediate: credit the unused days. at_renewal: the old quantity is billed until `decreasesFrom`. */
+  reductionPolicy?: "next_period" | "immediate" | "at_renewal" | null;
+  /** For at_renewal: the day from which decreases count (the contract's renewal or end date). */
+  decreasesFrom?: string | null;
 };
 
 export type PreviousInvoice = { period: { periodStart: string; periodEnd: string; fullDays: number }; lines: InvoiceDraftLine[] };
@@ -121,6 +125,25 @@ export function valueOn(l: BillableLine, field: LineChange["field"], date: strin
 }
 
 export const quantityOn = (l: BillableLine, date: string) => valueOn(l, "quantity", date);
+
+/**
+ * The quantity to bill on a day. Same as `quantityOn` unless the line's
+ * reductions wait for renewal: then any decrease dated before `decreasesFrom`
+ * is ignored (the old quantity stays billed), walking forward through the
+ * recorded chain so a later rise still counts from the kept level.
+ */
+export function billingQuantityOn(l: BillableLine, date: string): number {
+  if (l.reductionPolicy !== "at_renewal" || !l.decreasesFrom || date >= l.decreasesFrom) return quantityOn(l, date);
+  const list = sortedChanges(l, "quantity");
+  if (!list.length) return num(l.quantity);
+  let q = num(list[0].previousValue, num(l.quantity));
+  for (const c of list) {
+    if (c.effectiveFrom > date) break;
+    const next = num(c.newValue, q);
+    q = c.effectiveFrom < l.decreasesFrom ? Math.max(q, next) : next;
+  }
+  return q;
+}
 export const unitPriceOn = (l: BillableLine, date: string) => valueOn(l, "unit_price", date);
 
 /** The per-period unit price of a line on a date, normalised from the line's own frequency to a `months`-long period. */
@@ -131,7 +154,7 @@ function unitPerPeriodOn(l: BillableLine, months: number, date: string) {
 }
 
 export type ChargeSegment = {
-  kind: "period" | "prorata" | "increase";
+  kind: "period" | "prorata" | "increase" | "decrease";
   quantity: number;
   unitPerPeriod: number;
   from: string;
@@ -151,7 +174,7 @@ export type ChargeSegment = {
 export function chargeSegments(l: BillableLine, period: BillingPeriod, months: number): ChargeSegment[] {
   const out: ChargeSegment[] = [];
   const unitPerPeriod = unitPerPeriodOn(l, months, period.periodStart);
-  const startQty = quantityOn(l, period.periodStart);
+  const startQty = billingQuantityOn(l, period.periodStart);
   const partial = period.days < period.fullDays;
   if (startQty > 0) {
     const amount = partial ? round2(startQty * unitPerPeriod * (period.days / period.fullDays)) : round2(startQty * unitPerPeriod);
@@ -163,12 +186,17 @@ export function chargeSegments(l: BillableLine, period: BillingPeriod, months: n
   const byDay = new Map<string, LineChange[]>();
   for (const c of inside) byDay.set(c.effectiveFrom, [...(byDay.get(c.effectiveFrom) ?? []), c]);
   for (const [day, cs] of byDay) {
-    const q = quantityOn(l, day);
+    const q = billingQuantityOn(l, day);
+    const n = days(day, period.periodEnd);
+    const ids = cs.map((c) => c.id ?? "").filter(Boolean);
     if (q > level) {
-      const n = days(day, period.periodEnd);
-      out.push({ kind: "increase", quantity: q - level, unitPerPeriod, from: day, to: period.periodEnd, days: n, fullDays: period.fullDays, amount: round2((q - level) * unitPerPeriod * (n / period.fullDays)), changeIds: cs.map((c) => c.id ?? "").filter(Boolean) });
+      out.push({ kind: "increase", quantity: q - level, unitPerPeriod, from: day, to: period.periodEnd, days: n, fullDays: period.fullDays, amount: round2((q - level) * unitPerPeriod * (n / period.fullDays)), changeIds: ids });
+      level = q;
+    } else if (q < level && l.reductionPolicy === "immediate") {
+      out.push({ kind: "decrease", quantity: level - q, unitPerPeriod, from: day, to: period.periodEnd, days: n, fullDays: period.fullDays, amount: -round2((level - q) * unitPerPeriod * (n / period.fullDays)), changeIds: ids });
+      level = q;
     }
-    level = Math.max(level, q);
+    // next_period and at_renewal: a drop is not credited; the billed level stays until the next period (or renewal).
   }
   return out;
 }
@@ -179,6 +207,7 @@ function toLine(l: BillableLine, s: ChargeSegment, accountCode: string, taxType:
   const base = { accountCode, taxType, contractLineId: l.id };
   if (s.kind === "period") return { ...base, description: `${l.description} (${label({ periodStart: s.from, periodEnd: s.to })})`, quantity: s.quantity, unitAmount: s.unitPerPeriod, calc: { kind: "period", quantity: s.quantity, unitPerPeriod: s.unitPerPeriod, from: s.from, to: s.to, days: s.days, fullDays: s.fullDays, changeIds: s.changeIds } };
   if (s.kind === "prorata") return { ...base, description: `${l.description} (${label({ periodStart: s.from, periodEnd: s.to })}): ${s.quantity} × ${s.unitPerPeriod.toFixed(2)}, ${s.days} of ${s.fullDays} days (pro rata)`, quantity: 1, unitAmount: s.amount, calc: { kind: "prorata", quantity: s.quantity, unitPerPeriod: s.unitPerPeriod, from: s.from, to: s.to, days: s.days, fullDays: s.fullDays, changeIds: s.changeIds } };
+  if (s.kind === "decrease") return { ...base, description: `${l.description}: ${s.quantity} removed from ${s.from}, ${s.days} of ${s.fullDays} days (credit)`, quantity: 1, unitAmount: s.amount, calc: { kind: "decrease", quantity: s.quantity, unitPerPeriod: s.unitPerPeriod, from: s.from, to: s.to, days: s.days, fullDays: s.fullDays, changeIds: s.changeIds } };
   return { ...base, description: `${l.description}: ${s.quantity} added from ${s.from}, ${s.days} of ${s.fullDays} days (pro rata)`, quantity: 1, unitAmount: s.amount, calc: { kind: "increase", quantity: s.quantity, unitPerPeriod: s.unitPerPeriod, from: s.from, to: s.to, days: s.days, fullDays: s.fullDays, changeIds: s.changeIds } };
 }
 
@@ -204,10 +233,11 @@ export function buildContractInvoiceLines(input: { lines: BillableLine[]; period
         const billedLines = previous.lines.filter((x) => x.contractLineId === l.id);
         const billed = round2(billedLines.reduce((a, x) => a + x.quantity * x.unitAmount, 0));
         const diff = round2(expected - billed);
-        if (diff > 0.005) {
-          const increases = segments.filter((s) => s.kind === "increase");
-          const detail = increases.length === 1 ? `${increases[0].quantity} added from ${increases[0].from}, ${increases[0].days} of ${prevPeriod.fullDays} days (pro rata, previous period)` : `adjustment for ${label(prevPeriod)} (${increases.length} changes, previous period)`;
-          out.push({ description: `${l.description}: ${detail}`, quantity: 1, unitAmount: diff, accountCode, taxType, contractLineId: l.id, calc: { kind: "catchup", quantity: increases.reduce((a, s) => a + s.quantity, 0), unitPerPeriod: unitPerPeriodOn(l, months, prevPeriod.periodStart), from: prevPeriod.periodStart, to: prevPeriod.periodEnd, days: prevPeriod.days, fullDays: prevPeriod.fullDays, expected, billedBefore: billed, changeIds: changed.map((c) => c.id ?? "").filter(Boolean) } });
+        if (diff > 0.005 || (diff < -0.005 && l.reductionPolicy === "immediate")) {
+          const moves = segments.filter((s) => s.kind === "increase" || s.kind === "decrease");
+          const one = moves.length === 1 ? moves[0] : null;
+          const detail = one ? `${one.quantity} ${one.kind === "increase" ? "added" : "removed"} from ${one.from}, ${one.days} of ${prevPeriod.fullDays} days (${one.kind === "increase" ? "pro rata" : "credit"}, previous period)` : `adjustment for ${label(prevPeriod)} (${moves.length} changes, previous period)`;
+          out.push({ description: `${l.description}: ${detail}`, quantity: 1, unitAmount: diff, accountCode, taxType, contractLineId: l.id, calc: { kind: "catchup", quantity: moves.reduce((a, s) => a + (s.kind === "increase" ? s.quantity : -s.quantity), 0), unitPerPeriod: unitPerPeriodOn(l, months, prevPeriod.periodStart), from: prevPeriod.periodStart, to: prevPeriod.periodEnd, days: prevPeriod.days, fullDays: prevPeriod.fullDays, expected, billedBefore: billed, changeIds: changed.map((c) => c.id ?? "").filter(Boolean) } });
         }
       }
     }
@@ -227,8 +257,10 @@ export function explainLineCalc(c: InvoiceLineCalc, money: (n: number) => string
       return `${c.quantity} × ${unit} for ${c.days} of the ${c.fullDays} days in the period (${c.from} to ${c.to}), pro rata.`;
     case "increase":
       return `${c.quantity} more from ${c.from}: ${c.quantity} × ${unit} × ${c.days}/${c.fullDays} days to ${c.to}.`;
+    case "decrease":
+      return `${c.quantity} fewer from ${c.from}: credit of ${c.quantity} × ${unit} × ${c.days}/${c.fullDays} days to ${c.to}.`;
     case "catchup":
-      return `The previous period (${c.from} to ${c.to}) should have cost ${money(c.expected ?? 0)} once the change inside it is counted; ${money(c.billedBefore ?? 0)} was invoiced, so the difference is added here.`;
+      return `The previous period (${c.from} to ${c.to}) should have cost ${money(c.expected ?? 0)} once the changes inside it are counted; ${money(c.billedBefore ?? 0)} was invoiced, so the difference is ${(c.expected ?? 0) >= (c.billedBefore ?? 0) ? "added" : "credited"} here.`;
     default:
       return "";
   }

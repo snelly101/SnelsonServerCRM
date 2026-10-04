@@ -98,7 +98,7 @@ export const invoiceDraftStatusEnum = pgEnum("invoice_draft_status", ["draft", "
 
 /** The inputs behind a calculated draft line, kept with the line so the invoice stays explainable after the contract changes. */
 export type InvoiceLineCalc = {
-  kind: "period" | "prorata" | "increase" | "catchup";
+  kind: "period" | "prorata" | "increase" | "decrease" | "catchup";
   quantity: number;
   unitPerPeriod: number;
   from: string;
