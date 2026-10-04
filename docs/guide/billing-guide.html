@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Billing guide</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm 20mm 16mm; }
+  :root { --ink: #0f172a; --muted: #475569; --line: #e2e8f0; --brand: #1d36d6; --amber: #b45309; --red: #b91c1c; --green: #15803d; }
+  html { font-family: "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif; color: var(--ink); font-size: 11.5pt; line-height: 1.5; }
+  body { margin: 0; }
+  h1 { font-size: 26pt; margin: 0 0 4pt; letter-spacing: -0.01em; }
+  h2 { font-size: 17pt; margin: 0 0 8pt; padding-bottom: 4pt; border-bottom: 2px solid var(--brand); page-break-after: avoid; }
+  h3 { font-size: 13pt; margin: 14pt 0 4pt; page-break-after: avoid; }
+  p { margin: 0 0 7pt; }
+  ul, ol { margin: 0 0 8pt 18pt; padding: 0; }
+  li { margin-bottom: 3pt; }
+  .cover { height: 240mm; display: flex; flex-direction: column; justify-content: center; }
+  .cover .sub { font-size: 14pt; color: var(--muted); margin-bottom: 24pt; }
+  .cover .meta { color: var(--muted); font-size: 10pt; }
+  .toc ol { list-style: none; margin-left: 0; }
+  .toc li { display: flex; justify-content: space-between; border-bottom: 1px dotted var(--line); padding: 3pt 0; }
+  section.chapter { page-break-before: always; }
+  figure { margin: 10pt 0 12pt; page-break-inside: avoid; }
+  figure img { max-width: 100%; max-height: 135mm; width: auto; display: block; margin: 0 auto; border: 1px solid var(--line); border-radius: 4px; }
+  figcaption { font-size: 9.5pt; color: var(--muted); margin-top: 4pt; }
+  .tall img { max-height: 200mm; }
+  table { border-collapse: collapse; width: 100%; margin: 6pt 0 10pt; font-size: 10.5pt; page-break-inside: avoid; }
+  th, td { border: 1px solid var(--line); padding: 4pt 6pt; text-align: left; vertical-align: top; }
+  th { background: #f8fafc; }
+  .callout { border-left: 4px solid var(--brand); background: #f1f5ff; padding: 6pt 10pt; margin: 8pt 0 10pt; page-break-inside: avoid; }
+  .callout.warn { border-color: var(--amber); background: #fffbeb; }
+  .steps li { margin-bottom: 6pt; }
+  .tag { display: inline-block; font-size: 9pt; padding: 0 5pt; border-radius: 9pt; border: 1px solid var(--line); background: #f8fafc; }
+  .red { color: var(--red); } .amber { color: var(--amber); } .green { color: var(--green); }
+  code { font-family: Consolas, Menlo, monospace; font-size: 10pt; background: #f1f5f9; padding: 0 3pt; border-radius: 3px; }
+  .small { font-size: 9.5pt; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <h1>Billing in the Snelson Server CRM</h1>
+  <div class="sub">A practical guide: from contract lines to invoices in Xero, with every screen along the way</div>
+  <p class="meta">Version 1 · October 2026 · Screens taken from the demo data, so names and figures are illustrative.</p>
+  <p class="meta">Xero remains the system of record for issued invoices, payments and balances. The CRM calculates, explains and prepares; it creates <strong>draft</strong> invoices in Xero and never authorises or sends them.</p>
+</div>
+
+<section class="chapter toc">
+  <h2>Contents</h2>
+  <ol>
+    <li><span>1. How billing works, in one page</span></li>
+    <li><span>2. Setting a customer up to be billed</span></li>
+    <li><span>3. The monthly run: Prepare, Approve, Issued</span></li>
+    <li><span>4. Reading a draft and the customer schedule</span></li>
+    <li><span>5. Handling changes during a period</span></li>
+    <li><span>6. Exceptions: findings and count discrepancies</span></li>
+    <li><span>7. Services: what we provide against what we bill</span></li>
+    <li><span>8. Renewals and price reviews</span></li>
+    <li><span>9. Invoices and supplier bills</span></li>
+    <li><span>10. Automation, in stages</span></li>
+    <li><span>11. One customer at a glance: the company Billing tab</span></li>
+    <li><span>12. Roles, audit and where things live</span></li>
+    <li><span>13. Quick answers</span></li>
+  </ol>
+</section>
+
+<section class="chapter">
+  <h2>1. How billing works, in one page</h2>
+  <p>Everything about money sits under one sidebar entry, <strong>Billing</strong>. Its left-hand navigation is ordered the way the month flows.</p>
+  <table>
+    <tr><th style="width:28%">Section</th><th>What it is for</th></tr>
+    <tr><td>Overview</td><td>Where this month stands and a "what to do next" list that links straight into the steps below.</td></tr>
+    <tr><td>Monthly run</td><td>Three steps as tabs: <strong>Prepare</strong> (what is due and what changed), <strong>Approve</strong> (drafts to Xero), <strong>Issued</strong> (created in Xero, and anything changed in Xero afterwards).</td></tr>
+    <tr><td>Exceptions</td><td>Findings, licence and device count discrepancies and accepted exceptions in one place, each with the way to resolve it.</td></tr>
+    <tr><td>Services</td><td>The service register: every subscription, hosting item and device the integrations report, and how each is covered commercially.</td></tr>
+    <tr><td>Renewals &amp; pricing</td><td>The renewal queue with supplier commitment exposure, and the price review tool.</td></tr>
+    <tr><td>Invoices</td><td>The Xero sales mirror (outstanding, overdue, paid) and the Pax8 supplier bill reconciliation.</td></tr>
+    <tr><td>Automation</td><td>The staged automation policy in Settings.</td></tr>
+  </table>
+  <h3>The chain</h3>
+  <ol class="steps">
+    <li><strong>Contract lines</strong> say what a customer pays for: description, quantity, unit price, billing frequency, and for each line an invoice schedule and a reduction policy.</li>
+    <li>The <strong>billing engine</strong> works out, for a run date, which line periods are due and not yet invoiced and what each costs, including pro-rated additions, credits and catch-ups from dated changes.</li>
+    <li>The <strong>Monthly run</strong> shows one row per contract with the proposed amount, the previous invoice and plain-language reasons for any difference. Ticked rows become CRM <strong>drafts</strong>.</li>
+    <li>Drafts are reviewed and <strong>approved</strong>; approval creates the invoice in Xero as a DRAFT with a reference back to the CRM.</li>
+    <li>Finance approves and sends from Xero. Payments and status changes flow back and appear under Invoices.</li>
+    <li>Between runs, <strong>Exceptions</strong>, <strong>Services</strong> and <strong>Renewals</strong> keep the next run clean.</li>
+  </ol>
+  <figure><img src="img/01-overview.png" alt="Billing overview"><figcaption>Billing → Overview. The "what to do next" list is ordered by urgency: red is now, amber is this run, grey is information. Every line links to where it is resolved.</figcaption></figure>
+</section>
+
+<section class="chapter">
+  <h2>2. Setting a customer up to be billed</h2>
+  <h3>2.1 Link the company to its Xero contact</h3>
+  <p>A draft can be prepared without the link but cannot be approved. Go to Integrations → Xero → Mapping, or follow the red "Link this customer to its Xero contact" action on the company's Billing tab. The link is one to one: a Xero contact can belong to only one CRM company.</p>
+  <h3>2.2 Give the contract the right terms</h3>
+  <p>On the contract (Contracts &amp; Services → the agreement → Edit):</p>
+  <ul>
+    <li><strong>Start date</strong> and <strong>billing frequency</strong> anchor the periods. A <strong>billing day</strong> (1 to 28) anchors them to that day of the month instead; a start part-way through a period is pro-rated.</li>
+    <li><strong>Bill from (CRM)</strong> is the billing commencement in the CRM. Periods from this date with no draft are proposed as <em>missed</em>. Leave it empty for a contract imported mid-life so nothing earlier is back-billed.</li>
+    <li><strong>Renewal date</strong> and <strong>notice period</strong> drive the renewal queue; <strong>Prices fixed until the renewal date</strong> stops a price review changing this customer before then.</li>
+    <li><strong>Customer PO reference</strong> is copied onto every invoice drafted from the agreement and sent to Xero on the first line.</li>
+  </ul>
+  <figure><img src="img/18-contract-edit.png" alt="Contract edit form"><figcaption>The contract form. The lines editor at the bottom carries each line's invoice schedule and reduction policy; "Changes take effect from" dates any quantity or price change you make.</figcaption></figure>
+  <h3>2.3 Lines: schedule and reduction policy</h3>
+  <table>
+    <tr><th style="width:30%">Setting</th><th>Meaning</th></tr>
+    <tr><td>Invoice schedule: <em>With the contract</em> (default)</td><td>The line's price is spread over the contract's invoices. An annual £120 domain on a monthly contract bills £10 a month.</td></tr>
+    <tr><td>Invoice schedule: <em>On its own cycle</em></td><td>The line is invoiced once per its own period, anchored like the contract. A domain renewed yearly is billed once a year, in full.</td></tr>
+    <tr><td>Reduction policy: <em>Next period</em> (default)</td><td>A lower quantity applies from the next period; nothing is credited inside the current one.</td></tr>
+    <tr><td>Reduction policy: <em>Immediate</em></td><td>The unused days are credited as a negative line (and as a catch-up if the period was already invoiced).</td></tr>
+    <tr><td>Reduction policy: <em>At renewal</em></td><td>The old quantity is billed until the contract's renewal date.</td></tr>
+  </table>
+  <h3>2.4 Tell the register which line bills each service</h3>
+  <p>On the company's <strong>Subscriptions</strong> tab (Pax8) and <strong>Hosting</strong> tab (20i), choose the billing line for each subscription, package or domain. Lines marked "compare with NinjaOne" are compared with the device count at the linked organisation. Anything left without a line shows as <strong>unmapped</strong> in Services and in the Exceptions list until a decision is recorded (see chapter 7).</p>
+  <figure><img src="img/20-company-subscriptions.png" alt="Company subscriptions tab"><figcaption>Company → Subscriptions: each Pax8 subscription and the contract line that bills it.</figcaption></figure>
+</section>
+
+<section class="chapter">
+  <h2>3. The monthly run: Prepare, Approve, Issued</h2>
+  <div class="callout">The run is safe to repeat. A line period that already has a draft is never proposed again, whichever draft carries it.</div>
+  <h3>Step 1: Prepare</h3>
+  <p>Billing → Monthly run → <strong>Prepare</strong>. Pick a run date (today by default). The summary line says how many contracts are ready, need review or are blocked, the expected billing total, potential missed revenue across unmapped services, and renewals and notice deadlines this week.</p>
+  <p>Each row shows the customer and agreement, the period, the <strong>proposed</strong> net, the <strong>previous</strong> comparable draft (linked), the difference, and a status:</p>
+  <ul>
+    <li><span class="green"><strong>Ready</strong></span>: Xero linked, same amount as the previous invoice, nothing open for the customer. Ticked by default.</li>
+    <li><span class="amber"><strong>Needs review</strong></span>: something deserves a look: a changed amount with its reasons, an open discrepancy, an unmapped service, Pax8 or NinjaOne data not fetched for three hours, missed periods, or a first invoice from the CRM. Tick after reading the reasons.</li>
+    <li><span class="red"><strong>Blocked</strong></span>: the company has no Xero link, so the draft could not be approved. Cannot be ticked.</li>
+  </ul>
+  <p>Open the <em>why</em> toggle on a row to see the reasons. They are read from the calculated lines against the previous draft, never guessed: "Users: 10 → 12", "price £40.00 → £42.00 per unit", "2 added from 14 Oct, pro rata (£10.92)", "Includes 2 missed periods".</p>
+  <p>Leave <strong>One draft per customer</strong> ticked to get a single consolidated draft when several agreements of the same customer are due. Click <strong>Prepare drafts</strong>.</p>
+  <figure><img src="img/02-run-prepare.png" alt="Monthly run, Prepare step"><figcaption>Step 1, Prepare, with the reasons opened on the first row.</figcaption></figure>
+  <h3>Step 2: Approve</h3>
+  <p>Billing → Monthly run → <strong>Approve</strong> lists every draft awaiting approval with its verdict:</p>
+  <ul>
+    <li><strong>Unchanged</strong>: same contract lines, quantities and prices as the previous invoice, Xero linked, not stale, a plain draft. Ticked by default; <strong>Approve N in Xero</strong> creates them one after another. Each is re-checked at the moment of approval and anything that changed meanwhile is skipped with the reason.</li>
+    <li><strong>Needs review</strong>: the amount or lines differ (with the <em>why</em> reasons), the draft is <em>stale</em> (the contract changed after it was prepared), it is the first invoice from the CRM, or it was prepared by hand. Open it with <em>Review &amp; approve</em>.</li>
+    <li><strong>Failed</strong>: Xero rejected it; the error is shown. Fix and approve again.</li>
+  </ul>
+  <figure><img src="img/03-run-approve.png" alt="Monthly run, Approve step"><figcaption>Step 2, Approve. Unchanged drafts can go together; exceptions keep the one-by-one review.</figcaption></figure>
+  <h3>Step 3: Issued</h3>
+  <p>Billing → Monthly run → <strong>Issued</strong> lists what was created in Xero, with the Xero invoice number and a link to each customer schedule. If an invoice is changed, voided or deleted in Xero after approval, it appears at the top against the approved version. From here on, approve and send from Xero; payments come back through the hourly sync and webhooks.</p>
+  <figure><img src="img/06-run-issued.png" alt="Monthly run, Issued step"><figcaption>Step 3, Issued.</figcaption></figure>
+</section>
+
+<section class="chapter">
+  <h2>4. Reading a draft and the customer schedule</h2>
+  <p>A draft page has the lines (editable until approval), <strong>What the customer sees</strong> (one paragraph derived from the calculated lines), <strong>How these amounts were calculated</strong> (one explanation per line: the quantity on the first day, each addition for its remaining days, credits, catch-ups), the details (dates, period, PO reference, Xero contact) and the approval controls.</p>
+  <p>If the contract changed after the draft was prepared, a <strong>stale</strong> notice lists the changes since and offers <strong>Re-prepare from the contract</strong>: the old draft is cancelled, its periods and changes are handed back, and a fresh draft is prepared for the same stretch.</p>
+  <figure class="tall"><img src="img/04-draft.png" alt="Draft invoice page"><figcaption>A draft, with the customer explanation and the calculation panel.</figcaption></figure>
+  <h3>The customer schedule</h3>
+  <p>Click <strong>Customer schedule</strong> on a draft for a printable page to send with the Xero invoice: the explanation, the charges grouped by agreement with service dates, the supporting list of licences, devices and domains behind each charge, the PO reference and the agreement's renewal date. Use <em>Print or save as PDF</em>.</p>
+  <figure><img src="img/05-schedule.png" alt="Customer schedule"><figcaption>The customer schedule for a draft.</figcaption></figure>
+  <h3>Preparing one invoice by hand</h3>
+  <p>On a contract page, <strong>Prepare invoice</strong> opens a dialog with the period. The calculated lines, net and any already-drafted periods are shown before anything is created, so a partial period or a double-up is visible up front. A hand-typed period that is not an anchored one is pro-rated like any other partial period.</p>
+  <figure><img src="img/17-prepare-preview.png" alt="Prepare invoice dialog"><figcaption>Contract → Prepare invoice: the preview before the draft exists.</figcaption></figure>
+</section>
+
+<section class="chapter">
+  <h2>5. Handling changes during a period</h2>
+  <p>Every quantity or price change on an active contract is recorded as dated history: the value before and after, the effective day, who made it and why, and the draft that first accounted for it. The engine always calculates from this history, so several changes in one period are each charged for their own days.</p>
+  <h3>How to record a change</h3>
+  <ol class="steps">
+    <li>Open the contract and click <strong>Edit</strong>.</li>
+    <li>Change the quantity or unit price on the line.</li>
+    <li>Set <strong>Changes take effect from</strong> to the day the change applies (the day the users started, not the day you heard). Add a reason.</li>
+    <li>Save. The contract page shows the pending change on the line and the <strong>Change history</strong> card.</li>
+  </ol>
+  <table>
+    <tr><th style="width:30%">Change</th><th>What the next invoice does</th></tr>
+    <tr><td>Quantity up, inside the current period</td><td>The period is charged at the quantity on its first day, plus the extra units for their remaining days, pro rata. If the period was already invoiced, the difference is caught up on the next invoice.</td></tr>
+    <tr><td>Quantity down</td><td>Follows the line's reduction policy: from the next period, credited now, or at renewal.</td></tr>
+    <tr><td>Price change</td><td>Applies from the next anchored period starting on or after the effective day. Price changes are never pro-rated.</td></tr>
+    <tr><td>Backdated change</td><td>A change dated inside the previous period produces a traceable catch-up line: what that period should have cost, what was invoiced, the difference.</td></tr>
+  </table>
+  <div class="callout">Cancelling a draft never loses a change: its periods become due again and its changes wait for the next draft.</div>
+  <figure class="tall"><img src="img/16-contract.png" alt="Contract page"><figcaption>A contract page: contracted services, pending changes, change history, the device count check, renewal and terms.</figcaption></figure>
+</section>
+
+<section class="chapter">
+  <h2>6. Exceptions: findings and count discrepancies</h2>
+  <p>Billing → <strong>Exceptions</strong> is every reason the next run would not be clean, in one place. The views are <em>Everything open</em>, <em>Findings</em>, <em>Count discrepancies</em> and <em>Accepted exceptions</em>.</p>
+  <h3>Findings</h3>
+  <table>
+    <tr><th style="width:34%">Finding</th><th>Meaning and where it is resolved</th></tr>
+    <tr><td>Service without commercial coverage</td><td>Possibly missed revenue. Choose the billing line on the Subscriptions or Hosting tab, or record bundled, free, internal or investigate in Services.</td></tr>
+    <tr><td>Free arrangement past its review date</td><td>Decide again: extend the review date or start charging.</td></tr>
+    <tr><td>Covered service without an expected charge</td><td>Its line is on a non-active contract or has quantity 0. Fix the contract.</td></tr>
+    <tr><td>Expected charge not yet drafted</td><td>What the next run proposes; missed periods are red. Run step 1.</td></tr>
+    <tr><td>Draft waiting more than a week</td><td>Approve or cancel it.</td></tr>
+    <tr><td>Customer invoice differs from what was approved</td><td>Changed, voided or deleted in Xero after approval. Compare on the draft page.</td></tr>
+    <tr><td>Supplier charge differs / without a customer</td><td>Pax8 invoice vs Xero bill, or a Pax8 charge whose company is not linked. See chapter 9.</td></tr>
+    <tr><td>Customer invoice raised outside the CRM</td><td>Information only.</td></tr>
+  </table>
+  <figure><img src="img/07-exceptions.png" alt="Exceptions page"><figcaption>Exceptions, with the finding counts across the top.</figcaption></figure>
+  <h3>Count discrepancies and the Resolve dialog</h3>
+  <p>The licence check (Pax8) and the device check (NinjaOne) compare the contracted quantity with what the supplier reports, on every sync. A difference becomes a review item. Click <strong>Resolve…</strong> to see the options and the money consequence before anything happens:</p>
+  <ul>
+    <li><strong>Amend the contract line</strong> to the observed count from a chosen date: a dated change with a reason, pro-rated by the engine, linked back from the item.</li>
+    <li><strong>Reduce at renewal</strong> (fewer observed): the lower count, billed at the agreed count until the renewal date.</li>
+    <li><strong>Include in a bundle</strong> (licences): the chosen subscriptions count toward another line instead.</li>
+    <li><strong>Accept as an exception</strong> with an owner, a review date and a reason. It re-opens by itself after the date, or earlier if the gap grows.</li>
+    <li><strong>Dismiss</strong>: not a billing matter.</li>
+  </ul>
+  <figure><img src="img/08-exceptions-counts.png" alt="Resolve discrepancy dialog"><figcaption>The Resolve dialog on a device count discrepancy, with the money consequence for this period and every period after.</figcaption></figure>
+</section>
+
+<section class="chapter">
+  <h2>7. Services: what we provide against what we bill</h2>
+  <p>Billing → <strong>Services</strong> lists every service the integrations say a customer has and how it is covered commercially. Only <strong>unmapped</strong> may mean missed revenue; every other state is a recorded decision with a reason.</p>
+  <table>
+    <tr><th style="width:26%">State</th><th>Meaning</th></tr>
+    <tr><td>Charged</td><td>A contract line bills it (chosen on the company's Subscriptions or Hosting tab, or matched by SKU or name).</td></tr>
+    <tr><td>Included in a bundle</td><td>Another line pays for it; the licence check counts it toward that line.</td></tr>
+    <tr><td>Covered by commitment</td><td>Part of a commitment already billed; counts toward nothing.</td></tr>
+    <tr><td>Free</td><td>Deliberately free, with a reason and a review date. Comes back as a finding when the date passes.</td></tr>
+    <tr><td>Internal</td><td>Our own use; left out of counts.</td></tr>
+    <tr><td>Needs investigation</td><td>Parked with a reason until someone decides.</td></tr>
+    <tr><td>Unmapped</td><td>No decision yet. Potential missed revenue.</td></tr>
+  </table>
+  <p>Filter by state or customer, open a row's <em>Coverage</em> control to record a decision. The same register appears on each company's Services tab.</p>
+  <figure><img src="img/09-services.png" alt="Services register"><figcaption>Billing → Services, filtered to all states.</figcaption></figure>
+</section>
+
+<section class="chapter">
+  <h2>8. Renewals and price reviews</h2>
+  <h3>Renewals</h3>
+  <p>Billing → Renewals &amp; pricing → <strong>Renewals</strong> queues every active contract with a renewal date by its <strong>decision deadline</strong>: a configurable lead (Settings → General → Renewal decision lead, 30 days by default) before the notice deadline. Each row sets the customer's renewal against the supplier commitments behind its lines, read from the register, and names the mismatches: "the agreement renews on 31 December but the supplier commitment runs to 30 September (≈ £300 for 2 months beyond it)" or "the supplier commitment renews before the agreement; the cost may change first".</p>
+  <ul>
+    <li><strong>Record decision</strong>: renew as is, renew with amendments, or not renewing (with a reason). Kept against that renewal date and audited; cleared if the date moves.</li>
+    <li><strong>Prepare amendment</strong>: opens the contract with "Changes take effect from" set to the renewal date, so the amendment lands as dated history and the invoice preview shows its effect first.</li>
+  </ul>
+  <figure><img src="img/10-renewals.png" alt="Renewals queue"><figcaption>The renewal queue with supplier positions and exposure.</figcaption></figure>
+  <h3>Price reviews</h3>
+  <p>Billing → Renewals &amp; pricing → <strong>Price review</strong>. Choose a scope (a catalogue product, or lines whose description contains a phrase), a change (percentage, new unit price, or a supplier cost passed through at the same margin), an effective date and a reason, then <strong>Preview</strong>. Every affected line is listed with price and cost now and after, margin now and after, the monthly change, the day it applies for that customer, the first invoice period that carries it, and the constraints (prices fixed until renewal, agreement ending first, customer not renewing, notice deadline near). Untick anything to leave out, then <strong>Apply</strong>. Each change is a dated, reasoned entry in the contract's history; no price changes silently.</p>
+  <figure><img src="img/11-pricing.png" alt="Price review preview"><figcaption>A price review preview across every line that mentions Microsoft 365.</figcaption></figure>
+</section>
+
+<section class="chapter">
+  <h2>9. Invoices and supplier bills</h2>
+  <h3>Customer invoices</h3>
+  <p>Billing → <strong>Invoices</strong> mirrors the Xero sales invoices: outstanding, overdue, paid in the last 30 days, drafts in Xero, and the list with status, dates, totals and balances. Figures are cached from the hourly sync and webhooks; <em>Refresh from Xero</em> pulls now. Live balances per customer are on the company page.</p>
+  <figure><img src="img/12-invoices.png" alt="Customer invoices"><figcaption>Billing → Invoices → Customer invoices.</figcaption></figure>
+  <h3>Supplier bills (Pax8)</h3>
+  <p>The <strong>Supplier bills</strong> tab compares the Pax8 partner invoices with the purchase bills entered in Xero for the Pax8 supplier contact. Matches are made by reference (strong) or by a unique identical total within ten days (weaker, amber); finance can match or unmatch by hand and a hand decision is kept. Each Pax8 invoice's charge lines are allocated to customers and subscriptions, so an equal total cannot hide a line-level difference. <em>Import invoices from a date</em> brings older history in. Nothing is changed in Xero or at Pax8.</p>
+  <figure><img src="img/13-supplier-bills.png" alt="Supplier bills reconciliation"><figcaption>Billing → Invoices → Supplier bills.</figcaption></figure>
+</section>
+
+<section class="chapter">
+  <h2>10. Automation, in stages</h2>
+  <p>Settings → <strong>Billing automation</strong> holds a three-level policy. It only ever applies the same rules a person applies on the Monthly run and the draft review, and every run is audited naming the policy.</p>
+  <table>
+    <tr><th style="width:26%">Level</th><th>What runs by itself</th><th>What stays with people</th></tr>
+    <tr><td>0 Detect only (default)</td><td>Findings, the workspace, the draft review and the renewal queue are kept current.</td><td>Everything else.</td></tr>
+    <tr><td>1 Prepare ready drafts</td><td>On the run day each month, drafts are prepared for contracts rated <em>ready</em>.</td><td>Review and approval; every review or blocked contract.</td></tr>
+    <tr><td>2 Prepare, then approve unchanged</td><td>As 1, then drafts the review finds <em>unchanged</em> are created in Xero as drafts.</td><td>Every exception; authorising and sending in Xero.</td></tr>
+  </table>
+  <p>The scheduled job runs daily at 07:00 and acts once a month on or after the run day. <strong>Run the policy now</strong> runs it by hand. The last run's summary is shown on the page.</p>
+  <figure><img src="img/14-automation.png" alt="Billing automation settings"><figcaption>Settings → Billing automation.</figcaption></figure>
+</section>
+
+<section class="chapter">
+  <h2>11. One customer at a glance: the company Billing tab</h2>
+  <p>Every company page has a <strong>Billing</strong> tab with the same picture narrowed to that customer: its own "what to do next" list, the Xero balances and link state, each agreement in the next run with the proposed and previous amounts and the reasons, drafts awaiting approval with batch approval, open and accepted count discrepancies with Resolve, renewals with the decision button, the service coverage counts, and the invoices created in Xero with their customer schedules. Use it when a customer calls: everything about their billing is on one screen.</p>
+  <figure class="tall"><img src="img/15-company-billing.png" alt="Company Billing tab"><figcaption>Company → Billing.</figcaption></figure>
+</section>
+
+<section class="chapter">
+  <h2>12. Roles, audit and where things live</h2>
+  <table>
+    <tr><th style="width:30%">Action</th><th>Who</th></tr>
+    <tr><td>See Billing, invoices, drafts</td><td>finance, admin (finance.read)</td></tr>
+    <tr><td>Prepare drafts, run the Monthly run, cancel or re-prepare drafts</td><td>finance, admin, account manager (invoice.prepare)</td></tr>
+    <tr><td>Approve drafts into Xero, match supplier bills</td><td>finance, admin (invoice.approve)</td></tr>
+    <tr><td>Edit contracts, record renewal decisions, apply price reviews, set service coverage</td><td>finance, admin, account manager (contract.write)</td></tr>
+    <tr><td>Resolve count discrepancies</td><td>finance, admin, account manager (discrepancy.review)</td></tr>
+    <tr><td>Automation policy, Xero and Pax8 settings</td><td>admin</td></tr>
+  </table>
+  <p>Preparing, editing, approving and cancelling drafts, the billing run, quantity and price changes, discrepancy actions, renewal decisions, price reviews, coverage decisions and every automated run are in Settings → Audit log with actor, entity and details. Customer-visible consequences are posted on the company timeline.</p>
+  <p class="small">Old addresses (Finance, the billing run, findings, service coverage, renewals, price reviews) redirect into the Billing area, so bookmarks keep working.</p>
+</section>
+
+<section class="chapter">
+  <h2>13. Quick answers</h2>
+  <p><strong>A customer added two users on the 14th. What do I do?</strong> Edit the contract, change the quantity, set "Changes take effect from" to the 14th, save. The next run charges the two for their remaining days and the full quantity from the next period. The customer explanation will say so in plain words.</p>
+  <p><strong>The licence check says contracted 14, at Pax8 16.</strong> Open Exceptions (or the company's Billing tab), click Resolve, choose <em>Amend the contract line</em> from the day the licences were added, and apply. The item closes and the next invoice carries the change.</p>
+  <p><strong>A draft says "stale".</strong> The contract changed after it was prepared. Open it and click <em>Re-prepare from the contract</em>.</p>
+  <p><strong>Two agreements for one customer are due. Can they go on one invoice?</strong> Yes: leave <em>One draft per customer</em> ticked in step 1. The draft groups the lines by agreement and covers both.</p>
+  <p><strong>Why is a contract "blocked"?</strong> Its company has no Xero contact link. Link it on Integrations → Xero and run again.</p>
+  <p><strong>A supplier commitment runs past the customer's renewal.</strong> It shows in Renewals as a mismatch with the months and cost at stake. Decide before the decision deadline; if the customer leaves, that cost stays payable.</p>
+  <p><strong>Can the CRM send an invoice?</strong> No. It creates drafts in Xero; approving, sending and payments stay in Xero.</p>
+  <p><strong>What does "potential missed revenue" mean?</strong> The partner cost of services nobody has mapped to a line. It is not confirmed billable until someone decides; confirmed gaps (expected charges not drafted, covered services that cannot charge) are listed separately.</p>
+</section>
+
+</body>
+</html>
