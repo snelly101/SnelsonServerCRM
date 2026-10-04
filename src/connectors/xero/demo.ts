@@ -1,3 +1,4 @@
+import { demoPax8InvoiceSummary } from "../pax8/demo";
 import type { CreateInvoiceInput, XeroClient, XeroContactRaw, XeroInvoiceRaw, XeroPaymentRaw, XeroRepeatingInvoiceRaw, XeroItemRaw } from "./types";
 
 /**
@@ -25,6 +26,14 @@ function seed() {
   mk("demo-c-6", "Old Supplier Ltd", "ap@oldsupplier.example", { IsCustomer: false, IsSupplier: true });
   // A contact created in Xero that has never been invoiced: Xero leaves both flags false.
   mk("demo-c-7", "Kestrel Marketing Ltd", "hello@kestrelmarketing.example", { IsCustomer: false, IsSupplier: false });
+  // The Pax8 supplier: its purchase bills are reconciled with the Pax8 demo invoices (last month matches, the month before is £12.50 out, the current one has no bill yet, and one old bill has no Pax8 invoice).
+  mk("demo-c-8", "Pax8 UK Ltd", "billing@pax8.example", { IsCustomer: false, IsSupplier: true });
+  const bill = (id: string, number: string, reference: string, total: number, date: string, status: XeroInvoiceRaw["Status"]) =>
+    invoices.set(id, { InvoiceID: id, Type: "ACCPAY", InvoiceNumber: number, Reference: reference, Status: status, Contact: { ContactID: "demo-c-8", Name: "Pax8 UK Ltd" }, DateString: date, DueDateString: date, CurrencyCode: "GBP", LineAmountTypes: "Exclusive", SubTotal: total, TotalTax: 0, Total: total, AmountPaid: status === "PAID" ? total : 0, AmountDue: status === "PAID" ? 0 : total, AmountCredited: 0, UpdatedDateUTC: iso(-1), LineItems: [{ Description: "Pax8 monthly subscriptions", Quantity: 1, UnitAmount: total, AccountCode: "310", TaxType: "NONE", LineAmount: total }] });
+  const p8 = demoPax8InvoiceSummary();
+  if (p8[1]) bill("demo-b-1", "PAX8-" + p8[1].id.slice(-7), p8[1].id, p8[1].total, p8[1].invoiceDate, "PAID");
+  if (p8[2]) bill("demo-b-2", "PAX8-" + p8[2].id.slice(-7), p8[2].id, Math.round((p8[2].total + 12.5) * 100) / 100, p8[2].invoiceDate, "PAID");
+  bill("demo-b-3", "PAX8-OLD", "", 49.99, day(-110), "PAID");
   const inv = (id: string, contact: string, number: string, status: XeroInvoiceRaw["Status"], total: number, dateOffset: number, due: number, paid = 0) =>
     invoices.set(id, { InvoiceID: id, Type: "ACCREC", InvoiceNumber: number, Reference: "", Status: status, Contact: { ContactID: contact, Name: contacts.get(contact)!.Name }, DateString: day(dateOffset), DueDateString: day(due), CurrencyCode: "GBP", LineAmountTypes: "Exclusive", SubTotal: total / 1.2, TotalTax: total - total / 1.2, Total: total, AmountPaid: paid, AmountDue: status === "PAID" ? 0 : total - paid, AmountCredited: 0, FullyPaidOnDate: status === "PAID" ? day(due - 3) : undefined, SentToContact: status !== "DRAFT", UpdatedDateUTC: iso(dateOffset), LineItems: [{ Description: "Managed IT services", Quantity: 1, UnitAmount: total / 1.2, AccountCode: "200", TaxType: "OUTPUT2", LineAmount: total / 1.2 }] });
   inv("demo-i-1", "demo-c-1", "INV-0101", "AUTHORISED", 1238.64, -12, 18);

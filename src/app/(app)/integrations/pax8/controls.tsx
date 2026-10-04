@@ -15,7 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogClose, DialogContent } from "@/components/ui/dialog";
-import { fmtMoney } from "@/lib/format";
+import { fmtDate, fmtMoney, type DisplaySettings } from "@/lib/format";
 import {
   Field,
   Select,
@@ -29,7 +29,9 @@ import {
   changePax8QuantityAction,
   connectPax8Action,
   linkPax8CompanyAction,
+  matchPax8InvoiceAction,
   recheckLicencesAction,
+  setPax8SupplierAction,
   savePax8ConfigAction,
   setSubscriptionBillingLineAction,
   syncPax8Action,
@@ -736,5 +738,229 @@ export function ChangeQuantityButton({
       </Dialog>
       {done && <span className="text-[11px] text-green-700">{done}</span>}
     </span>
+  );
+}
+
+/** Picks the Xero contact that is the Pax8 supplier; saving re-mirrors its bills and re-runs the matcher. */
+export function Pax8SupplierForm({
+  value,
+  suppliers,
+  readOnly,
+}: {
+  value: string | null;
+  suppliers: { contactId: string; name: string }[];
+  readOnly: boolean;
+}) {
+  const [result, formAction] = useActionState(setPax8SupplierAction, null);
+  const known = value && !suppliers.some((s) => s.contactId === value);
+  return (
+    <form action={formAction} className="flex flex-wrap items-end gap-2">
+      <Field label="Pax8 supplier in Xero" htmlFor="p8-supplier" className="min-w-64">
+        <Select id="p8-supplier" name="contactId" defaultValue={value ?? ""} disabled={readOnly}>
+          <option value="">— not set —</option>
+          {known && <option value={value!}>{value}</option>}
+          {suppliers.map((s) => (
+            <option key={s.contactId} value={s.contactId}>
+              {s.name}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      {!readOnly && <SubmitButton size="sm">Save and match</SubmitButton>}
+      {result && (
+        <span className={`text-xs ${result.ok ? "text-green-700" : "text-red-700"}`}>
+          {result.ok ? `${result.data.bills} bills mirrored, ${result.data.matched} matched` : result.error}
+        </span>
+      )}
+    </form>
+  );
+}
+
+const RECON_LABEL: Record<string, { text: string; tone: string }> = {
+  matched: { text: "matched", tone: "green" },
+  amount_differs: { text: "amount differs", tone: "amber" },
+  no_bill: { text: "no bill in Xero", tone: "red" },
+  no_pax8_invoice: { text: "no Pax8 invoice", tone: "amber" },
+};
+
+type ReconRow = {
+  id: string;
+  pax8InvoiceId: string;
+  status: string | null;
+  invoiceDate: string | null;
+  total: number | null;
+  itemsTotal: number | null;
+  currency: string | null;
+  matchSource: string | null;
+  bill: {
+    invoiceId: string;
+    invoiceNumber: string | null;
+    reference: string | null;
+    status: string;
+    date: string | null;
+    total: number | null;
+    amountDue: number | null;
+  } | null;
+  difference: number | null;
+  state: string;
+};
+
+function BillMatchSelect({
+  rowId,
+  value,
+  options,
+}: {
+  rowId: string;
+  value: string | null;
+  options: { invoiceId: string; label: string }[];
+}) {
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
+  return (
+    <span className="flex flex-col gap-0.5">
+      <Select
+        aria-label="Matched Xero bill"
+        className={`py-1 text-xs ${pending ? "opacity-60" : ""}`}
+        value={value ?? ""}
+        onChange={(e) =>
+          start(async () => {
+            const r = await matchPax8InvoiceAction(rowId, e.target.value || null);
+            setError(r.ok ? null : r.error);
+            router.refresh();
+          })
+        }
+      >
+        <option value="">— no bill —</option>
+        {options.map((o) => (
+          <option key={o.invoiceId} value={o.invoiceId}>
+            {o.label}
+          </option>
+        ))}
+      </Select>
+      {error && <span className="text-xs text-red-700">{error}</span>}
+    </span>
+  );
+}
+
+/** Pax8 partner invoices against the supplier's Xero purchase bills. */
+export function Pax8ReconciliationTable({
+  rows,
+  unmatchedBills,
+  freeBills,
+  canMatch,
+  settings,
+}: {
+  rows: ReconRow[];
+  unmatchedBills: {
+    invoiceId: string;
+    invoiceNumber: string | null;
+    reference: string | null;
+    status: string;
+    date: string | null;
+    total: number | null;
+    amountDue: number | null;
+    currencyCode: string | null;
+  }[];
+  freeBills: { invoiceId: string; label: string }[];
+  canMatch: boolean;
+  settings: DisplaySettings & { currency: string };
+}) {
+  const money = (n: number | null, cur?: string | null) =>
+    n === null ? "—" : fmtMoney(n, cur ?? settings.currency);
+  const billUrl = (id: string) => `https://go.xero.com/AccountsPayable/View.aspx?InvoiceID=${id}`;
+  if (rows.length === 0 && unmatchedBills.length === 0)
+    return <p className="p-4 text-sm text-slate-500">No Pax8 invoices mirrored yet. Run a sync.</p>;
+  return (
+    <div className="overflow-x-auto">
+      <table className="tbl">
+        <thead>
+          <tr>
+            <th>Pax8 invoice</th>
+            <th className="text-right">Pax8 total</th>
+            <th>Xero bill</th>
+            <th className="text-right">Bill total</th>
+            <th className="text-right">Difference</th>
+            <th>State</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => {
+            const label = RECON_LABEL[r.state] ?? { text: r.state, tone: "slate" };
+            const options = r.bill
+              ? [{ invoiceId: r.bill.invoiceId, label: `${r.bill.invoiceNumber ?? r.bill.invoiceId}${r.bill.reference ? ` · ${r.bill.reference}` : ""}` }, ...freeBills]
+              : freeBills;
+            return (
+              <tr key={r.id}>
+                <td>
+                  <div className="font-medium">{r.pax8InvoiceId}</div>
+                  <div className="text-xs text-slate-500">
+                    {r.invoiceDate ? fmtDate(r.invoiceDate, settings) : "no date"}
+                    {r.status && (
+                      <Badge className="ml-1" tone={r.status === "Paid" ? "green" : "amber"}>
+                        {r.status}
+                      </Badge>
+                    )}
+                  </div>
+                </td>
+                <td className="text-right tabular-nums">
+                  <div>{money(r.total, r.currency)}</div>
+                  {r.itemsTotal !== null && r.total !== null && Math.abs(r.itemsTotal - r.total) >= 0.01 && (
+                    <div className="text-[11px] text-amber-700" title="The mirrored charge lines add up to a different figure than the invoice total">
+                      lines {money(r.itemsTotal, r.currency)}
+                    </div>
+                  )}
+                </td>
+                <td>
+                  {canMatch ? (
+                    <BillMatchSelect rowId={r.id} value={r.bill?.invoiceId ?? null} options={options} />
+                  ) : r.bill ? (
+                    <span className="text-xs">{r.bill.invoiceNumber ?? r.bill.invoiceId}{r.bill.reference ? ` · ${r.bill.reference}` : ""}</span>
+                  ) : (
+                    <span className="text-xs text-slate-400">—</span>
+                  )}
+                  {r.bill && (
+                    <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[11px] text-slate-500">
+                      {r.bill.date ? fmtDate(r.bill.date, settings) : "no date"} · {r.bill.status.toLowerCase()}
+                      {r.matchSource === "manual" && <Badge tone="slate">by hand</Badge>}
+                      <a href={billUrl(r.bill.invoiceId)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-brand-700 hover:underline">
+                        <ExternalLink className="h-3 w-3" /> Xero
+                      </a>
+                    </div>
+                  )}
+                </td>
+                <td className="text-right tabular-nums">{r.bill ? money(r.bill.total) : "—"}</td>
+                <td className={`text-right tabular-nums ${r.difference ? "text-amber-700" : ""}`}>
+                  {r.difference === null ? "—" : `${r.difference > 0 ? "+" : ""}${money(r.difference)}`}
+                </td>
+                <td>
+                  <Badge tone={label.tone}>{label.text}</Badge>
+                </td>
+              </tr>
+            );
+          })}
+          {unmatchedBills.map((b) => (
+            <tr key={b.invoiceId} className="bg-amber-50/40">
+              <td className="text-xs text-slate-400">—</td>
+              <td />
+              <td>
+                <div className="text-xs">{b.invoiceNumber ?? b.invoiceId}{b.reference ? ` · ${b.reference}` : ""}</div>
+                <div className="flex flex-wrap items-center gap-1 text-[11px] text-slate-500">
+                  {b.date ? fmtDate(b.date, settings) : "no date"} · {b.status.toLowerCase()}
+                  <a href={billUrl(b.invoiceId)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-brand-700 hover:underline">
+                    <ExternalLink className="h-3 w-3" /> Xero
+                  </a>
+                </div>
+              </td>
+              <td className="text-right tabular-nums">{money(b.total, b.currencyCode)}</td>
+              <td className="text-right">—</td>
+              <td>
+                <Badge tone="amber">no Pax8 invoice</Badge>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }

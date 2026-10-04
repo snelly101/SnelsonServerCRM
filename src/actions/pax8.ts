@@ -7,6 +7,8 @@ import { runAction, type ActionResult } from "@/lib/action-result";
 import {
   applyPax8Cost,
   changePax8SubscriptionQuantity,
+  matchPax8Invoice,
+  setPax8Supplier,
   connectPax8,
   createPax8CompanyForCompany,
   linkPax8Company,
@@ -193,6 +195,35 @@ export async function pushPax8ContactsAction(
     const r = await pushPax8Contacts(z.uuid().parse(companyId), u.id);
     revalidate();
     return r;
+  });
+}
+
+export async function setPax8SupplierAction(
+  _prev: ActionResult<unknown> | null,
+  fd: FormData,
+): Promise<ActionResult<{ bills: number; matched: number }>> {
+  return runAction(async () => {
+    const u = await requireActionPermission("integration.manage");
+    const contactId = z.string().trim().max(200).parse(fd.get("contactId") ?? "");
+    const r = await setPax8Supplier(contactId || null, u.id);
+    revalidate();
+    return r;
+  });
+}
+
+export async function matchPax8InvoiceAction(
+  pax8InvoiceRowId: string,
+  xeroInvoiceId: string | null,
+): Promise<ActionResult<undefined>> {
+  return runAction(async () => {
+    const u = await requireActionPermission("invoice.approve");
+    await matchPax8Invoice(
+      z.uuid().parse(pax8InvoiceRowId),
+      xeroInvoiceId ? z.string().trim().min(1).max(200).parse(xeroInvoiceId) : null,
+      u.id,
+    );
+    revalidate();
+    return undefined;
   });
 }
 

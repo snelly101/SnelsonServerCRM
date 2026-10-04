@@ -131,7 +131,7 @@ The company page's **Invoices** tab (hidden from roles without `finance.read`) s
 
 **Imports** for getting started: Xero customers → CRM companies; Xero **repeating invoices → draft contracts** (one recurring line per template line, frequency from the schedule, catalogue product matched by item code = SKU, or a product created from the Xero item), so existing recurring billing becomes contracts that a person reviews and activates.
 
-**Not in Xero scope yet**: purchase bills (ACCPAY) are not mirrored, so Pax8 partner invoices are not yet reconciled against the Xero bills for them.
+**Purchase bills**: only the bills of the Xero contact chosen as the Pax8 supplier are mirrored (type ACCPAY, kept out of every sales list), for the Pax8 reconciliation described in section 7.
 
 ## 7. Pax8: licences and partner cost
 
@@ -146,6 +146,8 @@ Pax8 is the distributor the MSP buys Microsoft 365 and other cloud subscriptions
 **Cost and margin**: the Pax8 price is the partner cost per unit per term. The Subscriptions tab shows it per month, the margin per unit against the line's sell price, and flags lines whose recorded unit cost differs by more than a penny a month. **Use as cost** copies the Pax8 price onto the contract line (converted to the line's billing period, audited); the sell price is never touched. This is why margin on the Contracts and Reports pages is real rather than a catalogue estimate.
 
 **What Pax8 charged for this customer**: a per-customer table of the mirrored partner invoice lines (invoice date, invoice, lines, cost), so partner cost can be compared with what the customer was invoiced.
+
+**Pax8 invoices vs Xero bills** (Pax8 page): an admin picks the Xero supplier contact that is Pax8. Each sync mirrors the recent Pax8 partner invoices and that supplier's Xero purchase bills and matches them, first by a bill reference or number carrying the Pax8 invoice id, then by a unique identical total within ten days. The card lists each Pax8 invoice with its bill, the difference and a state (matched, amount differs, no bill in Xero), plus any supplier bill that no Pax8 invoice explains. Finance can match or unmatch by hand and that decision sticks. Nothing is written to Xero or Pax8; entering and paying bills stays in Xero.
 
 **Quantity changes from the CRM** (opt-in, admin setting "Allow licence quantity changes at Pax8"): when on, people with `contract.write` get a **Change** button next to each Active subscription's quantity. The dialog shows licences added or removed and the monthly partner-cost impact, requires a reason, and sends the new count to Pax8. The mirror, audit log (`pax8.subscription.quantity`, from/to/reason) and company timeline are updated and the licence check re-runs, so a gap against the contract shows until someone updates the contract line (which then pro-rates per section 4.3). Cancelling and ordering stay in the Pax8 portal; the CRM never does either.
 
@@ -179,7 +181,7 @@ Proposals are built and signed in Better Proposals. The CRM creates the proposal
 
 ## 12. Known gaps and open decisions
 
-- **Pax8 invoice vs Xero bill reconciliation** is not built. It needs Xero purchase bills (ACCPAY) for the Pax8 supplier contact to be mirrored and matched to Pax8 partner invoices by number, total and date, then shown on the Pax8 page. This is the next item on the backlog.
+- Pax8 reconciliation is invoice-level only: it compares totals, not the individual charge lines of a bill, and only covers the last N Pax8 invoices the mirror holds.
 - Xero's "invoiced vs contracted" comparison still uses normalised MRR rather than the billed-per-frequency figure.
 - 20i hosting counts are not yet compared with contract quantities the way devices and licences are.
 - Decreases in quantity are never credited mid-period (by design; they apply from the next period). Credit notes are not produced by the CRM.
