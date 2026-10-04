@@ -160,6 +160,12 @@ export const contracts = pgTable(
     nextReviewDate: date("next_review_date"),
     reviewIntervalMonths: integer("review_interval_months").notNull().default(6),
     ownerUserId: text("owner_user_id").references(() => user.id, { onDelete: "set null" }),
+    /** Renewal decision for the renewal date in `renewalDecisionFor`: renew as is, amend, or not renewing. Cleared when the renewal date moves. */
+    renewalDecision: text("renewal_decision"),
+    renewalDecisionFor: date("renewal_decision_for"),
+    renewalDecidedAt: timestamp("renewal_decided_at", { withTimezone: true }),
+    renewalDecidedByUserId: text("renewal_decided_by_user_id").references(() => user.id, { onDelete: "set null" }),
+    renewalDecisionNote: text("renewal_decision_note"),
     notes: text("notes"),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     ...timestamps,

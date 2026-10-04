@@ -38,6 +38,7 @@ export function ContractForm({
   products,
   currency,
   cancelHref,
+  defaultEffectiveFrom,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   action: (prev: any, fd: FormData) => Promise<ActionResult<unknown>>;
@@ -49,6 +50,8 @@ export function ContractForm({
   products: ProductOption[];
   currency: string;
   cancelHref: string;
+  /** Pre-fills "Changes take effect from" (an amendment prepared for a renewal date). */
+  defaultEffectiveFrom?: string | null;
 }) {
   const [result, formAction] = useActionState<ActionResult<unknown> | null, FormData>(action, null);
   const [autoRenew, setAutoRenew] = useState(initial.autoRenew ?? true);
@@ -155,7 +158,7 @@ export function ContractForm({
         {initial.status === "active" && (
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <Field label="Changes take effect from" htmlFor="quantityEffectiveFrom" help="The next invoice bills the old quantity for the period and any increase pro rata from this day. Decreases apply from the next period. Price changes apply from the next period that starts on or after this day.">
-              <Input id="quantityEffectiveFrom" name="quantityEffectiveFrom" type="date" defaultValue={today} />
+              <Input id="quantityEffectiveFrom" name="quantityEffectiveFrom" type="date" defaultValue={defaultEffectiveFrom ?? today} />
             </Field>
             <Field label="Reason for the change" htmlFor="changeReason" help="Kept with the change in the contract's history and the audit log.">
               <Input id="changeReason" name="changeReason" placeholder="e.g. two new starters, requested by Pat on 3 Oct" maxLength={500} />

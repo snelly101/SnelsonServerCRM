@@ -21,6 +21,8 @@ import { PrepareInvoiceButton } from "@/components/prepare-invoice-button";
 import { FREQUENCY_LABELS, PRICING_LABELS, REVENUE_LABELS } from "@/lib/validation-sales";
 import { companyDeviceOverview } from "@/services/ninjaone";
 import { DiscrepancyTable } from "@/app/(app)/devices/discrepancies";
+import { renewalQueue, DECISION_LABELS } from "@/services/renewals";
+import { RenewalDecisionButton, ClearRenewalDecisionButton } from "@/components/renewal-decision";
 
 const STATUS_TONE: Record<string, string> = { draft: "slate", active: "green", expired: "amber", cancelled: "red" };
 
@@ -29,7 +31,8 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
   const { id } = await params;
   const contract = await getContract(id);
   if (!contract) notFound();
-  const [settings, tasks, owners, devices] = await Promise.all([getAppSettings(), listTasks({ contractId: id, status: "all", pageSize: 100 }), listOwners(), can(me.role, "device.read") ? companyDeviceOverview(contract.companyId) : Promise.resolve(null)]);
+  const [settings, tasks, owners, devices, renewalRows] = await Promise.all([getAppSettings(), listTasks({ contractId: id, status: "all", pageSize: 100 }), listOwners(), can(me.role, "device.read") ? companyDeviceOverview(contract.companyId) : Promise.resolve(null), contract.status === "active" && contract.renewalDate ? renewalQueue(undefined, { contractId: id }) : Promise.resolve([])]);
+  const renewal = renewalRows[0] ?? null;
   const contractDiscrepancies = devices?.discrepancies.filter((d) => d.contractId === id) ?? [];
   const c = settings.currency;
   const today = new Date().toISOString().slice(0, 10);
@@ -219,6 +222,44 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
           </Card>
         </div>
         <div className="space-y-4">
+          {renewal && (
+            <Card
+              title="Renewal"
+              actions={canWrite && (renewal.decision ? <ClearRenewalDecisionButton contractId={id} /> : <RenewalDecisionButton contractId={id} renewalDate={renewal.renewalDate} amendHref={`/contracts/${id}/edit?effectiveFrom=${renewal.renewalDate}`} />)}
+            >
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <Badge tone={renewal.status === "overdue" ? "red" : renewal.status === "due" ? "amber" : renewal.status === "decided" ? "green" : "slate"}>
+                  {renewal.status === "decided" ? DECISION_LABELS[renewal.decision!.kind] : renewal.status === "overdue" ? "decision overdue" : renewal.status === "due" ? "decide now" : "upcoming"}
+                </Badge>
+                <span className="text-slate-700">
+                  Decide by {fmtDate(renewal.decideBy, settings)} · notice by {fmtDate(renewal.noticeDeadline, settings)} · renews {fmtDate(renewal.renewalDate, settings)}
+                </span>
+              </div>
+              {renewal.decision && (
+                <p className="mt-2 text-xs text-slate-600">
+                  Recorded {fmtRelative(renewal.decision.at)}{renewal.decision.by ? ` by ${renewal.decision.by}` : ""}{renewal.decision.note ? `: ${renewal.decision.note}` : ""}
+                </p>
+              )}
+              {renewal.mismatches.length > 0 ? (
+                <ul className="mt-2 list-disc space-y-0.5 pl-5 text-xs text-amber-800">
+                  {renewal.mismatches.map((m) => (
+                    <li key={m}>{m}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-2 text-xs text-slate-500">{renewal.services.length ? `${renewal.services.length} supplier service${renewal.services.length === 1 ? "" : "s"} behind this agreement; commitments end with or before it.` : "No supplier commitments on record for this agreement's lines."}</p>
+              )}
+              {renewal.exposureTotal > 0 && <p className="mt-1 text-xs text-amber-800">≈ {fmtMoney(renewal.exposureTotal, c)} supplier cost would remain payable beyond the renewal date if the customer does not renew.</p>}
+              {renewal.planned.length > 0 && (
+                <p className="mt-1 text-xs text-slate-600">Planned: {renewal.planned.map((p) => `${p.lineDescription} ${p.field === "unit_price" ? "price " : ""}${p.previousValue ?? "—"} → ${p.newValue ?? "—"} from ${p.effectiveFrom}`).join("; ")}</p>
+              )}
+              {canWrite && (
+                <Link href={`/contracts/${id}/edit?effectiveFrom=${renewal.renewalDate}`} className="mt-2 inline-block text-xs text-brand-700 hover:underline">
+                  Prepare an amendment from the renewal date
+                </Link>
+              )}
+            </Card>
+          )}
           <Card title="Terms">
             <DescriptionList
               items={[

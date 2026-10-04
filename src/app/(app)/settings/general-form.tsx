@@ -10,7 +10,7 @@ export function GeneralSettingsForm({
   settings,
   readOnly,
 }: {
-  settings: { companyName: string; currency: string; dateFormat: string; timezone: string; defaultTaxRatePercent: number; taxLabel: string; deviceActiveDays: number };
+  settings: { companyName: string; currency: string; dateFormat: string; timezone: string; defaultTaxRatePercent: number; taxLabel: string; deviceActiveDays: number; renewalLeadDays: number };
   readOnly: boolean;
 }) {
   const [result, formAction] = useActionState(updateSettingsAction, null);
@@ -50,6 +50,9 @@ export function GeneralSettingsForm({
         </Field>
         <Field label="Device 'active' window (days)" htmlFor="deviceActiveDays" error={e("deviceActiveDays")} help="Devices not seen within this window are excluded from billable device counts.">
           <Input id="deviceActiveDays" name="deviceActiveDays" type="number" min={1} max={365} defaultValue={settings.deviceActiveDays} required />
+        </Field>
+        <Field label="Renewal decision lead (days)" htmlFor="renewalLeadDays" error={e("renewalLeadDays")} help="The renewal queue asks for a decision this many days before each contract's notice deadline.">
+          <Input id="renewalLeadDays" name="renewalLeadDays" type="number" min={0} max={365} defaultValue={settings.renewalLeadDays} required />
         </Field>
       </fieldset>
       {!readOnly && <SubmitButton>Save settings</SubmitButton>}
