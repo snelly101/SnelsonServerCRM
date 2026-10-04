@@ -125,7 +125,9 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
                 </tbody>
               </table>
             )}
-            <p className="mt-3 text-xs text-slate-500">MRR = Σ recurring lines (contracted qty × unit price ÷ months per billing period). One-off and hardware lines are excluded from MRR and shown separately.</p>
+            <p className="mt-3 text-xs text-slate-500">
+              <strong>Monthly</strong> is what the monthly invoice carries (recurring lines billed monthly). Quarterly and annual lines are invoiced on their own cycle and shown per quarter or per year. <strong>MRR normalised</strong> (annual ÷ 12, quarterly ÷ 3, added to the monthly lines) appears only when it differs; it is the forecasting figure used on the Reports page, not a monthly bill. One-off and hardware lines are excluded from both.
+            </p>
           </Card>
 
           <Card title="Device count check" padded={contractDiscrepancies.length === 0}>

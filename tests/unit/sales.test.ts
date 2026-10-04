@@ -38,6 +38,10 @@ describe("revenue maths", () => {
     const s = summariseLines(lines);
     expect(s.mrr).toBe(550);
     expect(s.arr).toBe(6600);
+    // What the monthly invoice carries vs the normalised figure: the annual licence is not monthly cash.
+    expect(s.monthlyBilled).toBe(450);
+    expect(s.annualBilled).toBe(1200);
+    expect(s.quarterlyBilled).toBe(0);
     expect(s.oneOff).toBe(1500);
     expect(s.hardware).toBe(2697);
     expect(s.firstYearValue).toBe(6600 + 1500 + 2697);

@@ -107,13 +107,16 @@ export async function getContract(id: string) {
  */
 export async function contractTotals() {
   const rows = await db.select({ status: contracts.status, lines: linesJson }).from(contracts).where(isNull(contracts.archivedAt));
-  const out = { active: 0, mrr: 0, arr: 0, oneOff: 0, hardware: 0, marginIsEstimate: false };
+  const out = { active: 0, mrr: 0, arr: 0, monthlyBilled: 0, quarterlyBilled: 0, annualBilled: 0, oneOff: 0, hardware: 0, marginIsEstimate: false };
   for (const r of rows) {
     if (r.status !== "active") continue;
     const s = withSummary(r).summary;
     out.active++;
     out.mrr += s.mrr;
     out.arr += s.arr;
+    out.monthlyBilled += s.monthlyBilled;
+    out.quarterlyBilled += s.quarterlyBilled;
+    out.annualBilled += s.annualBilled;
     out.oneOff += s.oneOff;
     out.hardware += s.hardware;
     if (s.marginIsEstimate) out.marginIsEstimate = true;

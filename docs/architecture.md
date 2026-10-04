@@ -118,3 +118,5 @@ Retries: per-queue `retryLimit` with exponential backoff (`retryBackoff: true`).
 ## MRR definition (Reports page)
 
 MRR = Σ over active contracts, over recurring lines: `unit_price × contracted_quantity`, normalised to monthly (annual ÷ 12, quarterly ÷ 3, monthly × 1). One-off and hardware lines are excluded and reported separately. The formula is printed on the report page.
+
+Contract, company, Contracts-page and dashboard headlines show **billed monthly** instead (monthly lines only, i.e. what the monthly invoice carries), with quarterly and annual lines listed per quarter / per year and the normalised MRR alongside only when it differs (`RevenueSummary.monthlyBilled / quarterlyBilled / annualBilled`).
