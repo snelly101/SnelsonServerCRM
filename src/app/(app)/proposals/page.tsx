@@ -137,8 +137,11 @@ export default async function ProposalsPage({ searchParams }: { searchParams: Pr
                     <td>{fmtDate(p.openedAt, settings)}</td>
                     <td>{fmtDate(p.signedAt, settings)}</td>
                     <td className="text-right">
-                      {(p.status === "signed" || p.status === "paid") && (p.contractId ? <Link href={`/contracts/${p.contractId}`} className="mr-2 text-xs text-brand-700 hover:underline">Contract</Link> : canWriteContracts ? <span className="mr-2 inline-block"><ContractFromProposalButton externalId={p.externalId} linked={Boolean(p.opportunityId)} /></span> : null)}
-                      {canLink && !p.opportunityId && <LinkProposalDialog externalId={p.externalId} subject={p.subjectLine ?? p.externalId} companies={companies} opportunities={opps.rows.map((o) => ({ id: o.id, title: o.title, companyName: o.companyName }))} />}</td>
+                      <span className="inline-flex items-center justify-end gap-1 whitespace-nowrap">
+                        {(p.status === "signed" || p.status === "paid") && (p.contractId ? <ButtonLink href={`/contracts/${p.contractId}`} size="sm" variant="ghost">Contract</ButtonLink> : canWriteContracts ? <ContractFromProposalButton externalId={p.externalId} linked={Boolean(p.opportunityId)} /> : null)}
+                        {canLink && !p.opportunityId && <LinkProposalDialog externalId={p.externalId} subject={p.subjectLine ?? p.externalId} companies={companies} opportunities={opps.rows.map((o) => ({ id: o.id, title: o.title, companyName: o.companyName }))} />}
+                      </span>
+                    </td>
                   </tr>
                 ))}
               </tbody>

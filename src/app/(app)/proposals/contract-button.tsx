@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { FilePlus2 } from "lucide-react";
 import { ConfirmButton } from "@/components/ui/confirm-button";
 import { contractFromProposalAction } from "@/actions/integrations";
 import { useToast } from "@/components/ui/toast";
@@ -12,7 +13,7 @@ export function ContractFromProposalButton({ externalId, linked }: { externalId:
   return (
     <ConfirmButton
       size="sm"
-      variant="secondary"
+      variant="ghost"
       title="Create a contract from this signed proposal?"
       description={linked ? "The linked opportunity is marked won, onboarding starts and a draft contract is created from its lines with the signed terms captured. Nothing is invoiced until the contract is activated." : "No opportunity is linked, so a draft contract is created from the proposal's totals (one line per billing term) for you to replace with the agreed services. Nothing is invoiced until it is activated."}
       confirmLabel="Create contract"
@@ -26,7 +27,7 @@ export function ContractFromProposalButton({ externalId, linked }: { externalId:
         return r;
       }}
     >
-      Create contract
+      <FilePlus2 className="h-3.5 w-3.5" /> Create contract
     </ConfirmButton>
   );
 }
