@@ -8,9 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent } from "@/components/ui/dialog";
 import { Field, Input, Select, Textarea } from "@/components/ui/form";
 import { clearServiceCoverageAction, setServiceCoverageAction } from "@/actions/coverage";
-import { fmtDate, fmtMoney, type DisplaySettings } from "@/lib/format";
+import { fmtDate, fmtMoney, fmtRelative, type DisplaySettings } from "@/lib/format";
 import type { RegisterRow } from "@/services/service-register";
-import { SERVICE_STATE_LABELS, type ServiceState } from "@/lib/service-coverage";
+import { MATCH_SOURCE_LABELS, SERVICE_STATE_LABELS, type ServiceState } from "@/lib/billing-model";
 
 export const STATE_TONE: Record<ServiceState, string> = {
   charged: "green",
@@ -138,8 +138,9 @@ export function ServiceRegisterTable({ rows, linesByCompany, canEdit, settings, 
             <th className="text-right">Qty</th>
             <th className="text-right">Cost / mo</th>
             <th>Renews</th>
-            <th>Coverage</th>
-            <th>Covered by</th>
+            <th>Synced</th>
+            <th>State</th>
+            <th>Billed on</th>
             {canEdit && <th />}
           </tr>
         </thead>
@@ -154,17 +155,21 @@ export function ServiceRegisterTable({ rows, linesByCompany, canEdit, settings, 
                 </td>
               )}
               <td>
-                <Link href={r.href} className="font-medium hover:underline">
-                  {r.name}
-                </Link>
+                <div className="flex flex-wrap items-center gap-1">
+                  <Badge tone={r.provider === "pax8" ? "indigo" : r.provider === "twentyi" ? "teal" : "blue"}>{r.providerLabel}</Badge>
+                  <Link href={r.href} className="font-medium hover:underline">
+                    {r.name}
+                  </Link>
+                </div>
                 <div className="text-xs text-slate-500">
                   {r.kind}
-                  {r.detail ? ` · ${r.detail}` : ""}
+                  {r.supplierProduct ? ` · ${r.supplierProduct}` : r.detail ? ` · ${r.detail}` : ""}
                 </div>
               </td>
               <td className="text-right tabular-nums">{r.quantity ?? "—"}</td>
-              <td className="text-right tabular-nums">{r.monthlyCost === null ? "—" : fmtMoney(r.monthlyCost, settings.currency)}</td>
+              <td className="text-right tabular-nums">{r.monthlyCost === null ? <span className="text-slate-400" title={r.costKnown ? "no recurring price" : "the supplier carries no pricing"}>{r.costKnown ? "—" : "not reported"}</span> : fmtMoney(r.monthlyCost, settings.currency)}</td>
               <td className="whitespace-nowrap text-xs">{r.renewsOn ? fmtDate(r.renewsOn, settings) : "—"}</td>
+              <td className="whitespace-nowrap text-xs text-slate-500">{r.syncedAt ? fmtRelative(r.syncedAt) : "—"}</td>
               <td>
                 <Badge tone={STATE_TONE[r.state]}>{SERVICE_STATE_LABELS[r.state]}</Badge>
                 {r.reviewOn && (
@@ -182,6 +187,7 @@ export function ServiceRegisterTable({ rows, linesByCompany, canEdit, settings, 
                 ) : (
                   <span className="text-slate-400">—</span>
                 )}
+                {r.matchedBy && (r.state === "charged" || r.state === "bundle") && <div className="text-[11px] text-slate-400">{MATCH_SOURCE_LABELS[r.matchedBy]}</div>}
                 {r.reason && <div className="text-slate-500">{r.reason}</div>}
                 {r.setByName && <div className="text-[11px] text-slate-400">by {r.setByName}</div>}
               </td>
