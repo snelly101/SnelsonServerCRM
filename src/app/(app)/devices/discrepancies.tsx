@@ -61,7 +61,7 @@ export function DiscrepancyTable({ rows, canReview, currency, compact = false, k
             {!compact && <th>Company</th>}
             <th>Contract line</th>
             <th className="text-right">Contracted</th>
-            <th className="text-right">{kind === "licence" ? "At Pax8" : "Observed"}</th>
+            <th className="text-right">{kind === "licence" ? "At supplier" : "Observed"}</th>
             <th className="text-right">Difference</th>
             <th>Status</th>
             {canReview && <th>Action</th>}

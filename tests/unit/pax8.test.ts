@@ -71,6 +71,9 @@ const line = (over: Partial<MatchableLine>): MatchableLine => ({
   unitCost: null,
   billingFrequency: "monthly",
   pricingModel: "per_user",
+  quantityRule: "fixed",
+  countsAsManagedDevice: false,
+  siteId: null,
   productSku: null,
   productName: null,
   ...over,
@@ -103,7 +106,9 @@ describe("Pax8 helpers", () => {
       description: "Microsoft 365 Business Standard",
     });
     const sub = {
-      contractLineId: null,
+      id: "00000000-0000-0000-0000-000000000001",
+      companyId: null,
+      quantity: 1,
       sku: "CFQ7TTC0LDPB:0001",
       vendorSku: "CFQ7TTC0LDPB",
       productName: "Microsoft 365 Business Standard",
@@ -116,9 +121,10 @@ describe("Pax8 helpers", () => {
       line: { id: "desc" },
       by: "name",
     });
-    expect(
-      matchLine({ ...sub, contractLineId: "name" }, [bySku, byName]),
-    ).toMatchObject({ line: { id: "name" }, by: "manual" });
+    const manual = { id: "l", source: "pax8_subscription", sourceRowId: sub.id, companyId: "c", contractLineId: "name", role: "charged", matchSource: "manual", quantity: "1", monthlyCost: null, lastSeenAt: null, reason: null, reviewOn: null, setByUserId: null, createdAt: new Date(), updatedAt: new Date() } as const;
+    expect(matchLine(sub, [bySku, byName], manual)).toMatchObject({ line: { id: "name" }, by: "manual" });
+    // A link that says "free" means no line bills it, whatever the SKU says.
+    expect(matchLine(sub, [bySku, byName], { ...manual, role: "free", contractLineId: null })).toBeNull();
     expect(
       matchLine(
         { ...sub, sku: null, vendorSku: null, productName: "Visio Plan 2" },

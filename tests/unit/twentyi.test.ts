@@ -2,6 +2,7 @@ import { describe, expect, it, beforeAll, vi } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { companies, contracts, contractLines, hostingItems, tasks, xeroInvoices } from "@/db/schema";
+import { serviceLinks } from "@/db/schema";
 import { createCompany } from "@/services/companies";
 import { companySchema } from "@/lib/validation";
 import { createContract } from "@/services/contracts";
@@ -138,8 +139,8 @@ describe("20i sync, matching, billing links and reminders (demo adapter)", () =>
     const [dentalLine] = await db.select({ id: contractLines.id }).from(contractLines).where(eq(contractLines.contractId, dentalContract));
     await expect(setHostingBillingLine(dotcom.id, dentalLine.id, admin.id)).rejects.toBeInstanceOf(ActionError);
     await setHostingBillingLine(dotcom.id, lineId, admin.id);
-    const [billed] = await db.select().from(hostingItems).where(eq(hostingItems.id, dotcom.id));
-    expect(billed.contractLineId).toBe(lineId);
+    const [billed] = await db.select().from(serviceLinks).where(and(eq(serviceLinks.source, "hosting_item"), eq(serviceLinks.sourceRowId, dotcom.id)));
+    expect(billed).toMatchObject({ contractLineId: lineId, role: "charged", matchSource: "manual" });
     await expect(setHostingBillingLine(afterSync.id, lineId, admin.id)).rejects.toThrow(/Link the item/);
     expect((await db.select({ id: contracts.id }).from(contracts).where(eq(contracts.id, contractId))).length).toBe(1);
   });

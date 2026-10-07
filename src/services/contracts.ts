@@ -193,6 +193,7 @@ function lineValues(contractId: string, l: ContractLineInput, i: number) {
     countsAsManagedDevice: l.pricingModel === "per_device" && l.countsAsManagedDevice,
     invoiceSchedule: l.revenueType === "recurring" ? (l.invoiceSchedule ?? "contract") : "contract",
     reductionPolicy: l.reductionPolicy ?? "next_period",
+    quantityRule: l.revenueType === "recurring" ? (l.quantityRule ?? "fixed") : "fixed",
     sortOrder: i,
   };
 }
@@ -361,5 +362,5 @@ export function contractAsInput(c: NonNullable<Awaited<ReturnType<typeof getCont
 }
 
 export function contractLinesAsInput(c: NonNullable<Awaited<ReturnType<typeof getContract>>>): ContractLineInput[] {
-  return c.lines.map((l) => ({ id: l.id, productId: l.productId, siteId: l.siteId, description: l.description, revenueType: l.revenueType, pricingModel: l.pricingModel, billingFrequency: l.billingFrequency, quantity: Number(l.quantity), unitPrice: Number(l.unitPrice), unitCost: l.unitCost === null ? null : Number(l.unitCost), countsAsManagedDevice: l.countsAsManagedDevice, invoiceSchedule: l.invoiceSchedule as "contract", reductionPolicy: l.reductionPolicy as "next_period" }));
+  return c.lines.map((l) => ({ id: l.id, productId: l.productId, siteId: l.siteId, description: l.description, revenueType: l.revenueType, pricingModel: l.pricingModel, billingFrequency: l.billingFrequency, quantity: Number(l.quantity), unitPrice: Number(l.unitPrice), unitCost: l.unitCost === null ? null : Number(l.unitCost), countsAsManagedDevice: l.countsAsManagedDevice, invoiceSchedule: l.invoiceSchedule as "contract", reductionPolicy: l.reductionPolicy as "next_period", quantityRule: l.quantityRule as "fixed" }));
 }

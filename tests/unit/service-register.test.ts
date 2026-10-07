@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeAll } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { contractLines, hostingItems, serviceCoverage } from "@/db/schema";
+import { contractLines, hostingItems, serviceLinks } from "@/db/schema";
 import { createCompany } from "@/services/companies";
 import { companySchema } from "@/lib/validation";
 import { createContract } from "@/services/contracts";
@@ -44,7 +44,7 @@ describe("service register (demo adapters)", () => {
     const standard = before.rows.find((r) => r.source === "pax8_subscription" && /Business Standard/i.test(r.name))!;
     expect(standard.state).toBe("charged"); // matched by product name
     expect(acronis.state).toBe("unmapped"); // nothing bills it
-    expect(before.rows.find((r) => r.key === `ninja_summary:${dental}`)).toMatchObject({ state: "charged", quantity: 19 });
+    expect(before.rows.find((r) => r.key === `ninja_device:${dental}` && r.pool)).toMatchObject({ state: "charged", quantity: 19, matchedBy: "rule" });
     expect(before.summary.unmapped).toBeGreaterThanOrEqual(1);
     expect((await companySubscriptionOverview(dental))!.totals.unbilled).toBe(1);
 
@@ -78,7 +78,7 @@ describe("service register (demo adapters)", () => {
     // Clearing goes back to the derived state.
     await clearServiceCoverage("pax8_subscription", acronis.rowId, admin.id);
     expect((await companyServiceRegister(dental)).rows.find((r) => r.rowId === acronis.rowId)!.state).toBe("unmapped");
-    expect(await db.select().from(serviceCoverage).where(and(eq(serviceCoverage.source, "pax8_subscription"), eq(serviceCoverage.sourceRowId, acronis.rowId)))).toHaveLength(0);
+    expect(await db.select().from(serviceLinks).where(and(eq(serviceLinks.source, "pax8_subscription"), eq(serviceLinks.sourceRowId, acronis.rowId)))).toHaveLength(0);
   });
 
   it("20i items: a package marked internal drops out of the linked-but-not-billed count and shows its coverage on the Hosting tab", async () => {
@@ -105,7 +105,7 @@ describe("service register (demo adapters)", () => {
     await runDiscrepancyCheck(admin.id, dental);
     expect((await listDiscrepancies({ companyId: dental, source: "ninjaone", status: "open" }))).toHaveLength(0); // 18 contracted = 18 billable now
     const reg = await companyServiceRegister(dental);
-    expect(reg.rows.find((r) => r.key === `ninja_summary:${dental}`)).toMatchObject({ quantity: 18, detail: "1 marked non-billable" });
+    expect(reg.rows.find((r) => r.key === `ninja_device:${dental}` && r.pool)).toMatchObject({ quantity: 18, detail: "1 marked separately" });
     expect(reg.rows.find((r) => r.key === `ninja_device:${srv.id}`)).toMatchObject({ state: "internal" });
 
     // Two device lines without a site on one contract: compared together against the organisation's 18 billable devices.

@@ -7,7 +7,7 @@ import { Input, Select } from "@/components/ui/form";
 import { Badge } from "@/components/ui/badge";
 import { fmtMoney, fmtPercent } from "@/lib/format";
 import { summariseLines } from "@/lib/money";
-import { CATEGORY_LABELS, FREQUENCY_LABELS, INVOICE_SCHEDULE_LABELS, PRICING_LABELS, REDUCTION_POLICY_LABELS, REVENUE_LABELS, billingFrequencyValues, invoiceScheduleValues, pricingModelValues, reductionPolicyValues, revenueTypeValues } from "@/lib/validation-sales";
+import { CATEGORY_LABELS, FREQUENCY_LABELS, INVOICE_SCHEDULE_LABELS, PRICING_LABELS, QUANTITY_RULE_LABELS, REDUCTION_POLICY_LABELS, REVENUE_LABELS, billingFrequencyValues, invoiceScheduleValues, pricingModelValues, quantityRuleValues, reductionPolicyValues, revenueTypeValues } from "@/lib/validation-sales";
 
 export type EditableLine = {
   key: string;
@@ -25,6 +25,8 @@ export type EditableLine = {
   invoiceSchedule?: (typeof invoiceScheduleValues)[number];
   /** Contracts only: what a mid-period decrease does. */
   reductionPolicy?: (typeof reductionPolicyValues)[number];
+  /** Contracts only: fixed (the agreed quantity bills) or synced (the integrations' count should bill; differences are proposed changes). */
+  quantityRule?: (typeof quantityRuleValues)[number];
 };
 
 export type ProductOption = {
@@ -122,6 +124,7 @@ export function LinesEditor({
             showSite && l.pricingModel === "per_device" && l.countsAsManagedDevice ? "checked against NinjaOne" : null,
             showSite && l.revenueType === "recurring" && l.invoiceSchedule === "own" ? `invoiced ${FREQUENCY_LABELS[l.billingFrequency].toLowerCase()} on its own cycle` : null,
             showSite && l.revenueType === "recurring" && l.reductionPolicy && l.reductionPolicy !== "next_period" ? REDUCTION_POLICY_LABELS[l.reductionPolicy].toLowerCase() : null,
+            showSite && l.revenueType === "recurring" && l.quantityRule === "synced" ? "quantity synced from integrations" : null,
           ]
             .filter(Boolean)
             .join(" · ");
@@ -138,6 +141,7 @@ export function LinesEditor({
               {showSite && <input type="hidden" name={`lines[${i}][countsAsManagedDevice]`} value={l.pricingModel === "per_device" && l.countsAsManagedDevice ? "true" : "false"} />}
               {showSite && <input type="hidden" name={`lines[${i}][invoiceSchedule]`} value={l.revenueType === "recurring" ? (l.invoiceSchedule ?? "contract") : "contract"} />}
               {showSite && <input type="hidden" name={`lines[${i}][reductionPolicy]`} value={l.reductionPolicy ?? "next_period"} />}
+              {showSite && <input type="hidden" name={`lines[${i}][quantityRule]`} value={l.revenueType === "recurring" ? (l.quantityRule ?? "fixed") : "fixed"} />}
               {l.revenueType !== "recurring" && <input type="hidden" name={`lines[${i}][billingFrequency]`} value="one_off" />}
               {/* Fields that stay in the form even while the details panel is closed. */}
               {!open && (
@@ -244,6 +248,18 @@ export function LinesEditor({
                           {reductionPolicyValues.map((v) => (
                             <option key={v} value={v}>
                               {REDUCTION_POLICY_LABELS[v]}
+                            </option>
+                          ))}
+                        </Select>,
+                      )}
+                    {showSite &&
+                      l.revenueType === "recurring" &&
+                      field(
+                        "Quantity rule",
+                        <Select aria-label="Quantity rule" value={l.quantityRule ?? "fixed"} onChange={(e) => update(l.key, { quantityRule: e.target.value as EditableLine["quantityRule"] })} title="Fixed: the agreed quantity is billed and a different count from Pax8, 20i or NinjaOne is an exception to decide. Synced: the integrations' count is what should be billed, so a different count is a proposed change that one approval records as dated history. Invoices always come from the recorded history, never from a live count.">
+                          {quantityRuleValues.map((v) => (
+                            <option key={v} value={v}>
+                              {QUANTITY_RULE_LABELS[v]}
                             </option>
                           ))}
                         </Select>,

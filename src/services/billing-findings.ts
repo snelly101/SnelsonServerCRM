@@ -1,6 +1,6 @@
 import { and, desc, eq, gte, inArray, isNull, ne, notInArray, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { companies, contractLines, contracts, hostingItems, invoiceDrafts, pax8Subscriptions, serviceCoverage, xeroInvoices } from "@/db/schema";
+import { companies, contractLines, contracts, invoiceDrafts, xeroInvoices } from "@/db/schema";
 import { previewBillingRun } from "./billing-run";
 import { serviceRegisterRows } from "./service-register";
 import { createdDraftsChangedInXero, listInvoiceDrafts } from "./xero";
@@ -57,9 +57,9 @@ export async function billingFindings(opts: { asOf?: string; staleDays?: number 
   // 1 & 2. Register: unmapped services and overdue free reviews.
   const register = await serviceRegisterRows(null);
   for (const r of register) {
-    if (r.state === "unmapped" && !r.key.startsWith("ninja_summary:"))
-      findings.push({ kind: "unmapped_service", severity: "amber", companyId: r.companyId, companyName: r.companyName, title: `${r.name} (${r.kind})`, detail: r.quantity && r.quantity > 1 ? `${r.quantity} units` : null, amount: r.monthlyCost, currency: null, href: r.href });
-    if (r.state === "unmapped" && r.key.startsWith("ninja_summary:"))
+    if (r.state === "unmapped" && !r.pool)
+      findings.push({ kind: "unmapped_service", severity: "amber", companyId: r.companyId, companyName: r.companyName, title: `${r.name} (${r.kind}, ${r.providerLabel})`, detail: r.quantity && r.quantity > 1 ? `${r.quantity} units` : null, amount: r.monthlyCost, currency: null, href: r.href });
+    if (r.state === "unmapped" && r.pool)
       findings.push({ kind: "unmapped_service", severity: "amber", companyId: r.companyId, companyName: r.companyName, title: r.name, detail: "no per-device line is compared with NinjaOne for this customer", amount: null, currency: null, href: r.href });
     if (r.reviewOverdue) findings.push({ kind: "review_overdue", severity: "amber", companyId: r.companyId, companyName: r.companyName, title: `${r.name} free since review date ${r.reviewOn}`, detail: r.reason, amount: r.monthlyCost, currency: null, href: r.href });
   }
@@ -74,11 +74,7 @@ export async function billingFindings(opts: { asOf?: string; staleDays?: number 
       and(
         isNull(contracts.archivedAt),
         or(ne(contracts.status, "active"), sql`${contractLines.quantity} = 0`),
-        or(
-          sql`exists (select 1 from pax8_subscriptions ps where ps.contract_line_id = ${contractLines.id} and ps.external_status = 'active')`,
-          sql`exists (select 1 from hosting_items hi where hi.contract_line_id = ${contractLines.id} and hi.external_status = 'active')`,
-          sql`exists (select 1 from service_coverage sc where sc.contract_line_id = ${contractLines.id})`,
-        ),
+        sql`exists (select 1 from service_links sl where sl.contract_line_id = ${contractLines.id})`,
       ),
     );
   for (const l of coveringLines)
@@ -132,8 +128,5 @@ export async function billingFindings(opts: { asOf?: string; staleDays?: number 
 }
 
 /** Unused-import guard for schema tables referenced only in SQL fragments. */
-void pax8Subscriptions;
-void hostingItems;
-void serviceCoverage;
 void invoiceDrafts;
 void inArray;

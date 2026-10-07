@@ -8,8 +8,8 @@ import { contractSchema, type ContractLineInput } from "@/lib/validation-sales";
 import { getContract, updateContract } from "./contracts";
 import { reviewDiscrepancy, runDiscrepancyCheck } from "./ninjaone";
 export { reopenExpiredExceptions } from "./ninjaone";
-import { runLicenceCheck } from "./pax8";
-import { setServiceCoverage } from "./service-register";
+import { setServiceLink } from "./service-links";
+import { runQuantityChecks, DISCREPANCY_NOUNS } from "./quantity-check";
 
 /**
  * Concrete actions on a billing discrepancy, each with its money consequence
@@ -116,7 +116,8 @@ export async function resolveDiscrepancy(id: string, input: ResolutionInput, act
   const now = new Date();
   const reason = input.reason?.trim() || null;
   const licence = d.source === "pax8";
-  const recheck = () => (licence ? runLicenceCheck(actorUserId, d.companyId) : runDiscrepancyCheck(actorUserId, d.companyId));
+  const noun = DISCREPANCY_NOUNS[d.source] ?? "Count";
+  const recheck = () => (d.source === "ninjaone" ? runDiscrepancyCheck(actorUserId, d.companyId) : runQuantityChecks(actorUserId, { companyId: d.companyId, providers: [d.source as "pax8" | "twentyi"] }));
 
   if (input.kind === "dismiss") {
     await reviewDiscrepancy(id, "dismissed", reason, actorUserId);
@@ -132,7 +133,7 @@ export async function resolveDiscrepancy(id: string, input: ResolutionInput, act
     if (!owner) throw new ActionError("Owner not found.");
     await db.update(billingDiscrepancies).set({ status: "accepted", resolution: "exception", ownerUserId: owner.id, reviewOn: input.reviewOn, note: reason, reviewedByUserId: actorUserId, reviewedAt: now, updatedAt: now }).where(eq(billingDiscrepancies.id, id));
     await audit({ actorUserId, action: "discrepancy.exception", entityType: "billing_discrepancy", entityId: id, details: { contractLineId: d.contractLineId, difference: diff, ownerUserId: owner.id, reviewOn: input.reviewOn, reason } });
-    await logActivity({ type: licence ? "sync" : "device", companyId: d.companyId, entityType: "contract", entityId: d.contractId, title: `${licence ? "Licence" : "Device"} discrepancy accepted until ${input.reviewOn} (owner ${owner.name}): ${d.lineDescription} (${diff > 0 ? "+" : ""}${diff})`, body: reason, actorUserId, source: d.source });
+    await logActivity({ type: licence ? "sync" : "device", companyId: d.companyId, entityType: "contract", entityId: d.contractId, title: `${noun} discrepancy accepted until ${input.reviewOn} (owner ${owner.name}): ${d.lineDescription} (${diff > 0 ? "+" : ""}${diff})`, body: reason, actorUserId, source: d.source });
     return { kind: input.kind };
   }
 
@@ -141,7 +142,7 @@ export async function resolveDiscrepancy(id: string, input: ResolutionInput, act
     if (!input.bundleLineId || !c.lines.some((l) => l.id === input.bundleLineId && l.id !== line.id)) throw new ActionError("Choose the bundle line on the same contract.");
     const rows = (input.subscriptionRowIds ?? []).filter(Boolean);
     if (!rows.length) throw new ActionError("Choose at least one subscription to include in the bundle.");
-    for (const rowId of rows) await setServiceCoverage({ source: "pax8_subscription", sourceRowId: rowId, state: "bundle", contractLineId: input.bundleLineId, reason: reason ?? `Included in bundle from discrepancy on ${d.lineDescription}` }, actorUserId);
+    for (const rowId of rows) await setServiceLink({ source: "pax8_subscription", sourceRowId: rowId, role: "bundle", contractLineId: input.bundleLineId, reason: reason ?? `Included in bundle from discrepancy on ${d.lineDescription}` }, actorUserId);
     await db.update(billingDiscrepancies).set({ resolution: "include_in_bundle", note: reason, reviewedByUserId: actorUserId, reviewedAt: now, updatedAt: now }).where(eq(billingDiscrepancies.id, id));
     await audit({ actorUserId, action: "discrepancy.include_in_bundle", entityType: "billing_discrepancy", entityId: id, details: { contractLineId: d.contractLineId, bundleLineId: input.bundleLineId, subscriptions: rows, reason } });
     const r = await recheck();
@@ -160,12 +161,12 @@ export async function resolveDiscrepancy(id: string, input: ResolutionInput, act
   const newQty = Number(line.quantity) + diff;
   if (newQty < 0) throw new ActionError("The amended quantity would be negative.");
   const lines = asLines(c).map((l) => (l.id === line.id ? { ...l, quantity: newQty, reductionPolicy: input.kind === "reduce_at_renewal" ? ("at_renewal" as const) : l.reductionPolicy } : l));
-  const why = reason ?? `${licence ? "Licence" : "Device"} count: contracted ${d.contractedQty}, observed ${d.observedQty}`;
+  const why = reason ?? `${noun} count: contracted ${d.contractedQty}, observed ${d.observedQty}`;
   await updateContract(c.id, asInput(c), lines, actorUserId, { quantityEffectiveFrom: effectiveFrom, changeReason: why });
   const [change] = await db.select({ id: contractLineChanges.id }).from(contractLineChanges).where(and(eq(contractLineChanges.contractLineId, line.id), eq(contractLineChanges.field, "quantity"))).orderBy(desc(contractLineChanges.recordedAt)).limit(1);
   await db.update(billingDiscrepancies).set({ status: "resolved", resolution: input.kind, note: why, appliedChangeId: change?.id ?? null, reviewedByUserId: actorUserId, reviewedAt: now, updatedAt: now }).where(eq(billingDiscrepancies.id, id));
   await audit({ actorUserId, action: `discrepancy.${input.kind}`, entityType: "billing_discrepancy", entityId: id, details: { contractLineId: line.id, from: Number(line.quantity), to: newQty, effectiveFrom, changeId: change?.id ?? null, reason: why } });
-  await logActivity({ type: "contract", companyId: d.companyId, entityType: "contract", entityId: c.id, title: `${line.description}: ${Number(line.quantity)} → ${newQty} from ${effectiveFrom}${input.kind === "reduce_at_renewal" ? ` (billed at ${Number(line.quantity)} until renewal ${c.renewalDate})` : ""}, from a ${licence ? "licence" : "device"} discrepancy`, body: why, actorUserId, source: d.source });
+  await logActivity({ type: "contract", companyId: d.companyId, entityType: "contract", entityId: c.id, title: `${line.description}: ${Number(line.quantity)} → ${newQty} from ${effectiveFrom}${input.kind === "reduce_at_renewal" ? ` (billed at ${Number(line.quantity)} until renewal ${c.renewalDate})` : ""}, from a ${noun.toLowerCase()} discrepancy`, body: why, actorUserId, source: d.source });
   const check = await recheck();
   return { kind: input.kind, changeId: change?.id ?? null, newQuantity: newQty, effectiveFrom, check };
 }
