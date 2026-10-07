@@ -208,6 +208,10 @@ export const contractLines = pgTable(
     invoiceSchedule: text("invoice_schedule").notNull().default("contract"),
     // What happens when the quantity goes down mid-period: next_period (no credit, lower quantity from the next period), immediate (credit the unused days), at_renewal (the old quantity is billed until the contract's renewal date).
     reductionPolicy: text("reduction_policy").notNull().default("next_period"),
+    // Which value controls the billed quantity. fixed: the agreed quantity bills and a different count from the integrations is an exception to decide.
+    // synced: the integrations' count is what the customer should be billed, so a different count is a proposed quantity change that one approval records as dated history.
+    // Either way the invoice is produced from the dated history, never from a live count.
+    quantityRule: text("quantity_rule").notNull().default("fixed"),
     sortOrder: integer("sort_order").notNull().default(0),
     ...timestamps,
   },

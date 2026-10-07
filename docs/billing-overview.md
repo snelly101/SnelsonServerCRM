@@ -61,21 +61,27 @@ The CRM keeps read-only copies of what the integrations report, each stamped wit
 
 Rows that disappear upstream are marked deleted or archived, never removed.
 
-### 3.7 Service register (`service_coverage`)
+### 3.7 Service links and the service register (`service_links`)
 
-Every service the integrations report for a customer (Pax8 subscriptions, 20i packages and domains, NinjaOne managed devices) has a commercial state, shown on the company's **Services** tab and across customers on Billing → **Services**:
+Every integration is read through one **billing adapter** (`src/connectors/<provider>/billing.ts`, registered in `src/services/billing-adapters.ts`) that reports what the provider supplies in one shape (`src/lib/billing-model.ts`): the customer, a kind ("Microsoft 365 licence", "Hosting package", "Domain", "Managed devices"), the supplier's product reference, the quantity, the partner cost per month where the supplier prices it (Pax8 does; 20i and NinjaOne carry no pricing, so their cost is *unknown*, never zero), the supplier commitment or expiry date and when it was last synced. NinjaOne reports one pooled "managed devices" service per customer whose quantity is the billable count under the counting rules. A new integration is one adapter and a registry entry; nothing above the adapters knows a provider's tables.
+
+How each supplied service relates to the customer's agreed charges is one table, `service_links` (one row per service, unique on source and mirror row): the contract line where there is one, a **role**, how the link came about (**chosen by a person**, or **matched by catalogue SKU** or **by product name** at sync time; the device pool follows the *compare with NinjaOne* rule), the quantity and cost last confirmed by a sync, a reason, a review date and who decided. This replaced the separate billing-line columns on the Pax8 and 20i mirrors and the old `service_coverage` table (migration 0026 moved every existing mapping across). Rule matches are recorded at sync time so a mapping is stable and inspectable rather than recomputed on every read; a person's choice is never overwritten by a sync.
 
 | State | Meaning | Effect |
 |---|---|---|
-| Charged on a line | its own contract line bills it (the billing line chosen on the Subscriptions or Hosting tab, or a Pax8 SKU / name match) | counted against that line |
-| Included in a bundle | part of another line (e.g. Microsoft 365 seats inside a per-user managed package) | counted toward the bundle line in the licence check |
+| Charged on a line | a contract line bills it | its quantity counts against that line in the quantity check |
+| Included in a bundle | part of another line (e.g. Microsoft 365 seats inside a per-user managed package) | counted toward the bundle line |
 | Covered by commitment | paid for by a minimum-commitment line | counted against nothing |
 | Intentionally free | not charged, with a reason and a review date | counted against nothing; flagged when the review date passes |
 | Internal / non-billable | the MSP's own, a test tenant, an engineer's laptop | left out of counts and checks |
 | Needs investigation | flagged with a note | shown first until decided |
-| Unmapped | nobody has said | the only state that may mean missed revenue |
+| Unmapped | no link and no rule matches | the only state that may mean missed revenue |
 
-Decisions are audited and posted on the company timeline. Nothing in the register changes a contract or an invoice.
+The **service register** (`src/services/service-register.ts`) lists every supplied service with its state, line, how it matched, cost and last sync, per customer and across customers. Decisions are audited and posted on the company timeline. Nothing in the register changes a contract or an invoice.
+
+**Quantity rule.** Each recurring contract line says which value controls its billed quantity: **fixed** (default: the agreed quantity bills, and a different count from the integrations is an exception for a person to decide) or **synced** (the integrations' count is what should be billed, so a different count is a proposed quantity change that one approval records as dated history). Either way an invoice is produced from the dated history (4.3), never from a live count, so historical invoices never move when a provider's data changes.
+
+**Quantity check** (`src/services/quantity-check.ts`): for every active line, the sum of the quantities of the services charged on it or bundled into it, from every provider that maps services one by one (Pax8 licences, 20i packages and domains), against the contracted quantity; NinjaOne's pooled device count keeps its own check (lines of one contract sharing a scope are compared together). Differences become review items (3.8) with `source` = the provider; matching counts resolve them; an accepted item re-opens if the gap grows; a line no service is charged on any more has its item resolved rather than left stale. Runs inside every sync and after every mapping change.
 
 ### 3.8 Review queue (`billing_discrepancies`)
 
@@ -299,7 +305,6 @@ Proposals are built and signed in Better Proposals. The CRM creates the proposal
 
 - Pax8 credits and replacement invoices appear as their own lines or invoices; they are not yet netted against the original charge.
 - Xero's "invoiced vs contracted" comparison still uses normalised MRR rather than the billed-per-frequency figure.
-- 20i hosting counts are not yet compared with contract quantities the way devices and licences are.
 - Decreases in quantity are never credited mid-period (by design; they apply from the next period). Credit notes are not produced by the CRM.
 - Weekly and other non-standard Xero repeating-invoice schedules are listed but not imported as contracts.
 - Multi-currency: drafts carry the app's configured currency; there is no per-customer currency.
@@ -319,5 +324,6 @@ Proposals are built and signed in Better Proposals. The CRM creates the proposal
 | 20i | `src/services/twentyi.ts`, `src/connectors/twentyi/` |
 | Better Proposals | `src/services/proposals.ts`, `src/connectors/betterproposals/` |
 | Outbound ledger, links, conflicts | `src/services/integrations.ts` |
-| Schema | `src/db/schema/sales.ts` (contracts), `xero.ts`, `pax8.ts`, `ninjaone.ts`, `hosting.ts` |
+| Shared billing model, adapters, links, quantity check | `src/lib/billing-model.ts`, `src/connectors/*/billing.ts`, `src/services/billing-adapters.ts`, `src/services/service-links.ts`, `src/services/quantity-check.ts` |
+| Schema | `src/db/schema/sales.ts` (contracts), `service-links.ts`, `xero.ts`, `pax8.ts`, `ninjaone.ts`, `hosting.ts` |
 | Longer docs | `docs/integrations.md`, `docs/architecture.md`, `docs/backlog.md`, `docs/phases.md` |

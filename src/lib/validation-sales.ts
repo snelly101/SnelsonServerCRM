@@ -132,17 +132,21 @@ export const invoiceScheduleValues = ["contract", "own"] as const;
 export const reductionPolicyValues = ["next_period", "immediate", "at_renewal"] as const;
 export const INVOICE_SCHEDULE_LABELS: Record<(typeof invoiceScheduleValues)[number], string> = { contract: "With the contract's invoices", own: "On its own cycle" };
 export const REDUCTION_POLICY_LABELS: Record<(typeof reductionPolicyValues)[number], string> = { next_period: "Lower quantity from the next period", immediate: "Credit the unused days", at_renewal: "Old quantity until renewal" };
+export const quantityRuleValues = ["fixed", "synced"] as const;
+export const QUANTITY_RULE_LABELS: Record<(typeof quantityRuleValues)[number], string> = { fixed: "Fixed: bill the agreed quantity", synced: "Synced: bill what the integrations report" };
 
 export const contractLineSchema = lineSchema.extend({
   siteId: optionalUuid,
   countsAsManagedDevice: boolish,
   invoiceSchedule: z.enum(invoiceScheduleValues).default("contract"),
   reductionPolicy: z.enum(reductionPolicyValues).default("next_period"),
+  quantityRule: z.enum(quantityRuleValues).default("fixed"),
 });
 /** Schedule and reduction policy are optional for callers that build lines in code (imports, tests); the form always sends them. */
-export type ContractLineInput = Omit<z.infer<typeof contractLineSchema>, "invoiceSchedule" | "reductionPolicy"> & {
+export type ContractLineInput = Omit<z.infer<typeof contractLineSchema>, "invoiceSchedule" | "reductionPolicy" | "quantityRule"> & {
   invoiceSchedule?: (typeof invoiceScheduleValues)[number];
   reductionPolicy?: (typeof reductionPolicyValues)[number];
+  quantityRule?: (typeof quantityRuleValues)[number];
 };
 
 export const taskSchema = z.object({

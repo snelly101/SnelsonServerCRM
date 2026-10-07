@@ -30,7 +30,7 @@ describe("billing findings", () => {
     expect(FINDING_KINDS.map((k) => k.kind).every((k) => k in first.counts)).toBe(true);
     // The Acronis seats have no line: unmapped. The October period is due and not drafted: expected charge missing.
     const acronis = first.findings.find((f) => f.kind === "unmapped_service" && /Acronis/.test(f.title) && f.companyId === dental)!;
-    expect(acronis).toMatchObject({ severity: "amber", href: `/companies/${dental}?tab=subscriptions` });
+    expect(acronis).toMatchObject({ severity: "amber", href: `/companies/${dental}?tab=billing#services` });
     expect(acronis.amount).toBeCloseTo(21.7, 2);
     const due = first.findings.find((f) => f.kind === "expected_missing" && f.companyId === dental)!;
     expect(due).toMatchObject({ severity: "amber", amount: 168, href: "/billing/run?asOf=2026-10-05" });

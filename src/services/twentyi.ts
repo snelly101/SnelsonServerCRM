@@ -7,7 +7,8 @@ import { DEFAULT_TWENTYI_CONFIG, getTwentyIClient, type TwentyIConfig, type Twen
 import { LiveTwentyIClient } from "@/connectors/twentyi/live";
 import { registrableDomain, twentyIDate, twentyITime, type TwentyIDomainRaw, type TwentyIMailboxRaw } from "@/connectors/twentyi/types";
 import { getConnection, runSync, setConnectionConfig, setCredentials, updateConnection } from "./integrations";
-import { coverageFor } from "./coverage-lookup";
+import { linksByRow, setServiceLink, clearServiceLink, confirmLinksFromSync, matchableLinesFor } from "./service-links";
+import { twentyIBillingAdapter } from "@/connectors/twentyi/billing";
 import { createTask } from "./tasks";
 
 export type HostingItem = typeof hostingItems.$inferSelect;
@@ -194,7 +195,12 @@ export async function syncTwentyI(trigger: "schedule" | "manual", actorUserId?: 
       }
 
       const auto = config.autoLink ? await autoLinkHostingItems(actorUserId ?? null) : { linked: 0, inherited: 0 };
-      return `${seen.package.size} packages, ${seen.domain.size} domains, ${seen.mailbox.size} mailboxes${resolved.mode === "demo" ? " (DEMO data)" : ""}; ${auto.linked} auto-linked`;
+      // Billing: confirm each linked item as seen now, record rule matches (a line naming the package or domain), then compare counts with the lines.
+      const synced = await twentyIBillingAdapter.services(null);
+      const linkStats = await confirmLinksFromSync(synced, await matchableLinesFor([...new Set(synced.map((x) => x.companyId))], ["active"]), twentyIBillingAdapter.autoMatch);
+      const { runQuantityChecks } = await import("./quantity-check");
+      const check = await runQuantityChecks(actorUserId ?? null, { providers: ["twentyi"] });
+      return `${seen.package.size} packages, ${seen.domain.size} domains, ${seen.mailbox.size} mailboxes${resolved.mode === "demo" ? " (DEMO data)" : ""}; ${auto.linked} auto-linked; ${linkStats.added} lines matched by rule; ${check.open} open hosting count discrepancies`;
     },
     actorUserId,
   );
@@ -277,7 +283,8 @@ export async function linkHostingItem(itemId: string, companyId: string, actorUs
   if (!item) throw new ActionError("Hosting item not found. Run a sync first.");
   const [co] = await db.select({ id: companies.id, name: companies.name }).from(companies).where(eq(companies.id, companyId)).limit(1);
   if (!co) throw new ActionError("Company not found.");
-  await db.update(hostingItems).set({ companyId, matchSource: "manual", contractLineId: item.companyId === companyId ? item.contractLineId : null, updatedAt: new Date() }).where(eq(hostingItems.id, itemId));
+  await db.update(hostingItems).set({ companyId, matchSource: "manual", updatedAt: new Date() }).where(eq(hostingItems.id, itemId));
+  if (item.companyId !== companyId) await clearServiceLink("hosting_item", itemId, actorUserId);
   if (item.kind === "package") {
     await db.update(hostingItems).set({ companyId, matchSource: "inherited", updatedAt: new Date() }).where(and(eq(hostingItems.parentExternalId, item.externalId), inArray(hostingItems.kind, ["mailbox", "ssl"]), or(isNull(hostingItems.matchSource), eq(hostingItems.matchSource, "inherited"))!));
   }
@@ -289,25 +296,25 @@ export async function unlinkHostingItem(itemId: string, actorUserId: string) {
   const [item] = await db.select().from(hostingItems).where(eq(hostingItems.id, itemId)).limit(1);
   if (!item) throw new ActionError("Hosting item not found.");
   // matchSource stays "manual" with no company so the next sync does not re-link it automatically.
-  await db.update(hostingItems).set({ companyId: null, matchSource: "manual", contractLineId: null, updatedAt: new Date() }).where(eq(hostingItems.id, itemId));
+  await db.update(hostingItems).set({ companyId: null, matchSource: "manual", updatedAt: new Date() }).where(eq(hostingItems.id, itemId));
+  await clearServiceLink("hosting_item", itemId, actorUserId);
   if (item.kind === "package") {
-    await db.update(hostingItems).set({ companyId: null, contractLineId: null, updatedAt: new Date() }).where(and(eq(hostingItems.parentExternalId, item.externalId), inArray(hostingItems.kind, ["mailbox", "ssl"]), or(isNull(hostingItems.matchSource), eq(hostingItems.matchSource, "inherited"))!));
+    await db.update(hostingItems).set({ companyId: null, updatedAt: new Date() }).where(and(eq(hostingItems.parentExternalId, item.externalId), inArray(hostingItems.kind, ["mailbox", "ssl"]), or(isNull(hostingItems.matchSource), eq(hostingItems.matchSource, "inherited"))!));
   }
   await audit({ actorUserId, action: "hosting.unlink", entityType: "company", entityId: item.companyId ?? "none", details: { itemId, kind: item.kind, name: item.name } });
   if (item.companyId) await logActivity({ type: "sync", companyId: item.companyId, entityType: "hosting_item", entityId: itemId, title: `Unlinked 20i ${HOSTING_KIND_LABELS[item.kind].toLowerCase()} "${item.name}"`, actorUserId, source: "twentyi" });
 }
 
-/** Ties an item to the contract line that bills it. The line must belong to a contract of the item's company. */
+/** Ties an item to the contract line that bills it (a charged service link). The line must belong to a contract of the item's company. */
 export async function setHostingBillingLine(itemId: string, contractLineId: string | null, actorUserId: string) {
   const [item] = await db.select().from(hostingItems).where(eq(hostingItems.id, itemId)).limit(1);
   if (!item) throw new ActionError("Hosting item not found.");
   if (!item.companyId) throw new ActionError("Link the item to a company before choosing what bills it.");
-  if (contractLineId) {
-    const [line] = await db.select({ id: contractLines.id, companyId: contracts.companyId, description: contractLines.description }).from(contractLines).innerJoin(contracts, eq(contracts.id, contractLines.contractId)).where(eq(contractLines.id, contractLineId)).limit(1);
-    if (!line || line.companyId !== item.companyId) throw new ActionError("That contract line belongs to a different company.");
-  }
-  await db.update(hostingItems).set({ contractLineId, updatedAt: new Date() }).where(eq(hostingItems.id, itemId));
+  if (contractLineId) await setServiceLink({ source: "hosting_item", sourceRowId: item.id, role: "charged", contractLineId }, actorUserId);
+  else await clearServiceLink("hosting_item", item.id, actorUserId);
   await audit({ actorUserId, action: "hosting.billing_line", entityType: "company", entityId: item.companyId, details: { itemId, name: item.name, contractLineId } });
+  const { runQuantityChecks } = await import("./quantity-check");
+  await runQuantityChecks(actorUserId, { companyId: item.companyId, providers: ["twentyi"] });
 }
 
 // ---------------------------------------------------------------------------
@@ -332,7 +339,7 @@ export async function hostingTotals(companyId?: string) {
       expiring30: sql<number>`count(*) filter (where expires_on is not null and expires_on <= current_date + 30)`.mapWith(Number),
       expired: sql<number>`count(*) filter (where expires_on is not null and expires_on < current_date)`.mapWith(Number),
       unlinked: sql<number>`count(*) filter (where company_id is null and kind in ('package','domain'))`.mapWith(Number),
-      unbilled: sql<number>`count(*) filter (where company_id is not null and contract_line_id is null and kind in ('package','domain') and not exists (select 1 from service_coverage sc where sc.source = 'hosting_item' and sc.source_row_id = hosting_items.id))`.mapWith(Number),
+      unbilled: sql<number>`count(*) filter (where company_id is not null and kind in ('package','domain') and not exists (select 1 from service_links sl where sl.source = 'hosting_item' and sl.source_row_id = hosting_items.id))`.mapWith(Number),
       lastFetched: sql<Date | null>`max(fetched_at)`,
     })
     .from(hostingItems)
@@ -385,10 +392,11 @@ export async function companyHostingOverview(companyId: string) {
     .where(and(eq(contracts.companyId, companyId), isNull(contracts.archivedAt), inArray(contracts.status, ["draft", "active"])))
     .orderBy(asc(contracts.name), asc(contractLines.sortOrder));
   const lineById = new Map(lineRows.map((l) => [l.id, l]));
-  const coverage = await coverageFor("hosting_item", { companyId });
+  const coverage = await linksByRow("hosting_item", { companyId });
   const decorate = (i: HostingItem) => {
     const cov = coverage.get(i.id) ?? null;
-    return { ...i, billingLine: i.contractLineId ? (lineById.get(i.contractLineId) ?? null) : null, coverage: cov ? { state: cov.state, reason: cov.reason, reviewOn: cov.reviewOn, line: cov.contractLineId ? (lineById.get(cov.contractLineId) ?? null) : null } : null, freshness: hostingFreshness(i.fetchedAt), consoleUrl: i.kind === "package" || i.kind === "domain" ? (resolved?.client.consoleUrl(i.kind, i.externalId) ?? null) : null };
+    const charged = cov?.role === "charged" && cov.contractLineId ? (lineById.get(cov.contractLineId) ?? null) : null;
+    return { ...i, contractLineId: charged?.id ?? null, billingLine: charged, coverage: cov && cov.role !== "charged" ? { state: cov.role, reason: cov.reason, reviewOn: cov.reviewOn, line: cov.contractLineId ? (lineById.get(cov.contractLineId) ?? null) : null } : null, freshness: hostingFreshness(i.fetchedAt), consoleUrl: i.kind === "package" || i.kind === "domain" ? (resolved?.client.consoleUrl(i.kind, i.externalId) ?? null) : null };
   };
   const packages = items.filter((i) => i.kind === "package").map((p) => ({ ...decorate(p), mailboxes: items.filter((m) => m.kind === "mailbox" && m.parentExternalId === p.externalId).map(decorate), domains: items.filter((d) => d.kind === "domain" && d.parentExternalId === p.externalId).map(decorate) }));
   const attachedDomainIds = new Set(packages.flatMap((p) => p.domains.map((d) => d.id)));

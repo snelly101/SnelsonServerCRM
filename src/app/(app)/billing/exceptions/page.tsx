@@ -32,7 +32,7 @@ export default async function ExceptionsPage({ searchParams }: { searchParams: P
   const meta = FINDING_KINDS.find((k) => k.kind === kind);
   const showFindings = view === "all" || view === "findings";
   const showCounts = view === "all" || view === "counts";
-  const licence = openDisc.filter((d) => d.source === "pax8");
+  const licence = openDisc.filter((d) => d.source !== "ninjaone");
   const device = openDisc.filter((d) => d.source === "ninjaone");
   const href = (v: string) => `/billing/exceptions?view=${v}`;
   return (
@@ -96,12 +96,12 @@ export default async function ExceptionsPage({ searchParams }: { searchParams: P
 
       {showCounts && (
         <>
-          <Card title={`Licence count discrepancies (${licence.length})`} padded={false}>
+          <Card title={`Licence and hosting count discrepancies (${licence.length})`} padded={false}>
             <DiscrepancyTable rows={licence} canReview={canReview} currency={settings.currency} kind="licence" />
           </Card>
           <Card title={`Device count discrepancies (${device.length})`} padded={false}>
             <DiscrepancyTable rows={device} canReview={canReview} currency={settings.currency} kind="device" />
-            <p className="border-t border-slate-100 px-4 py-2 text-[11px] text-slate-500">Contracted vs observed at Pax8 and NinjaOne. <strong>Resolve</strong> offers amend the line, reduce at renewal, include in a bundle, accept as an exception with an owner and review date, or dismiss, each with the money consequence first. Re-checked on every sync.</p>
+            <p className="border-t border-slate-100 px-4 py-2 text-[11px] text-slate-500">Contracted vs observed at Pax8, 20i and NinjaOne. <strong>Resolve</strong> offers amend the line, reduce at renewal, include in a bundle, accept as an exception with an owner and review date, or dismiss, each with the money consequence first. Re-checked on every sync.</p>
           </Card>
         </>
       )}

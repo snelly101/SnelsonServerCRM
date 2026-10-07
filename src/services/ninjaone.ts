@@ -13,10 +13,10 @@ import { getNinjaOneClient, type NinjaConfig, type NinjaCredentials } from "@/co
 import { LiveNinjaOneClient, NINJA_SCOPES, ninjaTime } from "@/connectors/ninjaone/live";
 import type { NinjaDeviceRaw, NinjaRegion } from "@/connectors/ninjaone/types";
 import { createLink, getConnection, getLink, listLinks, raiseConflict, removeLink, runOutbound, runSync, setConnectionConfig, setCredentials, updateConnection } from "./integrations";
-import { NON_BILLABLE_STATES } from "./coverage-lookup";
+import { deviceNotNonBillable } from "./service-links";
 
 /** SQL fragment: the device has no coverage row marking it free or internal. */
-const notMarkedNonBillable = sql`not exists (select 1 from service_coverage sc where sc.source = 'ninja_device' and sc.source_row_id = ${ninjaDevices.id} and sc.state in (${sql.join(NON_BILLABLE_STATES.map((x) => sql`${x}`), sql`, `)}))`;
+const notMarkedNonBillable = deviceNotNonBillable;
 
 // ---------------------------------------------------------------------------
 // Connection (credentials entered in the UI, verified before storage)
@@ -302,8 +302,8 @@ export async function listDevices(p: { q?: string; companyId?: string; orgId?: s
     base().where(where).orderBy(asc(ninjaOrganizations.name), asc(ninjaDevices.displayName)).limit(pageSize).offset((page - 1) * pageSize),
     db.select({ total: sql<number>`count(*)`.mapWith(Number) }).from(ninjaDevices).leftJoin(ninjaOrganizations, eq(ninjaOrganizations.orgId, ninjaDevices.orgId)).where(where),
   ]);
-  const coverage = rows.length ? await (await import("./coverage-lookup")).coverageFor("ninja_device", { rowIds: rows.map((r) => r.d.id) }) : new Map();
-  return { rows: rows.map((r) => ({ ...r.d, orgName: r.orgName, locationName: r.locationName, companyName: r.companyName, siteName: r.siteName, freshness: deviceFreshness(r.d.fetchedAt), active: Boolean(r.d.lastContact && r.d.lastContact >= activeCutoff), coverage: ((c) => (c ? { state: c.state, reason: c.reason, reviewOn: c.reviewOn } : null))(coverage.get(r.d.id)) })), total, page, pageSize, pageCount: Math.max(1, Math.ceil(total / pageSize)), activeCutoff };
+  const coverage = rows.length ? await (await import("./service-links")).linksByRow("ninja_device", { rowIds: rows.map((r) => r.d.id) }) : new Map();
+  return { rows: rows.map((r) => ({ ...r.d, orgName: r.orgName, locationName: r.locationName, companyName: r.companyName, siteName: r.siteName, freshness: deviceFreshness(r.d.fetchedAt), active: Boolean(r.d.lastContact && r.d.lastContact >= activeCutoff), coverage: ((c) => (c ? { state: c.role, reason: c.reason, reviewOn: c.reviewOn } : null))(coverage.get(r.d.id)) })), total, page, pageSize, pageCount: Math.max(1, Math.ceil(total / pageSize)), activeCutoff };
 }
 
 export async function deviceTotals(companyId?: string) {
@@ -317,7 +317,7 @@ export async function deviceTotals(companyId?: string) {
       active: sql<number>`count(*) filter (where last_contact >= ${cutoff})`.mapWith(Number),
       online: sql<number>`count(*) filter (where offline = false)`.mapWith(Number),
       billable: sql<number>`count(*) filter (where last_contact >= ${cutoff} and node_class in ${classes.length ? sql`(${sql.join(classes.map((c) => sql`${c}`), sql`, `)})` : sql`('__none__')`} and (approval_status = 'APPROVED' or approval_status is null) and ${notMarkedNonBillable})`.mapWith(Number),
-      nonBillable: sql<number>`count(*) filter (where exists (select 1 from service_coverage sc where sc.source = 'ninja_device' and sc.source_row_id = ninja_devices.id))`.mapWith(Number),
+      nonBillable: sql<number>`count(*) filter (where exists (select 1 from service_links sl where sl.source = 'ninja_device' and sl.source_row_id = ninja_devices.id))`.mapWith(Number),
       servers: sql<number>`count(*) filter (where node_class like '%SERVER%' and last_contact >= ${cutoff})`.mapWith(Number),
       workstations: sql<number>`count(*) filter (where node_class in ('WINDOWS_WORKSTATION','MAC','LINUX_WORKSTATION') and last_contact >= ${cutoff})`.mapWith(Number),
       needsAttention: sql<number>`count(*) filter (where health_status is not null and health_status <> 'HEALTHY' and last_contact >= ${cutoff})`.mapWith(Number),
@@ -398,7 +398,7 @@ export async function runDiscrepancyCheck(actorUserId: string | null, companyId?
 
 const owner = alias(user, "owner");
 
-export async function listDiscrepancies(p: { status?: string; companyId?: string; source?: "ninjaone" | "pax8" }) {
+export async function listDiscrepancies(p: { status?: string; companyId?: string; source?: "ninjaone" | "pax8" | "twentyi" }) {
   return db
     .select({ d: billingDiscrepancies, companyName: companies.name, contractName: contracts.name, siteName: sites.name, reviewedBy: db._.fullSchema.user.name, ownerName: owner.name })
     .from(billingDiscrepancies)

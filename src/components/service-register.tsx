@@ -185,7 +185,7 @@ export function ServiceRegisterTable({ rows, linesByCompany, canEdit, settings, 
                 {r.reason && <div className="text-slate-500">{r.reason}</div>}
                 {r.setByName && <div className="text-[11px] text-slate-400">by {r.setByName}</div>}
               </td>
-              {canEdit && <td className="text-right">{r.key.startsWith("ninja_summary:") ? null : <CoverageDialog row={r} lines={linesByCompany[r.companyId] ?? []} />}</td>}
+              {canEdit && <td className="text-right">{r.pool ? null : <CoverageDialog row={r} lines={linesByCompany[r.companyId] ?? []} />}</td>}
             </tr>
           ))}
         </tbody>
@@ -218,14 +218,24 @@ export function DeviceCoverageControl({ device }: { device: { id: string; compan
     key: `ninja_device:${device.id}`,
     source: "ninja_device",
     rowId: device.id,
+    provider: "ninjaone",
+    providerLabel: "NinjaOne",
     companyId: device.companyId,
     companyName: null,
     kind: "Device",
     name: device.name,
+    supplierProduct: device.nodeClass,
     detail: device.nodeClass.toLowerCase().replace(/_/g, " "),
     quantity: 1,
     monthlyCost: null,
+    costKnown: false,
     renewsOn: null,
+    status: "active",
+    syncedAt: null,
+    consoleUrl: null,
+    pool: false,
+    matchedBy: null,
+    linkedAt: null,
     state: (device.coverage?.state as ServiceState | undefined) ?? "charged",
     line: null,
     reason: device.coverage?.reason ?? null,

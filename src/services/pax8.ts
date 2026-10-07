@@ -14,13 +14,11 @@ import {
   companies,
   contacts,
   contractLines,
-  contracts,
   pax8Companies,
   pax8InvoiceItems,
   pax8Invoices,
   pax8Products,
   pax8Subscriptions,
-  products,
   user,
   xeroContacts,
   xeroInvoices,
@@ -48,7 +46,6 @@ import {
   pax8Date,
   pax8Number,
   pax8Time,
-  termMonths,
   type Pax8ContactCreate,
   type Pax8ContactType,
   type Pax8InvoiceItemRaw,
@@ -65,14 +62,16 @@ import {
   setCredentials,
   updateConnection,
 } from "./integrations";
-import { listDiscrepancies, reopenExpiredExceptions } from "./ninjaone";
-import { coverageFor, isNonBillable } from "./coverage-lookup";
+import { listDiscrepancies } from "./ninjaone";
+import { linksByRow, matchableLinesFor, resolveService, setServiceLink, clearServiceLink, confirmLinksFromSync, type ServiceLink } from "./service-links";
+import { pax8BillingAdapter, BILLED_STATUSES, monthlyUnitCost } from "@/connectors/pax8/billing";
+import type { MatchableLine } from "@/lib/billing-model";
+export { BILLED_STATUSES, monthlyUnitCost };
 
 export type Pax8Subscription = typeof pax8Subscriptions.$inferSelect;
 export type Pax8Company = typeof pax8Companies.$inferSelect;
 
 /** Subscription statuses that Pax8 bills the partner for (and that a customer therefore has). */
-export const BILLED_STATUSES = ["Active", "Activated", "PendingCancel"];
 const LINE_MONTHS: Record<string, number | null> = {
   monthly: 1,
   quarterly: 3,
@@ -420,8 +419,10 @@ export async function syncPax8(
       const auto = config.autoLink
         ? await autoLinkPax8Companies(actorUserId ?? null)
         : { linked: 0 };
+      const synced = await pax8BillingAdapter.services(null);
+      const linkStats = await confirmLinksFromSync(synced, await matchableLinesFor([...new Set(synced.map((x) => x.companyId))], ["active"]), pax8BillingAdapter.autoMatch);
       const check = await runLicenceCheck(actorUserId ?? null);
-      return `${seenCompanies.size} companies, ${seenSubs.size} subscriptions, ${itemCount} charge lines on ${invoiceCount} invoices${billNote}${resolved.mode === "demo" ? " (DEMO data)" : ""}; ${auto.linked} auto-linked; ${check.open} open licence discrepancies`;
+      return `${seenCompanies.size} companies, ${seenSubs.size} subscriptions, ${itemCount} charge lines on ${invoiceCount} invoices${billNote}${resolved.mode === "demo" ? " (DEMO data)" : ""}; ${auto.linked} auto-linked; ${linkStats.added} lines matched by rule; ${check.open} open licence discrepancies`;
     },
     actorUserId,
   );
@@ -1114,58 +1115,12 @@ export async function unlinkPax8Company(
 }
 
 // ---------------------------------------------------------------------------
-// Subscriptions ↔ contract lines. A person's explicit choice wins; otherwise
-// the CRM product SKU must equal the Pax8 SKU or vendor SKU, or the product
-// name (or line description) must equal the Pax8 product name.
+// Subscriptions ↔ contract lines: service links (a person's choice, or the
+// SKU / name rule recorded at sync time); see service-links.ts.
 // ---------------------------------------------------------------------------
-const norm = (s: string | null | undefined) =>
-  (s ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
-
-export type MatchableLine = {
-  id: string;
-  contractId: string;
-  contractName: string;
-  contractStatus: string;
-  description: string;
-  quantity: string;
-  unitPrice: string;
-  unitCost: string | null;
-  billingFrequency: string;
-  pricingModel: string;
-  productSku: string | null;
-  productName: string | null;
-};
-
-export async function matchableLines(
-  companyId: string,
-  statuses: ("draft" | "active")[] = ["draft", "active"],
-): Promise<MatchableLine[]> {
-  return db
-    .select({
-      id: contractLines.id,
-      contractId: contracts.id,
-      contractName: contracts.name,
-      contractStatus: contracts.status,
-      description: contractLines.description,
-      quantity: contractLines.quantity,
-      unitPrice: contractLines.unitPrice,
-      unitCost: contractLines.unitCost,
-      billingFrequency: contractLines.billingFrequency,
-      pricingModel: contractLines.pricingModel,
-      productSku: products.sku,
-      productName: products.name,
-    })
-    .from(contractLines)
-    .innerJoin(contracts, eq(contracts.id, contractLines.contractId))
-    .leftJoin(products, eq(products.id, contractLines.productId))
-    .where(
-      and(
-        eq(contracts.companyId, companyId),
-        isNull(contracts.archivedAt),
-        inArray(contracts.status, statuses),
-      ),
-    )
-    .orderBy(asc(contracts.name), asc(contractLines.sortOrder));
+export type { MatchableLine };
+export async function matchableLines(companyId: string, statuses: ("draft" | "active")[] = ["draft", "active"]): Promise<MatchableLine[]> {
+  return (await matchableLinesFor([companyId], statuses)).get(companyId) ?? [];
 }
 
 export type LineMatch = {
@@ -1173,79 +1128,28 @@ export type LineMatch = {
   by: "manual" | "sku" | "name";
 } | null;
 
-export function matchLine(
-  sub: Pick<
-    Pax8Subscription,
-    "contractLineId" | "sku" | "vendorSku" | "productName"
-  >,
-  lines: MatchableLine[],
-): LineMatch {
-  if (sub.contractLineId) {
-    const line = lines.find((l) => l.id === sub.contractLineId);
-    if (line) return { line, by: "manual" };
-  }
-  const skus = new Set([norm(sub.sku), norm(sub.vendorSku)].filter(Boolean));
-  const bySku = skus.size
-    ? lines.find((l) => l.productSku && skus.has(norm(l.productSku)))
-    : undefined;
-  if (bySku) return { line: bySku, by: "sku" };
-  const name = norm(sub.productName);
-  const byName = name
-    ? lines.find(
-        (l) => norm(l.productName) === name || norm(l.description) === name,
-      )
-    : undefined;
-  return byName ? { line: byName, by: "name" } : null;
+/**
+ * Which line bills a subscription: its service link (chosen by a person or
+ * recorded from a rule at sync time), else the SKU / name rule now. Null when
+ * the link says the subscription is not charged on a line of its own
+ * (bundled into another line counts as that line; free, internal,
+ * commitment and investigate return null).
+ */
+export function matchLine(sub: Pick<Pax8Subscription, "id" | "companyId" | "sku" | "vendorSku" | "productName" | "quantity">, lines: MatchableLine[], link?: ServiceLink | null): LineMatch {
+  const service = { key: `pax8_subscription:${sub.id}`, source: "pax8_subscription" as const, rowId: sub.id, provider: "pax8" as const, companyId: sub.companyId ?? "", kind: "", name: sub.productName, supplierProduct: sub.sku ?? sub.vendorSku ?? null, matchKeys: [sub.sku, sub.vendorSku].filter((x): x is string => Boolean(x)), detail: null, quantity: sub.quantity, monthlyCost: null, costKnown: true, renewsOn: null, status: null, syncedAt: null, href: "", consoleUrl: null, pool: false };
+  const r = resolveService(service, link ?? undefined, lines, pax8BillingAdapter.autoMatch);
+  if ((r.state !== "charged" && r.state !== "bundle") || !r.lineId) return null;
+  const line = lines.find((l) => l.id === r.lineId);
+  return line ? { line, by: (r.by === "rule" ? "name" : r.by) ?? "manual" } : null;
 }
 
-/** Monthly partner cost per unit, from the per-term price. Null for one-off or unknown terms. */
-export function monthlyUnitCost(
-  price: string | number | null,
-  billingTerm: string | null,
-): number | null {
-  const p = pax8Number(price);
-  const months = termMonths(billingTerm);
-  if (p === null || !months) return null;
-  return p / months;
-}
-
-export async function setSubscriptionBillingLine(
-  subscriptionRowId: string,
-  contractLineId: string | null,
-  actorUserId: string,
-) {
-  const [s] = await db
-    .select()
-    .from(pax8Subscriptions)
-    .where(eq(pax8Subscriptions.id, subscriptionRowId))
-    .limit(1);
+export async function setSubscriptionBillingLine(subscriptionRowId: string, contractLineId: string | null, actorUserId: string) {
+  const [s] = await db.select().from(pax8Subscriptions).where(eq(pax8Subscriptions.id, subscriptionRowId)).limit(1);
   if (!s) throw new ActionError("Subscription not found.");
-  if (!s.companyId)
-    throw new ActionError(
-      "Link the Pax8 company to a CRM company before choosing what bills its subscriptions.",
-    );
-  if (contractLineId) {
-    const lines = await matchableLines(s.companyId);
-    if (!lines.some((l) => l.id === contractLineId))
-      throw new ActionError(
-        "That contract line belongs to a different company.",
-      );
-  }
-  await db
-    .update(pax8Subscriptions)
-    .set({ contractLineId, updatedAt: new Date() })
-    .where(eq(pax8Subscriptions.id, s.id));
-  await audit({
-    actorUserId,
-    action: "pax8.billing_line",
-    entityType: "company",
-    entityId: s.companyId,
-    details: {
-      subscriptionId: s.subscriptionId,
-      product: s.productName,
-      contractLineId,
-    },
-  });
+  if (!s.companyId) throw new ActionError("Link the Pax8 company to a CRM company before choosing what bills its subscriptions.");
+  if (contractLineId) await setServiceLink({ source: "pax8_subscription", sourceRowId: s.id, role: "charged", contractLineId }, actorUserId);
+  else await clearServiceLink("pax8_subscription", s.id, actorUserId);
+  await audit({ actorUserId, action: "pax8.billing_line", entityType: "company", entityId: s.companyId, details: { subscriptionId: s.subscriptionId, product: s.productName, contractLineId } });
   await runLicenceCheck(actorUserId, s.companyId);
 }
 
@@ -1363,11 +1267,8 @@ export async function applyPax8Cost(
     .limit(1);
   if (!s || !s.companyId)
     throw new ActionError("Subscription not found or not linked to a company.");
-  const match = matchLine(s, await matchableLines(s.companyId));
-  if (!match)
-    throw new ActionError(
-      "No contract line bills this subscription yet. Choose one first.",
-    );
+  const match = matchLine(s, await matchableLines(s.companyId), (await linksByRow("pax8_subscription", { rowIds: [s.id] })).get(s.id));
+  if (!match) throw new ActionError("No contract line bills this subscription yet. Choose one first.");
   const monthly = monthlyUnitCost(s.price, s.billingTerm);
   const months = LINE_MONTHS[match.line.billingFrequency] ?? null;
   if (monthly === null || !months)
@@ -1408,140 +1309,9 @@ export async function applyPax8Cost(
 // Licence check: contracted quantity on the matched line vs licences held at
 // Pax8. Writes billing_discrepancies rows with source = pax8 for review.
 // ---------------------------------------------------------------------------
-export async function runLicenceCheck(
-  actorUserId: string | null,
-  companyId?: string,
-) {
-  await reopenExpiredExceptions();
-  const subs = await db
-    .select()
-    .from(pax8Subscriptions)
-    .where(
-      and(
-        eq(pax8Subscriptions.externalStatus, "active"),
-        inArray(pax8Subscriptions.status, BILLED_STATUSES),
-        sql`${pax8Subscriptions.companyId} is not null`,
-        companyId ? eq(pax8Subscriptions.companyId, companyId) : undefined,
-      ),
-    );
-  const byCompany = new Map<string, Pax8Subscription[]>();
-  for (const s of subs)
-    byCompany.set(s.companyId!, [...(byCompany.get(s.companyId!) ?? []), s]);
-  let open = 0;
-  let resolvedCount = 0;
-  let checked = 0;
-  const now = new Date();
-  for (const [cid, list] of byCompany) {
-    const lines = await matchableLines(cid, ["active"]);
-    const coverage = await coverageFor("pax8_subscription", { companyId: cid });
-    const observedByLine = new Map<
-      string,
-      { line: MatchableLine; observed: number; subscriptionIds: string[] }
-    >();
-    for (const s of list) {
-      // Explicit coverage first: a bundled subscription counts toward its bundle line; free, internal and commitment-covered ones count toward nothing.
-      const cov = coverage.get(s.id);
-      if (cov && (isNonBillable(cov) || cov.state === "commitment")) continue;
-      const m = cov?.state === "bundle" && cov.contractLineId ? ((l) => (l ? { line: l, by: "manual" as const } : null))(lines.find((l) => l.id === cov.contractLineId)) : matchLine(s, lines);
-      if (!m) continue;
-      const cur = observedByLine.get(m.line.id) ?? {
-        line: m.line,
-        observed: 0,
-        subscriptionIds: [],
-      };
-      cur.observed += s.quantity;
-      cur.subscriptionIds.push(s.subscriptionId);
-      observedByLine.set(m.line.id, cur);
-    }
-    for (const { line, observed, subscriptionIds } of observedByLine.values()) {
-      checked++;
-      const contracted = Number(line.quantity);
-      const diff = observed - contracted;
-      const [existing] = await db
-        .select()
-        .from(billingDiscrepancies)
-        .where(
-          and(
-            eq(billingDiscrepancies.source, "pax8"),
-            eq(billingDiscrepancies.contractLineId, line.id),
-            inArray(billingDiscrepancies.status, ["open", "accepted"]),
-          ),
-        )
-        .orderBy(desc(billingDiscrepancies.detectedAt))
-        .limit(1);
-      const basis = {
-        source: "pax8",
-        subscriptionIds,
-        statuses: BILLED_STATUSES,
-        checkedAt: now.toISOString(),
-      };
-      if (diff === 0) {
-        if (existing) {
-          await db
-            .update(billingDiscrepancies)
-            .set({
-              status: "resolved",
-              observedQty: observed,
-              difference: "0",
-              note: "Counts now match",
-              lastSeenAt: now,
-              updatedAt: now,
-            })
-            .where(eq(billingDiscrepancies.id, existing.id));
-          resolvedCount++;
-        }
-        continue;
-      }
-      if (existing) {
-        const changed = existing.observedQty !== observed;
-        await db
-          .update(billingDiscrepancies)
-          .set({
-            observedQty: observed,
-            contractedQty: String(contracted),
-            difference: String(diff),
-            lastSeenAt: now,
-            basis,
-            status:
-              existing.status === "accepted" &&
-              changed &&
-              Math.abs(diff) > Math.abs(Number(existing.difference))
-                ? "open"
-                : existing.status,
-            updatedAt: now,
-          })
-          .where(eq(billingDiscrepancies.id, existing.id));
-        if (existing.status === "open") open++;
-      } else {
-        await db
-          .insert(billingDiscrepancies)
-          .values({
-            source: "pax8",
-            companyId: cid,
-            contractId: line.contractId,
-            contractLineId: line.id,
-            siteId: null,
-            lineDescription: line.description,
-            contractedQty: String(contracted),
-            observedQty: observed,
-            difference: String(diff),
-            unitPrice: line.unitPrice,
-            basis,
-          });
-        await logActivity({
-          type: "sync",
-          companyId: cid,
-          entityType: "contract",
-          entityId: line.contractId,
-          title: `Licence count discrepancy: ${line.description} contracted ${contracted}, Pax8 has ${observed} (${diff > 0 ? "+" : ""}${diff})`,
-          actorUserId,
-          source: "pax8",
-        });
-        open++;
-      }
-    }
-  }
-  return { open, resolved: resolvedCount, checked };
+export async function runLicenceCheck(actorUserId: string | null, companyId?: string) {
+  const { runQuantityChecks } = await import("./quantity-check");
+  return runQuantityChecks(actorUserId, { companyId, providers: ["pax8"] });
 }
 
 // ---------------------------------------------------------------------------
@@ -2236,10 +2006,10 @@ export async function companySubscriptionOverview(companyId: string) {
       .orderBy(desc(pax8InvoiceItems.invoiceDate))
       .limit(6),
   ]);
-  const coverage = await coverageFor("pax8_subscription", { companyId });
+  const coverage = await linksByRow("pax8_subscription", { companyId });
   const subscriptions = subs.map((s) => {
     const cov = coverage.get(s.id) ?? null;
-    const match = cov?.state === "bundle" && cov.contractLineId ? ((l) => (l ? { line: l, by: "manual" as const } : null))(lines.find((l) => l.id === cov.contractLineId)) : matchLine(s, lines);
+    const match = matchLine(s, lines, cov);
     const monthly = monthlyUnitCost(s.price, s.billingTerm);
     const lineMonths = match ? LINE_MONTHS[match.line.billingFrequency] : null;
     const lineMonthlyCost =
@@ -2254,8 +2024,9 @@ export async function companySubscriptionOverview(companyId: string) {
         s.externalStatus === "active" && BILLED_STATUSES.includes(s.status),
       line: match?.line ?? null,
       matchedBy: match?.by ?? null,
+      contractLineId: match?.line.id ?? null,
       /** Explicit commercial state from the service register, if any (bundle, commitment, free, internal, investigate). */
-      coverage: cov ? { state: cov.state, reason: cov.reason, reviewOn: cov.reviewOn } : null,
+      coverage: cov && cov.role !== "charged" ? { state: cov.role, reason: cov.reason, reviewOn: cov.reviewOn } : null,
       monthlyUnitCost: monthly,
       lineMonthlyCost,
       lineMonthlyPrice,
