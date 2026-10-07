@@ -309,6 +309,9 @@ Proposals are built and signed in Better Proposals. A signed proposal can also b
 - Weekly and other non-standard Xero repeating-invoice schedules are listed but not imported as contracts.
 - Multi-currency: drafts carry the app's configured currency; there is no per-customer currency.
 - Tax is a single configured Xero tax type per draft line (tax-exclusive amounts); there is no per-line VAT logic beyond that.
+- 20i and NinjaOne expose no pricing through their APIs, so supplier cost for hosting and devices is whatever is recorded on the line; the CRM reports it as unknown rather than zero when nothing is recorded.
+- Pax8 is the only provider whose supplier invoices are reconciled line by line; duplicates are detected by supplier product within one customer and provider, not across providers.
+- A synced quantity change is never applied without a person's approval, including at automation level 2.
 
 ## 13. Where the code is
 
