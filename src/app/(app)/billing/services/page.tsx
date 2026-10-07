@@ -3,7 +3,8 @@ import { requirePermission } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { getAppSettings } from "@/lib/settings";
 import { serviceRegister, SERVICE_STATE_LABELS } from "@/services/service-register";
-import { matchableLines } from "@/services/pax8";
+import { matchableLinesFor } from "@/services/service-links";
+import { PROVIDER_LABELS } from "@/lib/billing-model";
 import { Card } from "@/components/ui/page";
 import { Input, Select } from "@/components/ui/form";
 import { Button } from "@/components/ui/button";
@@ -17,15 +18,15 @@ export default async function ServiceCoveragePage({ searchParams }: { searchPara
   const sp = await searchParams;
   const state = param(sp, "state") ?? "all";
   const companyId = param(sp, "companyId") ?? "";
+  const provider = param(sp, "provider") ?? "all";
   const q = param(sp, "q") ?? "";
-  const [settings, data] = await Promise.all([getAppSettings(), serviceRegister({ state, companyId: companyId || undefined, q: q || undefined })]);
+  const [settings, data] = await Promise.all([getAppSettings(), serviceRegister({ state, companyId: companyId || undefined, provider, q: q || undefined })]);
   const canEdit = can(me.role, "contract.write");
   const companyIds = [...new Set(data.rows.map((r) => r.companyId))];
-  const linesByCompany: Record<string, Awaited<ReturnType<typeof matchableLines>>> = {};
-  if (canEdit) for (const id of companyIds.slice(0, 60)) linesByCompany[id] = await matchableLines(id, ["draft", "active"]);
+  const linesByCompany = canEdit ? Object.fromEntries(await matchableLinesFor(companyIds.slice(0, 200), ["draft", "active"])) : {};
   return (
     <>
-      <p className="mb-4 text-sm text-slate-600">Every service the integrations say a customer has (Pax8 subscriptions, 20i packages and domains, NinjaOne managed devices) and how it is covered commercially. Only <strong>unmapped</strong> means possibly missed revenue; everything else is an explicit decision with a reason.</p>
+      <p className="mb-4 text-sm text-slate-600">Every service the integrations say a customer has (Pax8 subscriptions, 20i packages and domains, NinjaOne managed devices): which integration supplies it, the supplier product, the quantity and cost last synced, and how it maps to a charge. Only <strong>unmapped</strong> means possibly missed revenue; everything else is a recorded decision or a rule match.</p>
       <Card className="mb-4">
         <RegisterSummaryBar summary={data.summary} />
         <form method="get" className="mt-3 flex flex-wrap items-end gap-2">
@@ -37,6 +38,14 @@ export default async function ServiceCoveragePage({ searchParams }: { searchPara
             {(["charged", "bundle", "commitment", "free", "internal"] as const).map((s) => (
               <option key={s} value={s}>
                 {SERVICE_STATE_LABELS[s]}
+              </option>
+            ))}
+          </Select>
+          <Select name="provider" defaultValue={provider} aria-label="Integration" className="w-40">
+            <option value="all">All integrations</option>
+            {(Object.keys(PROVIDER_LABELS) as (keyof typeof PROVIDER_LABELS)[]).map((k) => (
+              <option key={k} value={k}>
+                {PROVIDER_LABELS[k]}
               </option>
             ))}
           </Select>
@@ -52,7 +61,7 @@ export default async function ServiceCoveragePage({ searchParams }: { searchPara
           <Button type="submit" size="sm" variant="secondary">
             Filter
           </Button>
-          {(state !== "all" || companyId || q) && (
+          {(state !== "all" || provider !== "all" || companyId || q) && (
             <Link href="/billing/services" className="text-xs text-brand-700 hover:underline">
               clear
             </Link>

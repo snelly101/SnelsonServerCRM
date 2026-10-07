@@ -126,3 +126,16 @@ export async function linkProposalAction(externalId: string, target: { opportuni
     return undefined;
   });
 }
+
+/** Turns a signed proposal into a contract (runs the acceptance workflow, or drafts from the proposal totals when only a company is linked). */
+export async function contractFromProposalAction(externalId: string): Promise<ActionResult<{ contractId: string; created: boolean }>> {
+  return runAction(async () => {
+    const u = await requireActionPermission("contract.write");
+    const { contractFromProposal } = await import("@/services/proposals");
+    const r = await contractFromProposal(z.string().min(1).parse(externalId), u.id);
+    revalidatePath("/proposals");
+    revalidatePath("/contracts", "layout");
+    revalidatePath("/companies", "layout");
+    return r;
+  });
+}

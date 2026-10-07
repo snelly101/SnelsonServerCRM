@@ -4,16 +4,16 @@ import { PageHeader } from "@/components/ui/page";
 import { SettingsNav } from "@/app/(app)/settings/nav";
 
 /**
- * One Billing area with a fixed path through the month: overview, the run
- * (prepare, approve, issued), exceptions, services, renewals and pricing,
- * invoices, automation. Pages inside render their own content only.
+ * One Billing area with a fixed path through the month: needs attention,
+ * customers, the run (prepare, approve, issued), services, renewals and
+ * pricing, invoices, automation. Pages inside render their own content only.
  */
 export default async function BillingLayout({ children }: { children: React.ReactNode }) {
   const me = await requirePermission("finance.read");
   const items = [
-    { href: "/billing", label: "Overview" },
+    { href: "/billing", label: "Needs attention" },
+    { href: "/billing/customers", label: "Customers" },
     ...(can(me.role, "invoice.prepare") ? [{ href: "/billing/run", label: "Monthly run", also: ["/billing/drafts"] }] : []),
-    { href: "/billing/exceptions", label: "Exceptions" },
     { href: "/billing/services", label: "Services" },
     { href: "/billing/renewals", label: "Renewals & pricing" },
     { href: "/billing/invoices", label: "Invoices" },

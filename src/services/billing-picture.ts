@@ -1,6 +1,6 @@
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/db";
-import { billingDiscrepancies, contractLines, contracts, sites } from "@/db/schema";
+import { billingDiscrepancies, companies, contractLines, contracts, sites } from "@/db/schema";
 import { billingPeriodFor, PERIOD_MONTHS } from "@/lib/billing";
 import { summariseLines } from "@/lib/money";
 import { lineChangesFor } from "./contracts";
@@ -222,6 +222,66 @@ export async function companyBillingPicture(companyId: string, asOf = new Date()
     register,
     totals: { chargeMonthly, costMonthly, marginMonthly: costMonthly === null ? null : round2(chargeMonthly - costMonthly), unknownCostLines: active.reduce((a, x) => a + x.unknownCostLines, 0), nextInvoiceOn, attention: active.reduce((a, x) => a + x.attention, 0) + otherServices.filter((r) => r.state === "unmapped" || r.state === "investigate" || r.reviewOverdue).length },
   };
+}
+
+export type CustomerBillingRow = {
+  companyId: string;
+  companyName: string;
+  agreements: number;
+  frequencies: string[];
+  nextInvoiceOn: string | null;
+  chargeMonthly: number;
+  costMonthly: number | null;
+  marginMonthly: number | null;
+  unknownCostLines: number;
+  unmapped: number;
+  attention: number;
+  linesTotal: number;
+  linesSupplied: number;
+};
+
+/** One row per customer with an active agreement or a supplied service: the Billing → Customers list. */
+export async function customersBillingPicture(asOf = new Date().toISOString().slice(0, 10)): Promise<CustomerBillingRow[]> {
+  const [rows, register, names] = await Promise.all([
+    db.select().from(contracts).where(and(isNull(contracts.archivedAt), eq(contracts.status, "active"))).orderBy(asc(contracts.name)),
+    serviceRegisterRows(null),
+    db.select({ id: companies.id, name: companies.name }).from(companies).where(isNull(companies.archivedAt)),
+  ]);
+  const nameOf = new Map(names.map((n) => [n.id, n.name]));
+  const ids = rows.map((c) => c.id);
+  const [lines, disc, pending] = await Promise.all([linesOf(ids), db.select().from(billingDiscrepancies).where(inArray(billingDiscrepancies.status, ["open", "accepted"])), pendingChangesOf(ids)]);
+  const byCompany = new Map<string, AgreementView[]>();
+  for (const c of rows) {
+    const regs = register.filter((r) => r.companyId === c.companyId);
+    byCompany.set(c.companyId, [...(byCompany.get(c.companyId) ?? []), agreementView(c, lines.get(c.id) ?? [], regs, disc.filter((d) => d.companyId === c.companyId), pending, asOf)]);
+  }
+  for (const r of register) if (!byCompany.has(r.companyId)) byCompany.set(r.companyId, []);
+  const out: CustomerBillingRow[] = [];
+  for (const [companyId, agreements] of byCompany) {
+    const accounted = new Set(agreements.flatMap((a) => a.lines.flatMap((l) => l.sources.map((s) => s.key))));
+    const other = register.filter((r) => r.companyId === companyId && !accounted.has(r.key) && !(r.pool && r.state === "charged"));
+    const known = agreements.filter((a) => a.costMonthly !== null);
+    const chargeMonthly = round2(agreements.reduce((a, x) => a + x.chargeMonthly, 0));
+    const costMonthly = known.length ? round2(known.reduce((a, x) => a + (x.costMonthly ?? 0), 0)) : null;
+    const recurring = agreements.flatMap((a) => a.lines.filter((l) => l.status !== "not_recurring"));
+    const unmapped = other.filter((r) => r.state === "unmapped").length;
+    out.push({
+      companyId,
+      companyName: nameOf.get(companyId) ?? "—",
+      agreements: agreements.length,
+      frequencies: [...new Set(agreements.map((a) => a.billingFrequency))],
+      nextInvoiceOn: agreements.map((a) => a.nextInvoiceOn).filter((x): x is string => Boolean(x)).sort()[0] ?? null,
+      chargeMonthly,
+      costMonthly,
+      marginMonthly: costMonthly === null ? null : round2(chargeMonthly - costMonthly),
+      unknownCostLines: agreements.reduce((a, x) => a + x.unknownCostLines, 0),
+      unmapped,
+      attention: agreements.reduce((a, x) => a + x.attention, 0) + unmapped + other.filter((r) => r.state === "investigate" || r.reviewOverdue).length,
+      linesTotal: recurring.length,
+      linesSupplied: recurring.filter((l) => l.sources.length > 0).length,
+    });
+  }
+  return out.sort((a, b) => b.attention - a.attention || b.chargeMonthly - a.chargeMonthly || a.companyName.localeCompare(b.companyName));
 }
 
 /** One agreement's picture for the contract page. */

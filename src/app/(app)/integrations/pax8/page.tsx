@@ -293,7 +293,7 @@ export default async function Pax8Page() {
           currency={settings.currency}
           kind="licence"
         />
-        <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500">All open licence and device discrepancies, with findings and accepted exceptions, are together in <Link href="/billing/exceptions" className="text-brand-700 hover:underline">Billing → Exceptions</Link>.</p>
+        <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500">All open licence and device discrepancies, with findings and accepted exceptions, are together in <Link href="/billing" className="text-brand-700 hover:underline">Billing → Exceptions</Link>.</p>
       </Card>
 
       <Card title="Pax8 invoices vs Xero bills" className="mt-4">

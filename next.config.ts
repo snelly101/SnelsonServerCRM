@@ -15,7 +15,8 @@ const nextConfig: NextConfig = {
       // Finance, the billing run, findings, service coverage, renewals and price reviews were joined into one Billing area.
       { source: "/finance", destination: "/billing", permanent: true },
       { source: "/finance/billing-run", destination: "/billing/run", permanent: true },
-      { source: "/finance/findings", destination: "/billing/exceptions", permanent: true },
+      { source: "/finance/findings", destination: "/billing", permanent: true },
+      { source: "/billing/exceptions", destination: "/billing", permanent: true },
       { source: "/finance/services", destination: "/billing/services", permanent: true },
       { source: "/finance/drafts/:path*", destination: "/billing/drafts/:path*", permanent: true },
       { source: "/contracts/renewals", destination: "/billing/renewals", permanent: true },

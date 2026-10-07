@@ -12,6 +12,7 @@ import { markWon } from "./opportunities";
 import { draftContractFromOpportunity } from "./contracts";
 import { findDuplicateCompanies } from "./companies";
 import { fullName, normalizeCompanyName } from "@/lib/utils";
+import { contractSchema, type ContractLineInput } from "@/lib/validation-sales";
 
 // ---------------------------------------------------------------------------
 // Connection management
@@ -63,12 +64,56 @@ export async function listProposals(p: { q?: string; status?: string; companyId?
     p.unlinked ? isNull(bpProposals.companyId) : undefined,
   ].filter(Boolean);
   const where = conds.length ? and(...(conds as [ReturnType<typeof eq>])) : undefined;
-  const base = () => db.select({ proposal: bpProposals, companyName: companies.name, opportunityTitle: opportunities.title }).from(bpProposals).leftJoin(companies, eq(companies.id, bpProposals.companyId)).leftJoin(opportunities, eq(opportunities.id, bpProposals.opportunityId));
+  const base = () => db.select({ proposal: bpProposals, companyName: companies.name, opportunityTitle: opportunities.title, contractId: sql<string | null>`(select c.id from contracts c where c.external_proposal_id = ${bpProposals.externalId} and c.archived_at is null order by c.created_at desc limit 1)` }).from(bpProposals).leftJoin(companies, eq(companies.id, bpProposals.companyId)).leftJoin(opportunities, eq(opportunities.id, bpProposals.opportunityId));
   const [rows, [{ total }]] = await Promise.all([
     base().where(where).orderBy(desc(sql`coalesce(${bpProposals.signedAt}, ${bpProposals.sentAt}, ${bpProposals.createdAtExternal}, ${bpProposals.fetchedAt})`)).limit(pageSize).offset((page - 1) * pageSize),
     db.select({ total: sql<number>`count(*)`.mapWith(Number) }).from(bpProposals).leftJoin(companies, eq(companies.id, bpProposals.companyId)).where(where),
   ]);
-  return { rows: rows.map((r) => ({ ...r.proposal, companyName: r.companyName, opportunityTitle: r.opportunityTitle })), total, page, pageSize, pageCount: Math.max(1, Math.ceil(total / pageSize)) };
+  return { rows: rows.map((r) => ({ ...r.proposal, companyName: r.companyName, opportunityTitle: r.opportunityTitle, contractId: r.contractId })), total, page, pageSize, pageCount: Math.max(1, Math.ceil(total / pageSize)) };
+}
+
+/**
+ * Turns a signed (or paid) proposal into a contract on request. With a
+ * linked opportunity the acceptance workflow runs (opportunity won, onboarding,
+ * contract drafted from the opportunity's lines, signed terms captured),
+ * which is idempotent. With only a company linked, a draft contract is
+ * created from the proposal's totals (one recurring line per billing term
+ * and a one-off line) for a person to refine, so a proposal built outside
+ * the CRM still becomes an agreement. Returns the contract id.
+ */
+export async function contractFromProposal(externalId: string, actorUserId: string) {
+  const [p] = await db.select().from(bpProposals).where(eq(bpProposals.externalId, externalId)).limit(1);
+  if (!p) throw new ActionError("Proposal not found. Run a sync first.");
+  if (!(p.status === "signed" || p.status === "paid")) throw new ActionError("Only a signed proposal can become a contract.");
+  const [existing] = await db.select({ id: contracts.id }).from(contracts).where(and(eq(contracts.externalProposalId, externalId), isNull(contracts.archivedAt))).limit(1);
+  if (existing) return { contractId: existing.id, created: false };
+  if (p.opportunityId) {
+    const r = await processAcceptance(externalId, actorUserId);
+    const [c] = await db.select({ id: contracts.id }).from(contracts).where(and(eq(contracts.externalProposalId, externalId), isNull(contracts.archivedAt))).limit(1);
+    if (c) return { contractId: c.id, created: !r?.already };
+    // Acceptance already ran before the contract was stamped: draft from the opportunity now and stamp it.
+    const contractId = await draftContractFromOpportunity(p.opportunityId, actorUserId);
+    await db.update(contracts).set({ externalProposalId: externalId, updatedAt: new Date() }).where(and(eq(contracts.id, contractId), isNull(contracts.externalProposalId)));
+    return { contractId, created: true };
+  }
+  if (!p.companyId) throw new ActionError("Link the proposal to a company (or an opportunity) first, so the contract knows whose it is.");
+  const { createContract } = await import("./contracts");
+  const start = new Date().toISOString().slice(0, 10);
+  const end = new Date(Date.now() + 365 * 86400000).toISOString().slice(0, 10);
+  const name = p.subjectLine ?? `Proposal ${externalId}`;
+  const lines: ContractLineInput[] = [];
+  const recurring = (freq: "monthly" | "quarterly" | "annual", total: string | null) => {
+    if (total && Number(total) > 0) lines.push({ id: null, productId: null, siteId: null, description: `${name} (${freq} charge as proposed)`, revenueType: "recurring", pricingModel: "fixed", billingFrequency: freq, quantity: 1, unitPrice: Number(total), unitCost: null, countsAsManagedDevice: false, invoiceSchedule: freq === "monthly" ? "contract" : "own" });
+  };
+  recurring("monthly", p.monthlyTotal);
+  recurring("quarterly", p.quarterlyTotal);
+  recurring("annual", p.annualTotal);
+  if (p.oneOffTotal && Number(p.oneOffTotal) > 0) lines.push({ id: null, productId: null, siteId: null, description: `${name} (one-off as proposed)`, revenueType: "one_off_project", pricingModel: "fixed", billingFrequency: "one_off", quantity: 1, unitPrice: Number(p.oneOffTotal), unitCost: null, countsAsManagedDevice: false });
+  const contractId = await createContract(contractSchema.parse({ companyId: p.companyId, name, status: "draft", startDate: start, endDate: end, renewalDate: end, externalProposalId: externalId, notes: `Drafted from the signed Better Proposals proposal "${name}"${p.signedBy ? ` (signed by ${p.signedBy})` : ""}. The lines carry the proposal totals; replace them with the agreed services before activating.` }), lines, actorUserId);
+  await db.update(contracts).set({ externalProposalId: externalId, updatedAt: new Date() }).where(eq(contracts.id, contractId));
+  await audit({ actorUserId, action: "contract.draft_from_proposal", entityType: "contract", entityId: contractId, details: { externalId, lines: lines.length } });
+  await logActivity({ type: "contract", companyId: p.companyId, entityType: "contract", entityId: contractId, title: `Draft contract created from signed proposal "${name}"`, actorUserId, source: "betterproposals" });
+  return { contractId, created: true };
 }
 
 export async function proposalsForOpportunity(opportunityId: string) {

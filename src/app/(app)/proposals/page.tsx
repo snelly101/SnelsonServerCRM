@@ -10,6 +10,7 @@ import { listOpportunities } from "@/services/opportunities";
 import { PageHeader, Card, EmptyState, Stat } from "@/components/ui/page";
 import { Badge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
+import { ContractFromProposalButton } from "./contract-button";
 import { Pagination } from "@/components/ui/pagination";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { ButtonLink } from "@/components/ui/button";
@@ -35,6 +36,7 @@ export default async function ProposalsPage({ searchParams }: { searchParams: Pr
     listOpportunities({ status: "open", pageSize: 200 }),
   ]);
   const canLink = can(me.role, "proposal.create");
+  const canWriteContracts = can(me.role, "contract.write");
   return (
     <>
       <PageHeader
@@ -134,7 +136,9 @@ export default async function ProposalsPage({ searchParams }: { searchParams: Pr
                     <td>{fmtDate(p.sentAt, settings)}</td>
                     <td>{fmtDate(p.openedAt, settings)}</td>
                     <td>{fmtDate(p.signedAt, settings)}</td>
-                    <td className="text-right">{canLink && !p.opportunityId && <LinkProposalDialog externalId={p.externalId} subject={p.subjectLine ?? p.externalId} companies={companies} opportunities={opps.rows.map((o) => ({ id: o.id, title: o.title, companyName: o.companyName }))} />}</td>
+                    <td className="text-right">
+                      {(p.status === "signed" || p.status === "paid") && (p.contractId ? <Link href={`/contracts/${p.contractId}`} className="mr-2 text-xs text-brand-700 hover:underline">Contract</Link> : canWriteContracts ? <span className="mr-2 inline-block"><ContractFromProposalButton externalId={p.externalId} linked={Boolean(p.opportunityId)} /></span> : null)}
+                      {canLink && !p.opportunityId && <LinkProposalDialog externalId={p.externalId} subject={p.subjectLine ?? p.externalId} companies={companies} opportunities={opps.rows.map((o) => ({ id: o.id, title: o.title, companyName: o.companyName }))} />}</td>
                   </tr>
                 ))}
               </tbody>
