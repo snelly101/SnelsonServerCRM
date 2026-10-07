@@ -40,3 +40,23 @@ export async function clearServiceCoverageAction(source: string, sourceRowId: st
     return undefined;
   });
 }
+
+/** Charges a supplied service on a contract line (or clears the link), then re-runs the provider's quantity check. */
+export async function setServiceLineAction(source: string, sourceRowId: string, contractLineId: string | null): Promise<ActionResult<{ companyId: string }>> {
+  return runAction(async () => {
+    const u = await requireActionPermission("contract.write");
+    const src = z.enum(coverageSourceValues).parse(source);
+    const rowId = z.uuid().parse(sourceRowId);
+    const { setServiceLink, clearServiceLink } = await import("@/services/service-links");
+    let companyId: string | null = null;
+    if (contractLineId) companyId = (await setServiceLink({ source: src, sourceRowId: rowId, role: "charged", contractLineId: z.uuid().parse(contractLineId) }, u.id)).companyId;
+    else companyId = (await clearServiceLink(src, rowId, u.id))?.companyId ?? null;
+    if (companyId && src !== "ninja_device") {
+      const { runQuantityChecks } = await import("@/services/quantity-check");
+      await runQuantityChecks(u.id, { companyId, providers: [src === "pax8_subscription" ? "pax8" : "twentyi"] });
+    }
+    revalidate(companyId ?? undefined);
+    revalidatePath("/contracts", "layout");
+    return { companyId: companyId ?? "" };
+  });
+}

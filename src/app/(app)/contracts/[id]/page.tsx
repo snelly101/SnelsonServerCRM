@@ -18,8 +18,11 @@ import { TaskList } from "@/components/task-list";
 import { TaskDialog } from "@/components/task-dialog";
 import { fmtDate, fmtMoney, fmtRelative } from "@/lib/format";
 import { PrepareInvoiceButton } from "@/components/prepare-invoice-button";
-import { FREQUENCY_LABELS, PRICING_LABELS, REVENUE_LABELS } from "@/lib/validation-sales";
-import { companyDeviceOverview } from "@/services/ninjaone";
+import { FREQUENCY_LABELS } from "@/lib/validation-sales";
+import { companyDeviceOverview, listDiscrepancies } from "@/services/ninjaone";
+import { contractBillingPicture } from "@/services/billing-picture";
+import { AgreementLines } from "@/components/billing/agreement-lines";
+import { matchableLinesFor } from "@/services/service-links";
 import { DiscrepancyTable } from "@/app/(app)/devices/discrepancies";
 import { renewalQueue, DECISION_LABELS } from "@/services/renewals";
 import { proposalForContract } from "@/services/proposals";
@@ -32,10 +35,11 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
   const { id } = await params;
   const contract = await getContract(id);
   if (!contract) notFound();
-  const [settings, tasks, owners, devices, renewalRows] = await Promise.all([getAppSettings(), listTasks({ contractId: id, status: "all", pageSize: 100 }), listOwners(), can(me.role, "device.read") ? companyDeviceOverview(contract.companyId) : Promise.resolve(null), contract.status === "active" && contract.renewalDate ? renewalQueue(undefined, { contractId: id }) : Promise.resolve([])]);
+  const [settings, tasks, owners, devices, renewalRows, picture, lineMap] = await Promise.all([getAppSettings(), listTasks({ contractId: id, status: "all", pageSize: 100 }), listOwners(), can(me.role, "device.read") ? companyDeviceOverview(contract.companyId) : Promise.resolve(null), contract.status === "active" && contract.renewalDate ? renewalQueue(undefined, { contractId: id }) : Promise.resolve([]), contractBillingPicture(id), matchableLinesFor([contract.companyId], ["draft", "active"])]);
+  const lineOptions = (lineMap.get(contract.companyId) ?? []).map((l) => ({ id: l.id, description: l.description, contractName: l.contractName, contractStatus: l.contractStatus }));
   const renewal = renewalRows[0] ?? null;
   const proposal = contract.externalProposalId ? await proposalForContract(contract.externalProposalId) : null;
-  const contractDiscrepancies = devices?.discrepancies.filter((d) => d.contractId === id) ?? [];
+  const contractDiscrepancies = (await listDiscrepancies({ companyId: contract.companyId })).filter((d) => d.contractId === id && (d.status === "open" || d.status === "accepted"));
   const c = settings.currency;
   const today = new Date().toISOString().slice(0, 10);
   const canWrite = can(me.role, "contract.write");
@@ -101,60 +105,20 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
           The notice period for the {fmtDate(contract.renewalDate, settings)} renewal ended on {fmtDate(contract.noticeDeadline, settings)}. {contract.autoRenew ? "This contract auto-renews." : "This contract will expire unless renewed."}
         </Alert>
       )}
+      <div className="mb-4">
+      <Card title="Contracted services" padded={false} actions={<RevenueSummaryBadges summary={contract.summary} currency={c} compact />}>
+        {!picture || picture.lines.length === 0 ? (
+          <div className="p-4"><EmptyState title="No services on this contract" /></div>
+        ) : (
+          <AgreementLines agreement={picture} settings={settings} lines={lineOptions} canEdit={canWrite} canReview={can(me.role, "discrepancy.review")} />
+        )}
+        <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500">
+          <strong>Quantity</strong> is what is billed (fixed: as agreed; synced: the integrations&apos; count once a change is approved). <strong>Supplied by</strong> shows which integration supplies each line and how many; open a line for the source records, the rule and any count check. <strong>Cost / unit</strong> comes from the supplier where it reports pricing (Pax8), otherwise from the cost recorded on the line; <strong>unknown</strong> means neither. <strong>Monthly</strong> is what the monthly invoice carries; <strong>MRR normalised</strong> (annual ÷ 12, quarterly ÷ 3) is the forecasting figure.
+        </p>
+      </Card>
+      </div>
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
-          <Card title="Contracted services" actions={<RevenueSummaryBadges summary={contract.summary} currency={c} compact />}>
-            {contract.lines.length === 0 ? (
-              <EmptyState title="No services on this contract" />
-            ) : (
-              <table className="tbl">
-                <thead>
-                  <tr>
-                    <th>Service</th>
-                    <th>Type</th>
-                    <th>Pricing</th>
-                    <th>Site</th>
-                    <th className="text-right">Contracted qty</th>
-                    <th className="text-right">Unit price</th>
-                    <th className="text-right">Per period</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {contract.lines.map((l) => (
-                    <tr key={l.id}>
-                      <td>
-                        {l.description}
-                        {l.countsAsManagedDevice && <Badge className="ml-1" tone="teal">device-checked</Badge>}
-                      </td>
-                      <td>
-                        <Badge tone={l.revenueType === "recurring" ? "green" : l.revenueType === "hardware" ? "indigo" : "blue"}>{REVENUE_LABELS[l.revenueType]}</Badge>
-                      </td>
-                      <td className="text-slate-600">
-                        {PRICING_LABELS[l.pricingModel]}
-                        {l.revenueType === "recurring" && <span className="text-xs"> · {FREQUENCY_LABELS[l.billingFrequency]}{l.invoiceSchedule === "own" ? ", own cycle" : ""}</span>}
-                        {l.revenueType === "recurring" && l.reductionPolicy !== "next_period" && <div className="text-[11px] text-slate-500">{l.reductionPolicy === "immediate" ? "decreases credited" : "decreases at renewal"}</div>}
-                      </td>
-                      <td className="text-slate-600">{l.siteName ?? "All"}</td>
-                      <td className="text-right tabular-nums font-medium">
-                        {Number(l.quantity)}
-                        {l.pendingChanges.filter((h) => h.field === "quantity").map((h) => (
-                          <div key={h.id} className="text-[11px] font-normal text-amber-700" title="Not yet on an invoice; the next one pro-rates it">
-                            {Number(h.previousValue ?? 0)} → {Number(h.newValue ?? 0)} from {fmtDate(h.effectiveFrom, settings)}
-                          </div>
-                        ))}
-                      </td>
-                      <td className="text-right tabular-nums">{fmtMoney(l.unitPrice, c)}</td>
-                      <td className="text-right tabular-nums">{fmtMoney(Number(l.quantity) * Number(l.unitPrice), c)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-            <p className="mt-3 text-xs text-slate-500">
-              <strong>Monthly</strong> is what the monthly invoice carries (recurring lines billed monthly). Quarterly and annual lines are invoiced on their own cycle and shown per quarter or per year. <strong>MRR normalised</strong> (annual ÷ 12, quarterly ÷ 3, added to the monthly lines) appears only when it differs; it is the forecasting figure used on the Reports page, not a monthly bill. One-off and hardware lines are excluded from both.
-            </p>
-          </Card>
-
           {contract.history.length > 0 && (
             <Card title={`Change history (${contract.history.length})`} padded={false}>
               <table className="tbl">
@@ -202,9 +166,14 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
             </Card>
           )}
 
-          <Card title="Device count check" padded={contractDiscrepancies.length === 0}>
-            {deviceLines.length === 0 ? (
-              <p className="text-sm text-slate-500">No per-device lines are marked for comparison. Edit the contract and tick “Compare with NinjaOne device count” on a per-device line.</p>
+          <Card title="Count checks" padded={contractDiscrepancies.length === 0}>
+            {contractDiscrepancies.length > 0 ? (
+              <>
+                <DiscrepancyTable rows={contractDiscrepancies} canReview={can(me.role, "discrepancy.review")} currency={c} compact />
+                <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500">Agreed quantities against what Pax8, 20i and NinjaOne supply on each line; re-checked on every sync. Accepting records the decision only; amend the contract to change billing.</p>
+              </>
+            ) : deviceLines.length === 0 ? (
+              <p className="text-sm text-slate-500">Every line charged from an integration matches what it supplies. Per-device lines are compared with NinjaOne once “Compare with NinjaOne device count” is ticked on them.</p>
             ) : !devices ? (
               <div className="text-sm text-slate-700">
                 <p className="mb-2">{deviceLines.length} line{deviceLines.length === 1 ? "" : "s"} will be compared with observed device counts once this company is linked to a NinjaOne organisation. Discrepancies appear here for review; billing is never changed automatically.</p>
@@ -221,20 +190,13 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
                   </Link>
                 )}
               </div>
-            ) : contractDiscrepancies.length === 0 ? (
+            ) : (
               <div className="text-sm text-slate-700">
                 <p className="mb-1">
                   All {deviceLines.length} compared line{deviceLines.length === 1 ? "" : "s"} match the observed count ({devices.totals.billable} billable active devices{devices.mode === "demo" ? ", demo data" : ""}).
                 </p>
                 <p className="text-xs text-slate-500">Observed counts are {devices.totals.freshness}{devices.totals.lastFetched ? `, fetched ${fmtRelative(new Date(devices.totals.lastFetched))}` : ""}. Site-scoped lines whose site is not linked to a NinjaOne location are skipped.</p>
               </div>
-            ) : (
-              <>
-                <DiscrepancyTable rows={contractDiscrepancies} canReview={can(me.role, "discrepancy.review")} currency={c} compact />
-                <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500">
-                  Observed counts are {devices.totals.freshness}{devices.mode === "demo" ? " (demo data)" : ""}. Accepting records the decision only; amend the contract to change billing.
-                </p>
-              </>
             )}
           </Card>
 
