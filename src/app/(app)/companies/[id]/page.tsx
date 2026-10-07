@@ -43,15 +43,13 @@ import {
 import { fmtRelative } from "@/lib/format";
 import { companyDeviceOverview } from "@/services/ninjaone";
 import { companyHostingOverview } from "@/services/twentyi";
-import { HostingPanel } from "@/components/hosting-panel";
 import { companySubscriptionOverview } from "@/services/pax8";
-import { companyServiceRegister } from "@/services/service-register";
 import { companyBilling } from "@/services/company-billing";
+import { companyBillingPicture } from "@/services/billing-picture";
 import { CompanyBillingTab } from "./billing-tab";
-import { DeviceCoverageControl, RegisterSummaryBar, ServiceRegisterTable } from "@/components/service-register";
+import { DeviceCoverageControl } from "@/components/service-register";
 import { companyTicketSummary, listTickets } from "@/services/helpdesk";
 import { TicketTable } from "@/components/helpdesk/ticket-table";
-import { SubscriptionsPanel } from "@/components/subscriptions-panel";
 import { listCompanyNotes } from "@/services/notes";
 import { NotesPanel } from "@/components/notes/notes-panel";
 import { MarkdownLite } from "@/lib/markdown-lite";
@@ -95,7 +93,6 @@ export default async function CompanyPage({
     devices,
     hosting,
     subscriptions,
-    services,
     ticketSummary,
     companyTickets,
     notes,
@@ -119,7 +116,6 @@ export default async function CompanyPage({
       : Promise.resolve(null),
     companyHostingOverview(id),
     companySubscriptionOverview(id),
-    companyServiceRegister(id),
     can(me.role, "helpdesk.read")
       ? companyTicketSummary(id)
       : Promise.resolve(null),
@@ -133,6 +129,7 @@ export default async function CompanyPage({
   if (!company) notFound();
   // The Billing tab joins this customer's slice of the Billing area; computed only when it is shown or its count is wanted.
   const billing = can(me.role, "contract.read") ? await companyBilling(id) : null;
+  const picture = await companyBillingPicture(id);
   const vaultCaps = await resolveCapabilities(me.id, me.role, id);
   const vault = vaultCaps.list
     ? await listVaultItems({ id: me.id, name: me.name, role: me.role }, id, {
@@ -207,39 +204,15 @@ export default async function CompanyPage({
             key: "billing",
             label: "Billing",
             href: `${base}?tab=billing`,
-            count: billing ? billing.next.filter((n) => n.tone !== "slate").length || undefined : undefined,
+            count: billing ? (picture.totals.attention + billing.next.filter((n) => n.tone === "red").length) || undefined : undefined,
           },
         ]
       : []),
-    {
-      key: "invoices",
-      label: "Invoices",
-      href: `${base}?tab=invoices`,
-      count: finance?.count,
-    },
     {
       key: "devices",
       label: "Devices",
       href: `${base}?tab=devices`,
       count: devices?.totals.active,
-    },
-    {
-      key: "hosting",
-      label: "Hosting",
-      href: `${base}?tab=hosting`,
-      count: hostingCount,
-    },
-    {
-      key: "subscriptions",
-      label: "Subscriptions",
-      href: `${base}?tab=subscriptions`,
-      count: subscriptions?.totals.subscriptions,
-    },
-    {
-      key: "services",
-      label: "Services",
-      href: `${base}?tab=services`,
-      count: services.summary.unmapped + services.summary.investigate + services.summary.reviewOverdue || undefined,
     },
     ...(ticketSummary
       ? [
@@ -269,8 +242,10 @@ export default async function CompanyPage({
       : []),
     { key: "activity", label: "Activity", href: `${base}?tab=activity` },
   ];
-  const tab = sections.some((x) => x.key === sp.tab)
-    ? (sp.tab as string)
+  // Invoices, Hosting, Subscriptions and Services now live inside Billing; old links still land there.
+  const requested = ["invoices", "hosting", "subscriptions", "services"].includes(sp.tab ?? "") ? "billing" : sp.tab;
+  const tab = sections.some((x) => x.key === requested)
+    ? (requested as string)
     : "overview";
 
   const Row = ({
@@ -469,7 +444,7 @@ export default async function CompanyPage({
                           .map((h) => (
                             <Link
                               key={h.id}
-                              href={`${base}?tab=hosting`}
+                              href={`${base}?tab=billing#services`}
                               className="[overflow-wrap:anywhere] text-brand-700 hover:underline"
                               title={HOSTING_KIND_LABEL[h.kind]}
                             >
@@ -478,7 +453,7 @@ export default async function CompanyPage({
                           ))}
                         {hostingCount > 3 && (
                           <Link
-                            href={`${base}?tab=hosting`}
+                            href={`${base}?tab=billing#services`}
                             className="text-xs text-slate-500 hover:underline"
                           >
                             and {hostingCount - 3} more
@@ -490,7 +465,7 @@ export default async function CompanyPage({
                   <Row label="Licences · Pax8">
                     {subscriptions ? (
                       <Link
-                        href={`${base}?tab=subscriptions`}
+                        href={`${base}?tab=billing#services`}
                         className="text-brand-700 hover:underline"
                       >
                         {plural(subscriptions.totals.licences, "licence")} on{" "}
@@ -526,7 +501,7 @@ export default async function CompanyPage({
                   <Row label="Invoices">
                     {finance?.link ? (
                       <Link
-                        href={`${base}?tab=invoices`}
+                        href={`${base}?tab=billing`}
                         className="text-brand-700 hover:underline"
                       >
                         {plural(finance.count, "invoice")}
@@ -857,7 +832,7 @@ export default async function CompanyPage({
         )}
 
         {tab === "billing" && billing && (
-          <CompanyBillingTab companyId={id} data={billing} finance={finance} settings={settings} canApprove={can(me.role, "invoice.approve")} canReview={can(me.role, "discrepancy.review")} canWrite={can(me.role, "contract.write")} />
+          <CompanyBillingTab companyId={id} data={billing} picture={picture} finance={finance} xero={xero} subscriptions={subscriptions} hosting={hosting} settings={settings} canApprove={can(me.role, "invoice.approve")} canReview={can(me.role, "discrepancy.review")} canWrite={can(me.role, "contract.write")} canManageIntegrations={can(me.role, "integration.manage")} />
         )}
         {tab === "contracts" && (
           <>
@@ -1069,192 +1044,6 @@ export default async function CompanyPage({
           </>
         )}
 
-        {tab === "invoices" && (
-          <>
-            {!finance ? (
-              <EmptyState
-                title="Finance data is restricted"
-                description="Only finance users and administrators can see invoices."
-              />
-            ) : (
-              <div className="space-y-4">
-                <Card
-                  title="Financial summary"
-                  actions={
-                    xero.demo ? (
-                      <Badge tone="amber">demo</Badge>
-                    ) : finance.link ? (
-                      <Badge tone="green">linked to Xero</Badge>
-                    ) : (
-                      <Badge tone="amber">not linked to Xero</Badge>
-                    )
-                  }
-                >
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                    <div>
-                      <div className="text-xs uppercase tracking-wide text-slate-500">
-                        Outstanding
-                      </div>
-                      <div className="text-lg font-semibold">
-                        {fmtMoney(
-                          finance.xeroContact?.outstanding ??
-                            finance.outstanding,
-                          settings.currency,
-                        )}
-                      </div>
-                      <div className="text-[11px] text-slate-500">
-                        {finance.xeroContact
-                          ? `Xero balance · fetched ${fmtRelative(finance.xeroContact.fetchedAt)}`
-                          : "from mirrored invoices"}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-xs uppercase tracking-wide text-slate-500">
-                        Overdue
-                      </div>
-                      <div
-                        className={`text-lg font-semibold ${Number(finance.xeroContact?.overdue ?? finance.overdue) > 0 ? "text-red-700" : ""}`}
-                      >
-                        {fmtMoney(
-                          finance.xeroContact?.overdue ?? finance.overdue,
-                          settings.currency,
-                        )}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-xs uppercase tracking-wide text-slate-500">
-                        Invoiced (12 months)
-                      </div>
-                      <div className="text-lg font-semibold">
-                        {fmtMoney(finance.invoiced12m, settings.currency)}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-xs uppercase tracking-wide text-slate-500">
-                        Paid (12 months)
-                      </div>
-                      <div className="text-lg font-semibold text-green-700">
-                        {fmtMoney(finance.paid12m, settings.currency)}
-                      </div>
-                    </div>
-                  </div>
-                  {!finance.link && (
-                    <p className="mt-3 text-xs text-amber-700">
-                      Link this company to its Xero contact on Integrations →
-                      Xero to see its invoices and create drafts.
-                    </p>
-                  )}
-                </Card>
-                {finance.drafts.length > 0 && (
-                  <Card title="Draft invoices awaiting approval" padded={false}>
-                    <ul className="divide-y divide-slate-100 text-sm">
-                      {finance.drafts.map((d) => (
-                        <li
-                          key={d.id}
-                          className="flex items-center justify-between px-4 py-2"
-                        >
-                          <Link
-                            href={`/billing/drafts/${d.id}`}
-                            className="text-brand-700 hover:underline"
-                          >
-                            {d.reference} · {d.description ?? "draft"}
-                          </Link>
-                          <span className="text-xs text-slate-500">
-                            {fmtMoney(d.subTotal, d.currencyCode)} net ·{" "}
-                            <Badge
-                              tone={d.status === "failed" ? "red" : "slate"}
-                            >
-                              {d.status}
-                            </Badge>
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </Card>
-                )}
-                <Card title="Invoices (from Xero)" padded={false}>
-                  {finance.invoices.length === 0 ? (
-                    <div className="p-4">
-                      <EmptyState
-                        title="No invoices"
-                        description={
-                          finance.link
-                            ? "None mirrored yet; run a Xero sync."
-                            : "Link the company to a Xero contact first."
-                        }
-                      />
-                    </div>
-                  ) : (
-                    <table className="tbl">
-                      <thead>
-                        <tr>
-                          <th>Invoice</th>
-                          <th>Status</th>
-                          <th>Date</th>
-                          <th>Due</th>
-                          <th className="text-right">Total</th>
-                          <th className="text-right">Amount due</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {finance.invoices.map((i) => {
-                          const overdue =
-                            i.status === "AUTHORISED" &&
-                            i.dueDate &&
-                            i.dueDate < new Date().toISOString().slice(0, 10);
-                          return (
-                            <tr key={i.id}>
-                              <td className="font-medium">
-                                {i.invoiceNumber ?? i.invoiceId.slice(0, 8)}
-                                {i.reference ? (
-                                  <span className="ml-1 text-xs font-normal text-slate-500">
-                                    {i.reference}
-                                  </span>
-                                ) : null}
-                              </td>
-                              <td>
-                                <Badge
-                                  tone={
-                                    overdue
-                                      ? "red"
-                                      : i.status === "PAID"
-                                        ? "green"
-                                        : i.status === "AUTHORISED"
-                                          ? "indigo"
-                                          : "slate"
-                                  }
-                                >
-                                  {overdue ? "overdue" : i.status.toLowerCase()}
-                                </Badge>
-                              </td>
-                              <td>{fmtDate(i.date, settings)}</td>
-                              <td className={overdue ? "text-red-600" : ""}>
-                                {fmtDate(i.dueDate, settings)}
-                              </td>
-                              <td className="text-right tabular-nums">
-                                {fmtMoney(
-                                  i.total,
-                                  i.currencyCode ?? settings.currency,
-                                )}
-                              </td>
-                              <td className="text-right tabular-nums font-medium">
-                                {fmtMoney(
-                                  i.amountDue,
-                                  i.currencyCode ?? settings.currency,
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  )}
-                </Card>
-              </div>
-            )}
-          </>
-        )}
-
         {tab === "devices" && (
           <>
             {!devices ? (
@@ -1349,17 +1138,6 @@ export default async function CompanyPage({
             )}
           </>
         )}
-        {tab === "hosting" && (
-          <>
-            <HostingPanel
-              overview={hosting}
-              canEdit={can(me.role, "contract.write")}
-              canManageIntegrations={can(me.role, "integration.manage")}
-              settings={settings}
-              companyId={id}
-            />
-          </>
-        )}
         {tab === "tickets" && companyTickets && (
           <Card
             title={`Helpdesk tickets · ${ticketSummary?.open ?? 0} open of ${ticketSummary?.total ?? 0}`}
@@ -1400,35 +1178,6 @@ export default async function CompanyPage({
               agents={[]}
               teams={[]}
             />
-          </Card>
-        )}
-        {tab === "subscriptions" && (
-          <SubscriptionsPanel
-            overview={subscriptions}
-            canEdit={can(me.role, "contract.write")}
-            canReview={can(me.role, "discrepancy.review")}
-            canManageIntegrations={can(me.role, "integration.manage")}
-            settings={settings}
-            companyId={id}
-          />
-        )}
-        {tab === "services" && (
-          <Card
-            title={`Services supplied · ${services.summary.total}`}
-            padded={false}
-            actions={
-              <Link href={`/billing/services?companyId=${id}`} className="text-xs text-brand-700 hover:underline">
-                all customers
-              </Link>
-            }
-          >
-            <div className="border-b border-slate-100 px-4 py-3">
-              <RegisterSummaryBar summary={services.summary} />
-              <p className="mt-2 text-xs text-slate-500">
-                Everything Pax8, 20i and NinjaOne say this customer has, and how each is covered commercially. <strong>Unmapped</strong> is the only state that may mean missed revenue: choose the billing line on the Subscriptions or Hosting tab, or record here that it is bundled, covered by a commitment, intentionally free or internal.
-              </p>
-            </div>
-            <ServiceRegisterTable rows={services.rows} linesByCompany={{ [id]: services.lines }} canEdit={can(me.role, "contract.write")} settings={settings} showCompany={false} />
           </Card>
         )}
         {tab === "vault" && vaultCaps.list && vault && (

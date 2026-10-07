@@ -110,3 +110,16 @@ export function matchBySkuOrName(skus: (string | null | undefined)[], productNam
   const byName = name ? lines.find((l) => norm(l.productName) === name || norm(l.description) === name) : undefined;
   return byName ? { lineId: byName.id, by: "name" } : null;
 }
+
+/** What a contract line's picture says about it, from its sources, rule and cost. */
+export type LineStatus = "ok" | "count_differs" | "proposed_change" | "exception_accepted" | "cost_stale" | "no_source" | "not_recurring";
+
+export const LINE_STATUS_LABELS: Record<LineStatus, string> = {
+  ok: "In step",
+  count_differs: "Count differs",
+  proposed_change: "Quantity change to approve",
+  exception_accepted: "Exception accepted",
+  cost_stale: "Recorded cost differs from supplier",
+  no_source: "No integration supplies this",
+  not_recurring: "One-off",
+};
