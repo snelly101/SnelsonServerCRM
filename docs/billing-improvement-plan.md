@@ -97,7 +97,22 @@ Customer-facing explanations and consolidation: 4C (above). Staged automation: 4
 
 Built after release 4: the eleven billing entry points spread over Finance, Contracts, Devices, the Pax8 page and Settings were joined into one **Billing** sidebar section with a fixed sub-navigation in the order the work flows (Overview with a "what to do next" list; Monthly run as Prepare / Approve / Issued; Exceptions; Services; Renewals & pricing; Invoices with customer and supplier tabs; Automation). No data or calculation changed; old addresses redirect. Each company page gained a **Billing** tab with the same picture narrowed to that customer and its own "what to do next" list.
 
+## Billing redesign (service links, one billing picture)
+
+Built after the Billing area, in four pull requests:
+
+1. **Shared billing model** (#67): `service_links` replaced the per-mirror billing-line columns, the unstored SKU / name match and `service_coverage`; every integration is read through a billing adapter returning one `SuppliedService` shape; rule matches are recorded at sync time; contract lines carry a quantity rule (fixed or synced); one quantity check covers every provider that maps services one by one, which brought 20i counts into the review queue.
+2. **Company Billing tab and contract page** (#68): one Billing tab per company (charge, supplier cost, margin, next invoice, attention; one card per agreement with each line's rule, sources, cost basis, margin and status; sources and count checks behind an expander; services not on a line; invoices, count checks, renewals and supplier panels collapsed). The Invoices, Hosting, Subscriptions and Services tabs folded into it.
+3. **Billing area** (#69): Needs attention (one queue from every check, grouped and filterable, with duplicates, stale data and unmatched accounts added), Customers (one row per customer), Services by integration, and Create contract from a signed proposal.
+4. **Guide and docs** (this release).
+
+Not changed: the billing engine, draft lifecycle, approval path, Xero and Pax8 writes, automation. Invoices still come from dated history only.
+
 ## Decisions taken while building
+
+- A synced quantity change always needs a person's approval; automation does not apply it. The brief asked for review of changes that affect customer billing, and a count can move for reasons that are not commercial (a device re-imaged, a trial subscription).
+- Rule matches are persisted as links at sync time rather than recomputed on each read, so a mapping is stable and inspectable; a sync never overwrites a person's choice, and a rule no longer matching does not silently unmap a service.
+- Supplier cost is never invented: Pax8 prices feed the line's cost live; 20i and NinjaOne carry no pricing and read as unknown until a cost is recorded on the line.
 
 - Price changes apply from the next period that starts on or after their effective day and are never pro-rated. Pro-rating a price change inside an advance-billed period would need a credit line against an invoice already issued, which the brief reserves for explicit policies.
 - `previous_quantity` and `quantity_changed_on` stay on `contract_lines` for one release (unused) so a rollback keeps the last pending change; they are dropped in a later migration.

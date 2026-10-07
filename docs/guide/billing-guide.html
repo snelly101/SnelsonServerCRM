@@ -41,7 +41,7 @@
 <div class="cover">
   <h1>Billing in the Snelson Server CRM</h1>
   <div class="sub">A practical guide: from contract lines to invoices in Xero, with every screen along the way</div>
-  <p class="meta">Version 1 · October 2026 · Screens taken from the demo data, so names and figures are illustrative.</p>
+  <p class="meta">Version 2 · October 2026 · Screens taken from the demo data, so names and figures are illustrative.</p>
   <p class="meta">Xero remains the system of record for issued invoices, payments and balances. The CRM calculates, explains and prepares; it creates <strong>draft</strong> invoices in Xero and never authorises or sends them.</p>
 </div>
 
@@ -53,12 +53,12 @@
     <li><span>3. The monthly run: Prepare, Approve, Issued</span></li>
     <li><span>4. Reading a draft and the customer schedule</span></li>
     <li><span>5. Handling changes during a period</span></li>
-    <li><span>6. Exceptions: findings and count discrepancies</span></li>
-    <li><span>7. Services: what we provide against what we bill</span></li>
+    <li><span>6. Needs attention: everything to decide, in one list</span></li>
+    <li><span>7. Services: what the integrations supply, and what bills it</span></li>
     <li><span>8. Renewals and price reviews</span></li>
     <li><span>9. Invoices and supplier bills</span></li>
     <li><span>10. Automation, in stages</span></li>
-    <li><span>11. One customer at a glance: the company Billing tab</span></li>
+    <li><span>11. One customer at a glance: the company Billing tab and the Customers list</span></li>
     <li><span>12. Roles, audit and where things live</span></li>
     <li><span>13. Quick answers</span></li>
   </ol>
@@ -69,24 +69,26 @@
   <p>Everything about money sits under one sidebar entry, <strong>Billing</strong>. Its left-hand navigation is ordered the way the month flows.</p>
   <table>
     <tr><th style="width:28%">Section</th><th>What it is for</th></tr>
-    <tr><td>Overview</td><td>Where this month stands and a "what to do next" list that links straight into the steps below.</td></tr>
+    <tr><td>Needs attention</td><td>Everything a person should look at, from every check, in one list: unmatched provider accounts, unmapped services, duplicates, count differences, quantity changes to approve, supplier cost changes, stale data, drafts, invoices changed in Xero, supplier bills and renewals. Filter by group or customer; every row opens where it is dealt with.</td></tr>
+    <tr><td>Customers</td><td>One row per customer: agreements, next invoice, charge per month, supplier cost, margin, how many lines the integrations supply, and whether anything needs attention.</td></tr>
     <tr><td>Monthly run</td><td>Three steps as tabs: <strong>Prepare</strong> (what is due and what changed), <strong>Approve</strong> (drafts to Xero), <strong>Issued</strong> (created in Xero, and anything changed in Xero afterwards).</td></tr>
-    <tr><td>Exceptions</td><td>Findings, licence and device count discrepancies and accepted exceptions in one place, each with the way to resolve it.</td></tr>
-    <tr><td>Services</td><td>The service register: every subscription, hosting item and device the integrations report, and how each is covered commercially.</td></tr>
+    <tr><td>Services</td><td>The service register: every subscription, hosting item and device the integrations report, with the supplier product, quantity, cost, last sync and the line that bills it.</td></tr>
     <tr><td>Renewals &amp; pricing</td><td>The renewal queue with supplier commitment exposure, and the price review tool.</td></tr>
     <tr><td>Invoices</td><td>The Xero sales mirror (outstanding, overdue, paid) and the Pax8 supplier bill reconciliation.</td></tr>
     <tr><td>Automation</td><td>The staged automation policy in Settings.</td></tr>
   </table>
   <h3>The chain</h3>
   <ol class="steps">
-    <li><strong>Contract lines</strong> say what a customer pays for: description, quantity, unit price, billing frequency, and for each line an invoice schedule and a reduction policy.</li>
+    <li><strong>Contract lines</strong> say what a customer pays for: description, quantity, unit price, billing frequency, and for each line an invoice schedule, a reduction policy and a <strong>quantity rule</strong> (fixed or synced).</li>
+    <li>Each integration (Pax8, 20i, NinjaOne) reports what it <strong>supplies</strong> to each customer. A <strong>service link</strong> ties each supplied service to the contract line that bills it, or records that it is bundled, covered, free or internal. Supplier cost comes through the same link.</li>
     <li>The <strong>billing engine</strong> works out, for a run date, which line periods are due and not yet invoiced and what each costs, including pro-rated additions, credits and catch-ups from dated changes.</li>
     <li>The <strong>Monthly run</strong> shows one row per contract with the proposed amount, the previous invoice and plain-language reasons for any difference. Ticked rows become CRM <strong>drafts</strong>.</li>
     <li>Drafts are reviewed and <strong>approved</strong>; approval creates the invoice in Xero as a DRAFT with a reference back to the CRM.</li>
     <li>Finance approves and sends from Xero. Payments and status changes flow back and appear under Invoices.</li>
-    <li>Between runs, <strong>Exceptions</strong>, <strong>Services</strong> and <strong>Renewals</strong> keep the next run clean.</li>
+    <li>Between runs, <strong>Needs attention</strong>, <strong>Services</strong> and <strong>Renewals</strong> keep the next run clean.</li>
   </ol>
-  <figure><img src="img/01-overview.png" alt="Billing overview"><figcaption>Billing → Overview. The "what to do next" list is ordered by urgency: red is now, amber is this run, grey is information. Every line links to where it is resolved.</figcaption></figure>
+  <div class="callout">Nothing an integration reports becomes a customer charge by itself. A supplied service is billed only through a contract line; a changed count only changes an invoice once a person records (or approves) the dated change. Historical invoices never move when provider data changes.</div>
+  <figure><img src="img/01-overview.png" alt="Billing, Needs attention"><figcaption>Billing → Needs attention. The strip says where the month stands; the list is ordered by urgency: red is now, amber is this run. The chips filter by group; every row opens where it is resolved.</figcaption></figure>
 </section>
 
 <section class="chapter">
@@ -110,10 +112,13 @@
     <tr><td>Reduction policy: <em>Next period</em> (default)</td><td>A lower quantity applies from the next period; nothing is credited inside the current one.</td></tr>
     <tr><td>Reduction policy: <em>Immediate</em></td><td>The unused days are credited as a negative line (and as a catch-up if the period was already invoiced).</td></tr>
     <tr><td>Reduction policy: <em>At renewal</em></td><td>The old quantity is billed until the contract's renewal date.</td></tr>
+    <tr><td>Quantity rule: <em>Fixed</em> (default)</td><td>The agreed quantity bills. If Pax8, 20i or NinjaOne supply a different count, that is an exception for a person to decide (amend, reduce at renewal, bundle, accept, dismiss).</td></tr>
+    <tr><td>Quantity rule: <em>Synced</em></td><td>The integrations' count is what should be billed. A different count is a <em>quantity change to approve</em>; one approval records it as a dated change from the day it changed, and the next invoice pro-rates it. Nothing changes until approved.</td></tr>
   </table>
-  <h3>2.4 Tell the register which line bills each service</h3>
-  <p>On the company's <strong>Subscriptions</strong> tab (Pax8) and <strong>Hosting</strong> tab (20i), choose the billing line for each subscription, package or domain. Lines marked "compare with NinjaOne" are compared with the device count at the linked organisation. Anything left without a line shows as <strong>unmapped</strong> in Services and in the Exceptions list until a decision is recorded (see chapter 7).</p>
-  <figure><img src="img/20-company-subscriptions.png" alt="Company subscriptions tab"><figcaption>Company → Subscriptions: each Pax8 subscription and the contract line that bills it.</figcaption></figure>
+  <h3>2.4 Say which line bills each supplied service</h3>
+  <p>On the company's <strong>Billing</strong> tab, each agreement line shows <em>Supplied by</em>: which integration supplies it and how many. Services the integrations report that no line accounts for are listed below the agreements under <strong>Supplied but not on an active agreement</strong>, unmapped ones first. For each, pick the line in <em>Billed on</em>, or use <em>Not charged?</em> to record that it is bundled into another line, covered by a commitment, intentionally free (with a review date) or internal.</p>
+  <p>Matching by rule happens at sync time and is recorded, so you can see <em>how</em> a service came to be on a line: chosen by a person, matched by catalogue SKU, matched by product name, or the per-device rule (lines marked "compare with NinjaOne" take the billable device count). A person's choice is never overwritten by a sync.</p>
+  <figure><img src="img/20-company-subscriptions.png" alt="Supplied services on the company Billing tab"><figcaption>Company → Billing: services the integrations supply that no agreement line accounts for yet, each with the line picker and the coverage dialog.</figcaption></figure>
 </section>
 
 <section class="chapter">
@@ -174,52 +179,60 @@
     <tr><td>Backdated change</td><td>A change dated inside the previous period produces a traceable catch-up line: what that period should have cost, what was invoiced, the difference.</td></tr>
   </table>
   <div class="callout">Cancelling a draft never loses a change: its periods become due again and its changes wait for the next draft.</div>
-  <figure class="tall"><img src="img/16-contract.png" alt="Contract page"><figcaption>A contract page: contracted services, pending changes, change history, the device count check, renewal and terms.</figcaption></figure>
+  <figure class="tall"><img src="img/16-contract.png" alt="Contract page"><figcaption>A contract page: each line with its quantity rule, what supplies it, unit price, cost per unit, margin and status; a line opened to its source records, rule and count check; then change history, count checks, renewal and terms.</figcaption></figure>
 </section>
 
 <section class="chapter">
-  <h2>6. Exceptions: findings and count discrepancies</h2>
-  <p>Billing → <strong>Exceptions</strong> is every reason the next run would not be clean, in one place. The views are <em>Everything open</em>, <em>Findings</em>, <em>Count discrepancies</em> and <em>Accepted exceptions</em>.</p>
-  <h3>Findings</h3>
+  <h2>6. Needs attention: everything to decide, in one list</h2>
+  <p>Billing → <strong>Needs attention</strong> is the one queue. Every check the system runs lands here with the same vocabulary, so you never have to visit several pages to find out whether anything is wrong. The chips filter by group; the customer picker narrows to one customer; clicking a label filters to that kind and shows what it means.</p>
   <table>
-    <tr><th style="width:34%">Finding</th><th>Meaning and where it is resolved</th></tr>
-    <tr><td>Service without commercial coverage</td><td>Possibly missed revenue. Choose the billing line on the Subscriptions or Hosting tab, or record bundled, free, internal or investigate in Services.</td></tr>
-    <tr><td>Free arrangement past its review date</td><td>Decide again: extend the review date or start charging.</td></tr>
-    <tr><td>Covered service without an expected charge</td><td>Its line is on a non-active contract or has quantity 0. Fix the contract.</td></tr>
-    <tr><td>Expected charge not yet drafted</td><td>What the next run proposes; missed periods are red. Run step 1.</td></tr>
-    <tr><td>Draft waiting more than a week</td><td>Approve or cancel it.</td></tr>
-    <tr><td>Customer invoice differs from what was approved</td><td>Changed, voided or deleted in Xero after approval. Compare on the draft page.</td></tr>
-    <tr><td>Supplier charge differs / without a customer</td><td>Pax8 invoice vs Xero bill, or a Pax8 charge whose company is not linked. See chapter 9.</td></tr>
-    <tr><td>Customer invoice raised outside the CRM</td><td>Information only.</td></tr>
+    <tr><th style="width:22%">Group</th><th style="width:34%">Kind</th><th>What to do</th></tr>
+    <tr><td rowspan="3">Matching</td><td>Provider account not matched to a customer</td><td>A Pax8 company, NinjaOne organisation or 20i item nobody has linked. Link it on the integration page; its services cannot be billed or costed until then.</td></tr>
+    <tr><td>Service not mapped to a charge</td><td>Possible missed revenue. Pick the line on the company's Billing tab, or record bundled, covered, free or internal.</td></tr>
+    <tr><td>Possible duplicate service</td><td>The same supplier product appears twice for one customer. Check nothing is charged or supplied twice.</td></tr>
+    <tr><td rowspan="3">Quantities</td><td>Supplied count differs from the agreement</td><td>A fixed line. Resolve: amend the line from a date, reduce at renewal, include in a bundle, accept as an exception with an owner and review date, or dismiss. The money consequence is shown first.</td></tr>
+    <tr><td>Quantity change to approve</td><td>A synced line. Approve to record the new quantity from the day it changed; the next invoice pro-rates it.</td></tr>
+    <tr><td>Service covered by a line that cannot charge</td><td>The line's contract is not active or its quantity is 0. Fix the contract.</td></tr>
+    <tr><td rowspan="2">Prices and costs</td><td>Supplier cost differs from the recorded cost</td><td>Pax8's price changed. Margin already uses the supplier figure; update the recorded cost on the line, and consider a price review.</td></tr>
+    <tr><td>Free arrangement past its review date</td><td>Decide again: extend the date or start charging.</td></tr>
+    <tr><td>Data</td><td>Integration data is stale</td><td>The last successful sync is more than three hours old. Run a sync from the integration page.</td></tr>
+    <tr><td rowspan="4">Drafts</td><td>Customer not linked to Xero</td><td>Drafts can be prepared but not approved. Link on Integrations → Xero.</td></tr>
+    <tr><td>Draft rejected by Xero / differs from the previous invoice / waiting more than a week</td><td>Open the draft: fix and approve, review the reasons, re-prepare or cancel.</td></tr>
+    <tr><td>Charge due but not drafted</td><td>Run the Monthly run, or set Bill from on the contract. Missed periods are red.</td></tr>
+    <tr><td colspan="2" class="small">Drafts the review finds unchanged are not in this list; they are one click on the Monthly run's Approve step.</td></tr>
+    <tr><td>Invoices</td><td>Invoice changed in Xero after approval / raised outside the CRM</td><td>Compare with the approved version on the draft; information for ad-hoc invoices.</td></tr>
+    <tr><td>Supplier bills</td><td>Supplier charge differs / without a customer</td><td>Pax8 invoice vs Xero bill, or a charge whose Pax8 company is not linked. See chapter 9.</td></tr>
+    <tr><td>Renewals</td><td>Renewal decision overdue / due</td><td>Record the customer's decision or prepare an amendment before the deadline.</td></tr>
   </table>
-  <figure><img src="img/07-exceptions.png" alt="Exceptions page"><figcaption>Exceptions, with the finding counts across the top.</figcaption></figure>
-  <h3>Count discrepancies and the Resolve dialog</h3>
-  <p>The licence check (Pax8) and the device check (NinjaOne) compare the contracted quantity with what the supplier reports, on every sync. A difference becomes a review item. Click <strong>Resolve…</strong> to see the options and the money consequence before anything happens:</p>
+  <figure><img src="img/07-exceptions.png" alt="Needs attention filtered to quantities"><figcaption>Needs attention filtered to the Quantities group: count differences on fixed lines and quantity changes to approve on synced lines, each with the amount per period at stake.</figcaption></figure>
+  <h3>Resolving a count difference</h3>
+  <p>Every row opens the customer's Billing tab with the line expanded. The line shows the agreed and supplied counts and a <strong>Resolve…</strong> button with the options and the money consequence before anything happens:</p>
   <ul>
-    <li><strong>Amend the contract line</strong> to the observed count from a chosen date: a dated change with a reason, pro-rated by the engine, linked back from the item.</li>
-    <li><strong>Reduce at renewal</strong> (fewer observed): the lower count, billed at the agreed count until the renewal date.</li>
+    <li><strong>Amend the contract line</strong> to the supplied count from a chosen date: a dated change with a reason, pro-rated by the engine, linked back from the item.</li>
+    <li><strong>Reduce at renewal</strong> (fewer supplied): the lower count, billed at the agreed count until the renewal date.</li>
     <li><strong>Include in a bundle</strong> (licences): the chosen subscriptions count toward another line instead.</li>
-    <li><strong>Accept as an exception</strong> with an owner, a review date and a reason. It re-opens by itself after the date, or earlier if the gap grows.</li>
+    <li><strong>Accept as an exception</strong> with an owner, a review date and a reason. It re-opens by itself after the date, or earlier if the gap grows. Accepted exceptions have their own view on Needs attention.</li>
     <li><strong>Dismiss</strong>: not a billing matter.</li>
   </ul>
-  <figure><img src="img/08-exceptions-counts.png" alt="Resolve discrepancy dialog"><figcaption>The Resolve dialog on a device count discrepancy, with the money consequence for this period and every period after.</figcaption></figure>
+  <figure><img src="img/08-exceptions-counts.png" alt="Resolve dialog"><figcaption>The Resolve dialog, with the money consequence for this period and every period after.</figcaption></figure>
 </section>
 
 <section class="chapter">
-  <h2>7. Services: what we provide against what we bill</h2>
-  <p>Billing → <strong>Services</strong> lists every service the integrations say a customer has and how it is covered commercially. Only <strong>unmapped</strong> may mean missed revenue; every other state is a recorded decision with a reason.</p>
+  <h2>7. Services: what the integrations supply, and what bills it</h2>
+  <p>Billing → <strong>Services</strong> lists every service the integrations say a customer has: the integration, the supplier product (SKU, package type, device classes), the quantity and cost last synced, when it was synced, its state and the line that bills it, with how that link came about. Filter by state, integration or customer. Only <strong>unmapped</strong> may mean missed revenue; every other state is a recorded decision with a reason or a rule match.</p>
   <table>
     <tr><th style="width:26%">State</th><th>Meaning</th></tr>
-    <tr><td>Charged</td><td>A contract line bills it (chosen on the company's Subscriptions or Hosting tab, or matched by SKU or name).</td></tr>
-    <tr><td>Included in a bundle</td><td>Another line pays for it; the licence check counts it toward that line.</td></tr>
+    <tr><td>Charged on a line</td><td>A contract line bills it. The register says how: chosen by a person, matched by catalogue SKU, matched by product name, or the per-device rule.</td></tr>
+    <tr><td>Included in a bundle</td><td>Another line pays for it; its quantity counts toward that line in the count check.</td></tr>
     <tr><td>Covered by commitment</td><td>Part of a commitment already billed; counts toward nothing.</td></tr>
-    <tr><td>Free</td><td>Deliberately free, with a reason and a review date. Comes back as a finding when the date passes.</td></tr>
-    <tr><td>Internal</td><td>Our own use; left out of counts.</td></tr>
+    <tr><td>Intentionally free</td><td>Deliberately free, with a reason and a review date. Comes back to Needs attention when the date passes.</td></tr>
+    <tr><td>Internal / non-billable</td><td>Our own use; left out of counts.</td></tr>
     <tr><td>Needs investigation</td><td>Parked with a reason until someone decides.</td></tr>
-    <tr><td>Unmapped</td><td>No decision yet. Potential missed revenue.</td></tr>
+    <tr><td>Unmapped</td><td>No decision and no rule match. Potential missed revenue.</td></tr>
   </table>
-  <p>Filter by state or customer, open a row's <em>Coverage</em> control to record a decision. The same register appears on each company's Services tab.</p>
-  <figure><img src="img/09-services.png" alt="Services register"><figcaption>Billing → Services, filtered to all states.</figcaption></figure>
+  <p><strong>Cost</strong> is shown where the supplier prices the service (Pax8). 20i and NinjaOne carry no pricing, so their cost reads <em>not reported</em>, never zero; record a unit cost on the line if you know it, and the line's margin uses that.</p>
+  <p>Adding another integration later means one adapter that reports services in this shape; the register, the checks and every screen then work the same way for it.</p>
+  <figure><img src="img/09-services.png" alt="Services register"><figcaption>Billing → Services: the integration, supplier product, quantity, cost, last sync, state and the line that bills each service.</figcaption></figure>
 </section>
 
 <section class="chapter">
@@ -260,9 +273,23 @@
 </section>
 
 <section class="chapter">
-  <h2>11. One customer at a glance: the company Billing tab</h2>
-  <p>Every company page has a <strong>Billing</strong> tab with the same picture narrowed to that customer: its own "what to do next" list, the Xero balances and link state, each agreement in the next run with the proposed and previous amounts and the reasons, drafts awaiting approval with batch approval, open and accepted count discrepancies with Resolve, renewals with the decision button, the service coverage counts, and the invoices created in Xero with their customer schedules. Use it when a customer calls: everything about their billing is on one screen.</p>
-  <figure class="tall"><img src="img/15-company-billing.png" alt="Company Billing tab"><figcaption>Company → Billing.</figcaption></figure>
+  <h2>11. One customer at a glance: the company Billing tab and the Customers list</h2>
+  <p>Every company page has one <strong>Billing</strong> tab. It answers, on one screen: what are we billing this customer, what does each service cost us, which integration or manual entry supplies it, does the billed quantity match the rule, what changed, and what will the next invoice be.</p>
+  <ul>
+    <li><strong>The strip</strong>: charge per month, supplier cost per month (with how many lines have an unknown cost), margin, the next invoice date, the Xero balance and the number of things needing attention.</li>
+    <li><strong>Needs attention</strong> for this customer only.</li>
+    <li><strong>One card per agreement</strong>: frequency, the current period, the next invoice date, the renewal date and what the next run proposes. Each line shows the billed quantity and its rule, <em>Supplied by</em>, unit price, cost per unit (from the supplier where it prices the service, otherwise the recorded cost, otherwise <em>unknown</em>), margin per month and a status: in step, count differs, quantity change to approve, exception accepted, recorded cost differs from supplier, or no integration supplies this.</li>
+    <li><strong>Open a line</strong> for the source records (product, quantity, cost, last sync, how it matched, a link to the supplier console) with the line picker, the rule in plain words, pending dated changes and the count check with Resolve.</li>
+    <li><strong>Supplied but not on an active agreement</strong>: unmapped services first, each with the line picker and the coverage dialog.</li>
+    <li><strong>Drafts awaiting approval</strong>, then collapsed sections for <strong>Invoices</strong> (balances, history, drafts created from the CRM), <strong>Count checks and renewals</strong>, and <strong>Supplier detail</strong> (the Pax8 and 20i panels, including partner invoices and quantity changes at Pax8).</li>
+  </ul>
+  <figure class="tall"><img src="img/15-company-billing.png" alt="Company Billing tab"><figcaption>Company → Billing: the strip, the attention list, the agreement with one line opened to its sources, and the services not yet on a line.</figcaption></figure>
+  <h3>The Customers list</h3>
+  <p>Billing → <strong>Customers</strong> is the same picture one row per customer: agreements and frequency, next invoice, charge, supplier cost (unknown where no supplier prices it), margin, how many lines the integrations supply and an attention count. Filter to customers needing attention, with an unknown cost, or supplied without an agreement. Click through to the customer's Billing tab.</p>
+  <figure><img src="img/21-customers.png" alt="Billing, Customers list"><figcaption>Billing → Customers.</figcaption></figure>
+  <h3>From a signed proposal to a contract</h3>
+  <p>When a Better Proposals proposal is signed, the CRM normally drafts the contract itself from the opportunity's lines. If it did not (the proposal was built outside the CRM, or was linked later), the Proposals page shows <strong>Create contract</strong> on every signed proposal without one. With a linked opportunity the full acceptance runs; with only a company linked, a draft contract is created from the proposal's totals for you to replace with the agreed services before activating.</p>
+  <figure><img src="img/22-proposals.png" alt="Proposals page with Create contract"><figcaption>Proposals filtered to signed: Create contract on a signed proposal, or a link to its contract.</figcaption></figure>
 </section>
 
 <section class="chapter">
@@ -272,7 +299,7 @@
     <tr><td>See Billing, invoices, drafts</td><td>finance, admin (finance.read)</td></tr>
     <tr><td>Prepare drafts, run the Monthly run, cancel or re-prepare drafts</td><td>finance, admin, account manager (invoice.prepare)</td></tr>
     <tr><td>Approve drafts into Xero, match supplier bills</td><td>finance, admin (invoice.approve)</td></tr>
-    <tr><td>Edit contracts, record renewal decisions, apply price reviews, set service coverage</td><td>finance, admin, account manager (contract.write)</td></tr>
+    <tr><td>Edit contracts, record renewal decisions, apply price reviews, map services to lines, create a contract from a signed proposal</td><td>finance, admin, account manager (contract.write)</td></tr>
     <tr><td>Resolve count discrepancies</td><td>finance, admin, account manager (discrepancy.review)</td></tr>
     <tr><td>Automation policy, Xero and Pax8 settings</td><td>admin</td></tr>
   </table>
@@ -283,7 +310,10 @@
 <section class="chapter">
   <h2>13. Quick answers</h2>
   <p><strong>A customer added two users on the 14th. What do I do?</strong> Edit the contract, change the quantity, set "Changes take effect from" to the 14th, save. The next run charges the two for their remaining days and the full quantity from the next period. The customer explanation will say so in plain words.</p>
-  <p><strong>The licence check says contracted 14, at Pax8 16.</strong> Open Exceptions (or the company's Billing tab), click Resolve, choose <em>Amend the contract line</em> from the day the licences were added, and apply. The item closes and the next invoice carries the change.</p>
+  <p><strong>The licence check says agreed 14, Pax8 supplies 16.</strong> Open Needs attention (or the company's Billing tab), open the line, click Resolve, choose <em>Amend the contract line</em> from the day the licences were added, and apply. The item closes and the next invoice carries the change. If that line should always follow Pax8, set its quantity rule to <em>synced</em>: future differences arrive as a quantity change to approve.</p>
+  <p><strong>Where does this charge come from?</strong> Company → Billing, open the line. <em>Supplied by</em> names the integration and the count; the opened line lists each source record with its supplier product, last sync and how it was matched, or says the quantity was entered by hand.</p>
+  <p><strong>Why is the cost "unknown"?</strong> Only Pax8 reports prices. 20i and NinjaOne do not, so lines they supply use the cost recorded on the line, and read unknown until one is recorded. The CRM never invents a cost.</p>
+  <p><strong>Pax8 changed a price.</strong> Needs attention shows "supplier cost differs from the recorded cost" for the line; margin already uses the new figure. Update the recorded cost on the line, then run a price review if the sell price should move.</p>
   <p><strong>A draft says "stale".</strong> The contract changed after it was prepared. Open it and click <em>Re-prepare from the contract</em>.</p>
   <p><strong>Two agreements for one customer are due. Can they go on one invoice?</strong> Yes: leave <em>One draft per customer</em> ticked in step 1. The draft groups the lines by agreement and covers both.</p>
   <p><strong>Why is a contract "blocked"?</strong> Its company has no Xero contact link. Link it on Integrations → Xero and run again.</p>
