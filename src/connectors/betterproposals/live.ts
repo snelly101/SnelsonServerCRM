@@ -66,6 +66,28 @@ export class LiveBetterProposalsClient implements BetterProposalsClient {
     }
   }
 
+  async getProposalRaw(externalId: string): Promise<Record<string, unknown> | null> {
+    try {
+      const data = this.unwrap(await this.http.get<BpApiResponse<Record<string, unknown>>>(`/proposal/${encodeURIComponent(externalId)}`), "proposal");
+      return data && typeof data === "object" ? data : null;
+    } catch (err) {
+      if (err instanceof HttpError && err.status === 404) return null;
+      if (err instanceof Error && /not found/i.test(err.message)) return null;
+      throw err;
+    }
+  }
+
+  async getQuote(quoteId: string): Promise<Record<string, unknown> | null> {
+    try {
+      const data = this.unwrap(await this.http.get<BpApiResponse<Record<string, unknown>>>(`/quote/${encodeURIComponent(quoteId)}`), "quote");
+      return data && typeof data === "object" ? data : null;
+    } catch (err) {
+      if (err instanceof HttpError && err.status === 404) return null;
+      if (err instanceof Error && /not found/i.test(err.message)) return null;
+      throw err;
+    }
+  }
+
   async listTemplates() {
     const out: { id: string; name: string; description: string | null; isDefault: boolean }[] = [];
     for (let page = 1; page <= 20; page++) {

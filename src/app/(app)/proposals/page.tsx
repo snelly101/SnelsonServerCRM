@@ -101,13 +101,13 @@ export default async function ProposalsPage({ searchParams }: { searchParams: Pr
                 {data.rows.map((p) => (
                   <tr key={p.id}>
                     <td>
-                      <span className="font-medium">{p.subjectLine ?? `Proposal ${p.externalId}`}</span>
+                      <Link href={`/proposals/${p.externalId}`} className="font-medium text-brand-700 hover:underline">{p.subjectLine ?? `Proposal ${p.externalId}`}</Link>
                       {p.viewUrl && (
                         <a href={p.viewUrl} target="_blank" rel="noreferrer" className="ml-1 inline-flex align-middle text-slate-400 hover:text-brand-700" aria-label="Open in Better Proposals">
                           <ExternalLink className="h-3.5 w-3.5" />
                         </a>
                       )}
-                      <div className="text-xs text-slate-500">#{p.externalId}</div>
+                      <div className="text-xs text-slate-500">#{p.externalId}{p.itemCount ? ` · ${p.itemCount} line item${p.itemCount === 1 ? "" : "s"}` : ""}</div>
                     </td>
                     <td>
                       <Badge tone={STATUS_TONE[p.status]}>{p.status}</Badge>

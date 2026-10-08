@@ -98,6 +98,10 @@ export interface BetterProposalsClient {
   testConnection(): Promise<{ ok: true; accountName: string; accountId: string; taxLabel: string | null; taxAmount: string | null } | { ok: false; error: string }>;
   listProposals(filter: "all" | "new" | "sent" | "opened" | "signed" | "paid", page: number, perPage?: number): Promise<BpProposal[]>;
   getProposal(externalId: string): Promise<BpProposal | null>;
+  /** GET /proposal/:id as the API returned it, for the pricing detail the list endpoints leave out. */
+  getProposalRaw(externalId: string): Promise<Record<string, unknown> | null>;
+  /** GET /quote/:id: the proposal's pricing table. The public docs leave its shape undocumented, so it is stored raw and parsed heuristically. */
+  getQuote(quoteId: string): Promise<Record<string, unknown> | null>;
   listTemplates(): Promise<{ id: string; name: string; description: string | null; isDefault: boolean }[]>;
   listCompanies(page: number, perPage?: number): Promise<{ id: string; name: string }[]>;
   createCompany(name: string): Promise<{ id: string; name: string }>;

@@ -41,7 +41,7 @@ function seedDemo() {
   for (const p of [
     mk({ subjectLine: "Managed IT for 40 users (DEMO)", companyName: "Pennine Precision Engineering", status: "opened", openedAt: new Date(Date.now() - 2 * 86400000) }),
     mk({ subjectLine: "Wi-Fi refresh (DEMO)", companyName: "The Old Mill Hotel", status: "sent" }),
-    mk({ subjectLine: "Security awareness (DEMO)", companyName: "Greenfield Primary Academy", status: "signed", openedAt: new Date(Date.now() - 3 * 86400000), signedAt: new Date(Date.now() - 86400000), signedBy: "Sarah Okafor" }),
+    mk({ subjectLine: "Security awareness (DEMO)", companyName: "Greenfield Primary Academy", status: "signed", openedAt: new Date(Date.now() - 3 * 86400000), signedAt: new Date(Date.now() - 86400000), signedBy: "Sarah Okafor", raw: { ID: String(counter + 1), Demo: true, QuoteID: "demo-quote-1" } }),
   ])
     store.set(p.externalId, p);
 }
@@ -80,6 +80,29 @@ export class DemoBetterProposalsClient implements BetterProposalsClient {
   }
   async getProposal(externalId: string) {
     return store.get(externalId) ?? null;
+  }
+  async getProposalRaw(externalId: string) {
+    const p = store.get(externalId);
+    return p ? { ...p.raw, SubjectLine: p.subjectLine, MonthlyTotal: p.monthlyTotal === null ? null : p.monthlyTotal.toFixed(2), OneOffTotal: p.oneOffTotal === null ? null : p.oneOffTotal.toFixed(2) } : null;
+  }
+  /** A quote in the shape the live API is believed to use: sections of priced rows with a billing type. Only the signed demo proposal has one. */
+  async getQuote(quoteId: string) {
+    if (quoteId !== "demo-quote-1") return null;
+    return {
+      ID: quoteId,
+      Title: "Security awareness (DEMO)",
+      Currency: "GBP",
+      Sections: [
+        { Title: "Monthly services", Type: "Monthly", Items: [
+          { Name: "Security awareness training", Description: "Per user, monthly", Quantity: "60", Price: "2.50", Total: "150.00" },
+          { Name: "Managed phishing simulation", Description: "Per user, monthly", Quantity: "60", Price: "1.50", Total: "90.00" },
+          { Name: "Managed firewall", Quantity: "1", Price: "2100.00", Total: "2100.00" },
+        ] },
+        { Title: "One-off", Type: "OneOff", Items: [
+          { Name: "Onboarding and baseline assessment", Quantity: "1", Price: "1500.00", Total: "1500.00" },
+        ] },
+      ],
+    };
   }
   async listTemplates() {
     return [

@@ -32,8 +32,27 @@ describe("a signed proposal becomes a contract on request", () => {
     expect(r.created).toBe(true);
     const [c] = await db.select().from(contracts).where(eq(contracts.id, r.contractId));
     expect(c).toMatchObject({ companyId: school, status: "draft", externalProposalId: signed.externalId });
+    // The demo quote carries four priced rows: they become the lines, not the totals.
     const lines = await db.select().from(contractLines).where(eq(contractLines.contractId, c.id));
-    expect(lines.map((l) => [l.revenueType, Number(l.unitPrice)])).toEqual(expect.arrayContaining([["recurring", 180], ["one_off_project", 450]]));
+    expect(lines).toHaveLength(4);
+    expect(lines.map((l) => [l.description, Number(l.quantity), Number(l.unitPrice), l.revenueType, l.billingFrequency])).toEqual(
+      expect.arrayContaining([
+        ["Security awareness training · Per user, monthly", 60, 2.5, "recurring", "monthly"],
+        ["Managed phishing simulation · Per user, monthly", 60, 1.5, "recurring", "monthly"],
+        ["Managed firewall", 1, 2100, "recurring", "monthly"],
+        ["Onboarding and baseline assessment", 1, 1500, "one_off_project", "one_off"],
+      ]),
+    );
+    expect(lines.find((l) => l.description.startsWith("Security awareness"))!.pricingModel).toBe("per_user");
+    const stored = (await db.select({ lineItems: bpProposals.lineItems, quoteRaw: bpProposals.quoteRaw }).from(bpProposals).where(eq(bpProposals.id, signed.id)))[0];
+    expect(stored.lineItems).toHaveLength(4);
+    expect(stored.quoteRaw).toMatchObject({ ID: "demo-quote-1" });
+    // A proposal whose quote carried nothing falls back to the totals.
+    const other = (await db.select().from(bpProposals).where(eq(bpProposals.status, "opened")))[0];
+    await db.update(bpProposals).set({ status: "signed", signedAt: new Date(), companyId: school, opportunityId: null, monthlyTotal: "180.00", oneOffTotal: "450.00", lineItems: [] }).where(eq(bpProposals.id, other.id));
+    const r2 = await contractFromProposal(other.externalId, admin.id);
+    const lines2 = await db.select().from(contractLines).where(eq(contractLines.contractId, r2.contractId));
+    expect(lines2.map((l) => [l.revenueType, Number(l.unitPrice)])).toEqual(expect.arrayContaining([["recurring", 180], ["one_off_project", 450]]));
     // Asking again returns the same contract; the list shows it.
     expect(await contractFromProposal(signed.externalId, admin.id)).toEqual({ contractId: c.id, created: false });
     const listed = (await listProposals({ companyId: school })).rows.find((p) => p.externalId === signed.externalId)!;
