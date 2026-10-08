@@ -1,11 +1,13 @@
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { bpProposals, companies, contacts, contracts, opportunities, user, opportunityLines } from "@/db/schema";
+import { bpProposals, companies, contacts, contracts, opportunities, user, opportunityLines, products } from "@/db/schema";
+import { extractProposalItems, itemTotals } from "@/lib/proposal-items";
 import { logger } from "@/lib/logger";
 import { audit, logActivity } from "@/lib/audit";
 import { ActionError } from "@/lib/action-result";
 import { getAppSettings } from "@/lib/settings";
 import { getBetterProposalsClient, type BpConfig } from "@/connectors/betterproposals";
+import type { BetterProposalsClient } from "@/connectors/betterproposals/types";
 import type { BpProposal } from "@/connectors/betterproposals/types";
 import { createLink, getLink, getLinkByExternal, raiseConflict, recordInboundEvent, runOutbound, runSync, setConnectionConfig, setCredentials, updateConnection, getConnection, markEventProcessed } from "./integrations";
 import { markWon } from "./opportunities";
@@ -64,12 +66,12 @@ export async function listProposals(p: { q?: string; status?: string; companyId?
     p.unlinked ? isNull(bpProposals.companyId) : undefined,
   ].filter(Boolean);
   const where = conds.length ? and(...(conds as [ReturnType<typeof eq>])) : undefined;
-  const base = () => db.select({ proposal: bpProposals, companyName: companies.name, opportunityTitle: opportunities.title, contractId: sql<string | null>`(select c.id from contracts c where c.external_proposal_id = ${bpProposals.externalId} and c.archived_at is null order by c.created_at desc limit 1)` }).from(bpProposals).leftJoin(companies, eq(companies.id, bpProposals.companyId)).leftJoin(opportunities, eq(opportunities.id, bpProposals.opportunityId));
+  const base = () => db.select({ proposal: bpProposals, companyName: companies.name, opportunityTitle: opportunities.title, contractId: sql<string | null>`(select c.id from contracts c where c.external_proposal_id = ${bpProposals.externalId} and c.archived_at is null order by c.created_at desc limit 1)`, itemCount: sql<number>`coalesce(jsonb_array_length(${bpProposals.lineItems}), 0)`.mapWith(Number) }).from(bpProposals).leftJoin(companies, eq(companies.id, bpProposals.companyId)).leftJoin(opportunities, eq(opportunities.id, bpProposals.opportunityId));
   const [rows, [{ total }]] = await Promise.all([
     base().where(where).orderBy(desc(sql`coalesce(${bpProposals.signedAt}, ${bpProposals.sentAt}, ${bpProposals.createdAtExternal}, ${bpProposals.fetchedAt})`)).limit(pageSize).offset((page - 1) * pageSize),
     db.select({ total: sql<number>`count(*)`.mapWith(Number) }).from(bpProposals).leftJoin(companies, eq(companies.id, bpProposals.companyId)).where(where),
   ]);
-  return { rows: rows.map((r) => ({ ...r.proposal, companyName: r.companyName, opportunityTitle: r.opportunityTitle, contractId: r.contractId })), total, page, pageSize, pageCount: Math.max(1, Math.ceil(total / pageSize)) };
+  return { rows: rows.map((r) => ({ ...r.proposal, companyName: r.companyName, opportunityTitle: r.opportunityTitle, contractId: r.contractId, itemCount: r.itemCount })), total, page, pageSize, pageCount: Math.max(1, Math.ceil(total / pageSize)) };
 }
 
 /**
@@ -102,16 +104,27 @@ export async function contractFromProposal(externalId: string, actorUserId: stri
   const end = new Date(Date.now() + 365 * 86400000).toISOString().slice(0, 10);
   const name = p.subjectLine ?? `Proposal ${externalId}`;
   const lines: ContractLineInput[] = [];
-  const recurring = (freq: "monthly" | "quarterly" | "annual", total: string | null) => {
-    if (total && Number(total) > 0) lines.push({ id: null, productId: null, siteId: null, description: `${name} (${freq} charge as proposed)`, revenueType: "recurring", pricingModel: "fixed", billingFrequency: freq, quantity: 1, unitPrice: Number(total), unitCost: null, countsAsManagedDevice: false, invoiceSchedule: freq === "monthly" ? "contract" : "own" });
-  };
-  recurring("monthly", p.monthlyTotal);
-  recurring("quarterly", p.quarterlyTotal);
-  recurring("annual", p.annualTotal);
-  if (p.oneOffTotal && Number(p.oneOffTotal) > 0) lines.push({ id: null, productId: null, siteId: null, description: `${name} (one-off as proposed)`, revenueType: "one_off_project", pricingModel: "fixed", billingFrequency: "one_off", quantity: 1, unitPrice: Number(p.oneOffTotal), unitCost: null, countsAsManagedDevice: false });
-  const contractId = await createContract(contractSchema.parse({ companyId: p.companyId, name, status: "draft", startDate: start, endDate: end, renewalDate: end, externalProposalId: externalId, notes: `Drafted from the signed Better Proposals proposal "${name}"${p.signedBy ? ` (signed by ${p.signedBy})` : ""}. The lines carry the proposal totals; replace them with the agreed services before activating.` }), lines, actorUserId);
+  const items = p.lineItems ?? [];
+  if (items.length) {
+    // The proposal's own pricing rows: one line each, matched to the catalogue by name where a product has that name.
+    const catalogue = await db.select({ id: products.id, name: products.name, pricingModel: products.pricingModel }).from(products).where(eq(products.active, true));
+    for (const it of items) {
+      const prod = catalogue.find((c) => c.name.trim().toLowerCase() === it.description.split(" · ")[0].trim().toLowerCase()) ?? null;
+      const recurring = it.billingFrequency !== "one_off";
+      lines.push({ id: null, productId: prod?.id ?? null, siteId: null, description: it.description, revenueType: recurring ? "recurring" : "one_off_project", pricingModel: prod?.pricingModel ?? (it.quantity > 1 ? "per_user" : "fixed"), billingFrequency: it.billingFrequency, quantity: it.quantity, unitPrice: it.unitPrice, unitCost: null, countsAsManagedDevice: false, invoiceSchedule: it.billingFrequency === "monthly" || !recurring ? "contract" : "own" });
+    }
+  } else {
+    const recurring = (freq: "monthly" | "quarterly" | "annual", total: string | null) => {
+      if (total && Number(total) > 0) lines.push({ id: null, productId: null, siteId: null, description: `${name} (${freq} charge as proposed)`, revenueType: "recurring", pricingModel: "fixed", billingFrequency: freq, quantity: 1, unitPrice: Number(total), unitCost: null, countsAsManagedDevice: false, invoiceSchedule: freq === "monthly" ? "contract" : "own" });
+    };
+    recurring("monthly", p.monthlyTotal);
+    recurring("quarterly", p.quarterlyTotal);
+    recurring("annual", p.annualTotal);
+    if (p.oneOffTotal && Number(p.oneOffTotal) > 0) lines.push({ id: null, productId: null, siteId: null, description: `${name} (one-off as proposed)`, revenueType: "one_off_project", pricingModel: "fixed", billingFrequency: "one_off", quantity: 1, unitPrice: Number(p.oneOffTotal), unitCost: null, countsAsManagedDevice: false });
+  }
+  const contractId = await createContract(contractSchema.parse({ companyId: p.companyId, name, status: "draft", startDate: start, endDate: end, renewalDate: end, externalProposalId: externalId, notes: items.length ? `Drafted from the signed Better Proposals proposal "${name}"${p.signedBy ? ` (signed by ${p.signedBy})` : ""}: ${items.length} line item${items.length === 1 ? "" : "s"} from its quote. Check quantities, pricing models and the billing day before activating.` : `Drafted from the signed Better Proposals proposal "${name}"${p.signedBy ? ` (signed by ${p.signedBy})` : ""}. The API returned no line items, so the lines carry the proposal totals; replace them with the agreed services before activating.` }), lines, actorUserId);
   await db.update(contracts).set({ externalProposalId: externalId, updatedAt: new Date() }).where(eq(contracts.id, contractId));
-  await audit({ actorUserId, action: "contract.draft_from_proposal", entityType: "contract", entityId: contractId, details: { externalId, lines: lines.length } });
+  await audit({ actorUserId, action: "contract.draft_from_proposal", entityType: "contract", entityId: contractId, details: { externalId, lines: lines.length, fromQuote: items.length > 0 } });
   await logActivity({ type: "contract", companyId: p.companyId, entityType: "contract", entityId: contractId, title: `Draft contract created from signed proposal "${name}"`, actorUserId, source: "betterproposals" });
   return { contractId, created: true };
 }
@@ -335,12 +348,14 @@ export async function syncProposals(trigger: "schedule" | "manual", actorUserId?
       }
       counters.fetched = seen.size;
       const accepted: string[] = [];
+      let quotes = 0;
       for (const p of seen.values()) {
         try {
           const outcome = await upsertMirror(p);
           if (outcome === "created") counters.created++;
           else if (outcome === "updated") counters.updated++;
           else counters.skipped++;
+          if (await refreshProposalItems(resolved.client, p)) quotes++;
           if (p.status === "signed" || p.status === "paid") accepted.push(p.externalId);
         } catch (err) {
           await fail(err instanceof Error ? err.message : String(err), { externalId: p.externalId });
@@ -353,10 +368,40 @@ export async function syncProposals(trigger: "schedule" | "manual", actorUserId?
           await fail(`Acceptance handling failed: ${err instanceof Error ? err.message : String(err)}`, { externalId: id });
         }
       }
-      return `${seen.size} proposals checked${resolved.mode === "demo" ? " (DEMO data)" : ""}`;
+      return `${seen.size} proposals checked${quotes ? `, ${quotes} quotes fetched` : ""}${resolved.mode === "demo" ? " (DEMO data)" : ""}`;
     },
     actorUserId,
   );
+}
+
+/**
+ * Fetches a proposal's detail and quote once (and again when it is signed,
+ * so the items match what was agreed), extracts the line items and stores
+ * both the raw responses and the items on the mirror. One or two extra API
+ * calls per proposal, once; returns true when a fetch happened.
+ */
+async function refreshProposalItems(client: BetterProposalsClient, p: BpProposal): Promise<boolean> {
+  const [row] = await db.select({ id: bpProposals.id, quoteFetchedAt: bpProposals.quoteFetchedAt, lineItems: bpProposals.lineItems, status: bpProposals.status, raw: bpProposals.raw }).from(bpProposals).where(eq(bpProposals.externalId, p.externalId)).limit(1);
+  if (!row) return false;
+  const signed = p.status === "signed" || p.status === "paid";
+  const stale = !row.quoteFetchedAt || (signed && !(row.lineItems?.length) && Date.now() - row.quoteFetchedAt.getTime() > 86400000);
+  if (!stale) return false;
+  const detail = (await client.getProposalRaw(p.externalId)) ?? p.raw;
+  const quoteId = detail?.QuoteID ?? p.raw.QuoteID;
+  const quote = quoteId ? await client.getQuote(String(quoteId)) : null;
+  const items = extractProposalItems(detail, quote);
+  await db.update(bpProposals).set({ raw: { ...(row.raw ?? {}), ...detail }, quoteRaw: quote, quoteFetchedAt: new Date(), lineItems: items, updatedAt: new Date() }).where(eq(bpProposals.id, row.id));
+  return true;
+}
+
+/** The stored line items of a proposal, with totals, for the proposal page and the contract draft. */
+export async function proposalItems(externalId: string) {
+  const [p] = await db.select({ externalId: bpProposals.externalId, subjectLine: bpProposals.subjectLine, status: bpProposals.status, companyId: bpProposals.companyId, companyName: companies.name, opportunityId: bpProposals.opportunityId, currencyCode: bpProposals.currencyCode, oneOffTotal: bpProposals.oneOffTotal, monthlyTotal: bpProposals.monthlyTotal, quarterlyTotal: bpProposals.quarterlyTotal, annualTotal: bpProposals.annualTotal, lineItems: bpProposals.lineItems, quoteRaw: bpProposals.quoteRaw, quoteFetchedAt: bpProposals.quoteFetchedAt, raw: bpProposals.raw, viewUrl: bpProposals.viewUrl, signedAt: bpProposals.signedAt, signedBy: bpProposals.signedBy }).from(bpProposals).leftJoin(companies, eq(companies.id, bpProposals.companyId)).where(eq(bpProposals.externalId, externalId)).limit(1);
+  if (!p) return null;
+  const items = p.lineItems ?? [];
+  const totals = itemTotals(items);
+  const [contract] = await db.select({ id: contracts.id, name: contracts.name }).from(contracts).where(and(eq(contracts.externalProposalId, externalId), isNull(contracts.archivedAt))).limit(1);
+  return { ...p, items, totals, contract: contract ?? null, quoteId: (p.raw?.QuoteID as string | undefined) ?? null };
 }
 
 function mergeProposal(a: BpProposal | undefined, b: BpProposal): BpProposal {

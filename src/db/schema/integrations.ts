@@ -182,6 +182,9 @@ export const mappingConflicts = pgTable(
 // ---------------------------------------------------------------------------
 export const bpProposalStatusEnum = pgEnum("bp_proposal_status", ["draft", "sent", "opened", "signed", "paid", "unknown"]);
 
+/** A priced row from a proposal's quote, normalised from whatever shape the API used. */
+export type ProposalLineItem = { description: string; quantity: number; unitPrice: number; total: number | null; billingFrequency: "one_off" | "monthly" | "quarterly" | "annual"; section: string | null; path: string };
+
 export const bpProposals = pgTable(
   "bp_proposals",
   {
@@ -215,6 +218,11 @@ export const bpProposals = pgTable(
     /** True when the opportunity's lines were edited between the signature and the capture, so the activated terms may not be what was signed. */
     termsChangedAfterSignature: boolean("terms_changed_after_signature").notNull().default(false),
     raw: jsonb("raw").$type<Record<string, unknown>>(),
+    /** The proposal's quote (pricing table) as the API returned it, fetched once per proposal and again when it is signed. */
+    quoteRaw: jsonb("quote_raw").$type<Record<string, unknown>>(),
+    quoteFetchedAt: timestamp("quote_fetched_at", { withTimezone: true }),
+    /** Line items extracted from the proposal and its quote (see src/lib/proposal-items.ts); empty when the API carried none. */
+    lineItems: jsonb("line_items").$type<ProposalLineItem[]>(),
     fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
     ...timestamps,
   },
