@@ -184,7 +184,8 @@ Built to the architecture in [`docs/secure-vault-plan.md`](secure-vault-plan.md)
 
 - Generate `VAULT_MASTER_KEY` on the VPS and store it per docs/deployment.md §5a before creating any items.
 - Grant technicians access under Settings → Secure Vault.
-- Later (per decisions): external KMS for the master key, SSH private keys as a secret kind.
+- Take an offline plain-text backup quarterly (Settings → Secure Vault → Offline backup; procedure in docs/deployment.md §5a). Added after the phase: export to CSV + JSON in a ZIP, optional passphrase, fresh step-up + typed acknowledgement + reason, two per hour, audited with the file hash, urgent task to the other administrators; companion import for recovery after a lost key.
+- Later (per decisions): external KMS for the master key, SSH private keys as a secret kind, second-admin approval and scheduled public-key-encrypted exports.
 
 ## Phase 8 — 20i Hosting ✅
 

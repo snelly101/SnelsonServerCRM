@@ -22,17 +22,12 @@ Ideas and requests not yet scheduled. Each item states what it is, why, and the 
 
 **Follow-up: plain-text backup export of everything in the vault**
 
-**What:** an admin-only "Export vault" action that decrypts every item (including archived) and produces a readable backup, CSV and JSON, holding title, category, company, username, secret, URL, notes, TOTP seed, tags, rotation dates and archive state. Intended for disaster recovery (loss of the master key or the database) and for migrating to another tool, not for day-to-day use.
+**Status:** built. Settings → Secure Vault → **Offline backup** exports every item (archived included) as one ZIP holding CSV, JSON and a README, optionally wrapped with a passphrase (OpenSSL-compatible AES-256-CBC, PBKDF2 600k). Gated by `vault.admin`, a password confirmed in the last five minutes, a typed `EXPORT ALL SECRETS`, and a reason; limited to two exports per hour across all administrators; written to the vault audit chain with item count, reason and the ZIP's SHA-256; every other administrator gets an urgent task. Companion **Import backup** loads the JSON (existing ids skipped, missing customers and categories created) with the same gates. Procedure in `docs/deployment.md` §5a.
 
-**Why:** the vault is only as recoverable as the master key. A periodic offline plain-text copy, kept in the password manager or a sealed envelope, means a lost key or a corrupted database does not lose every customer credential.
-
-**Design notes and decisions needed:**
-- Requires `vault.admin`, a fresh step-up, and a second admin's confirmation (or a typed acknowledgement) because the output is every secret in clear.
-- Every export written to the vault audit chain with row count and file hash; an urgent task is created for the other admins so an export is never silent. Counts against a separate, tighter rate limit (for example one per hour).
-- Output offered two ways: a plain CSV/JSON download for offline storage, and the same content wrapped in a password-protected archive (7z/AES or age) so the browser download is not itself clear text. Decide whether plain download is allowed at all or only the encrypted archive with the passphrase spoken separately.
-- Companion "Import vault backup" so the export format round-trips, used when re-keying after a lost master key.
-- Optional scheduled export to the backup volume, encrypted with a public key held offline, to avoid relying on someone remembering to run it.
-- Document the procedure in `docs/deployment.md` next to key custody.
+**Still open from the design notes:**
+- A second administrator's approval before the download, instead of the typed acknowledgement (needs a pending-request flow and a notification to the approver).
+- Scheduled export to the backup volume, encrypted with a public key held offline (age or GPG), so recovery does not rely on someone remembering to run it.
+- Site assignment is not restored on import (the backup records the site name only).
 
 ## Two-factor authentication for CRM sign-in
 

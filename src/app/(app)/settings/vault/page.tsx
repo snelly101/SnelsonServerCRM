@@ -11,13 +11,15 @@ import { Card, DescriptionList } from "@/components/ui/page";
 import { Badge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
 import { CategoryForm, CategoryList, GrantsTable, MaintenanceButtons, VaultSettingsForm } from "./controls";
+import { VaultBackupControls } from "./backup";
+import { exportRateStatus } from "@/services/vault-backup";
 
 export const metadata = { title: "Secure Vault settings" };
 export const dynamic = "force-dynamic";
 
 export default async function VaultSettingsPage() {
   await requirePermission("vault.admin");
-  const [grants, users, companies, settings, health, chain, categories] = await Promise.all([
+  const [grants, users, companies, settings, health, chain, categories, backup] = await Promise.all([
     listGrants(),
     listUsers(),
     companyOptions(),
@@ -25,7 +27,9 @@ export default async function VaultSettingsPage() {
     vaultHealth(),
     getSystemStatus<{ ok: boolean; checked: number; brokenAt: number | null }>("vault.chain"),
     db.select({ id: vaultCategories.id, name: vaultCategories.name, isSystem: vaultCategories.isSystem, archivedAt: vaultCategories.archivedAt, itemCount: sql<number>`(select count(*) from vault_items i where i.category_id = vault_categories.id)`.mapWith(Number) }).from(vaultCategories).orderBy(vaultCategories.sortOrder, vaultCategories.name),
+    exportRateStatus(),
   ]);
+  const adminCount = users.filter((u) => u.active && u.role === "admin").length;
   const eligible = users.filter((u) => u.active && (u.role === "technician" || u.role === "admin")).map((u) => ({ id: u.id, name: u.name, role: u.role }));
   void eq;
   void vaultItems;
@@ -64,6 +68,13 @@ export default async function VaultSettingsPage() {
           <VaultSettingsForm settings={settings} />
         </Card>
       </div>
+
+      <Card title="Offline backup">
+        <p className="mb-3 text-xs text-slate-500">
+          The vault is only as recoverable as the master key. A periodic plain-text export, kept offline in your password manager or a sealed envelope, means a lost key or a corrupted database does not lose every customer credential. Exports are limited to {backup.limitPerHour} per hour, need your password again plus a typed confirmation, are written to the audit chain with the file&apos;s SHA-256, and raise an urgent task for every other administrator. Import restores a backup after re-keying; existing items are skipped. Procedure: docs/deployment.md §5a.
+        </p>
+        <VaultBackupControls status={{ ...backup, last: backup.last ? { ...backup.last, at: backup.last.at.toISOString() } : null }} windowMinutes={settings.vaultStepUpMinutes} admins={adminCount} />
+      </Card>
 
       <Card title={`Access grants · ${grants.length}`} padded={false}>
         <p className="border-b border-slate-100 px-4 py-2 text-xs text-slate-500">Administrators always have every capability. Technicians get exactly what is granted here, for all customers or one. Sales, finance and read-only roles can never hold vault access. Every change is recorded in the vault audit trail.</p>

@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, pbkdf2Sync, randomBytes, timingSafeEqual } from "node:crypto";
 
 /**
  * Envelope encryption for Secure Vault items.
@@ -180,4 +180,34 @@ export function constantTimeEquals(a: string, b: string) {
   const ab = Buffer.from(a);
   const bb = Buffer.from(b);
   return ab.length === bb.length && timingSafeEqual(ab, bb);
+}
+
+// ---------------------------------------------------------------------------
+// Passphrase-protected files (backup export), OpenSSL-compatible.
+//   openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -md sha256 -in FILE.enc -out FILE
+// ---------------------------------------------------------------------------
+export const PASSPHRASE_FILE_ITERATIONS = 600_000;
+
+export function sealWithPassphrase(plaintext: Buffer, passphrase: string): Buffer {
+  if (passphrase.length < 12) throw new Error("Passphrase must be at least 12 characters");
+  const salt = randomBytes(8);
+  const keyIv = pbkdf2Sync(passphrase, salt, PASSPHRASE_FILE_ITERATIONS, 48, "sha256");
+  try {
+    const cipher = createCipheriv("aes-256-cbc", keyIv.subarray(0, 32), keyIv.subarray(32, 48));
+    return Buffer.concat([Buffer.from("Salted__", "latin1"), salt, cipher.update(plaintext), cipher.final()]);
+  } finally {
+    keyIv.fill(0);
+  }
+}
+
+export function openWithPassphrase(wire: Buffer, passphrase: string): Buffer {
+  if (wire.length < 32 || wire.subarray(0, 8).toString("latin1") !== "Salted__") throw new Error("Not a passphrase-protected file");
+  const salt = wire.subarray(8, 16);
+  const keyIv = pbkdf2Sync(passphrase, salt, PASSPHRASE_FILE_ITERATIONS, 48, "sha256");
+  try {
+    const decipher = createDecipheriv("aes-256-cbc", keyIv.subarray(0, 32), keyIv.subarray(32, 48));
+    return Buffer.concat([decipher.update(wire.subarray(16)), decipher.final()]);
+  } finally {
+    keyIv.fill(0);
+  }
 }

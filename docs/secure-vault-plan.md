@@ -132,6 +132,7 @@ Rate limits: reveal/copy limited per user (e.g. 60 per 10 minutes) with an audit
 - Database dumps contain ciphertext and wrapped DEKs only. **Restoring requires the same `VAULT_MASTER_KEY`.** Deployment docs get a "Vault key custody" section: store it in the password manager alongside `APP_ENCRYPTION_KEY`, ideally split (two halves with two people) for a business that will hold thousands of customer secrets.
 - Restore drill extended: decrypt one vault item after a test restore to prove the key is intact.
 - A "vault health" row on `/api/health`: KEK present, key version matches `vault_keys`, chain verified at last check (booleans only).
+- Plain-text offline backup (built later, see `docs/deployment.md` §5a): admin-only export of every item to CSV + JSON inside a ZIP, optionally passphrase-protected, gated by a fresh step-up, a typed acknowledgement, a reason and a two-per-hour limit; audited with the file hash and announced to the other administrators by an urgent task. Companion import restores the JSON after re-keying (existing ids skipped).
 
 ## 11. Migration and rollout
 
