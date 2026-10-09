@@ -166,7 +166,7 @@ export function CompanyBillingTab({ companyId, data, picture, finance, xero, sub
                     {r.line && r.state !== "charged" && <div className="text-[11px] text-slate-500">{r.line.description}</div>}
                   </td>
                   {canWrite && (
-                    <td>
+                    <td className="min-w-[18rem]">
                       <div className="flex flex-wrap items-center gap-1">
                         {!r.pool && <ServiceLineSelect source={r.source} rowId={r.rowId} value={r.state === "charged" ? (r.line?.id ?? null) : null} lines={lineOptions} canEdit compact />}
                         {!r.pool && <CoverageDialog row={r} lines={lineOptions} trigger={r.state === "unmapped" ? "Not charged?" : "Change"} />}

@@ -24,7 +24,7 @@ export function ServiceLineSelect({ source, rowId, value, lines, canEdit, compac
         aria-label="Billed on contract line"
         value={value ?? ""}
         disabled={pending}
-        className={compact ? "h-7 w-auto max-w-[18rem] text-xs" : "w-auto max-w-xs"}
+        className={compact ? "h-7 w-full min-w-[14rem] max-w-[20rem] py-0.5 text-xs leading-tight" : "w-auto max-w-xs"}
         onChange={(e) =>
           start(async () => {
             const r = await setServiceLineAction(source, rowId, e.target.value || null);
