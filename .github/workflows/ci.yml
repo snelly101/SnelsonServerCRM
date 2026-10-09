@@ -8,7 +8,10 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16
+        # The official image via AWS's public mirror: GitHub's shared runners
+        # regularly hit Docker Hub's anonymous pull rate limit and the job
+        # dies before a test runs.
+        image: public.ecr.aws/docker/library/postgres:16
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
