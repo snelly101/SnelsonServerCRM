@@ -54,7 +54,7 @@ export type Ticket = typeof tickets.$inferSelect;
 export type TicketMessage = typeof ticketMessages.$inferSelect;
 export type Actor = {
   id: string | null;
-  type?: "user" | "system" | "automation" | "email";
+  type?: "user" | "system" | "automation" | "email" | "portal";
 };
 const SYSTEM: Actor = { id: null, type: "system" };
 

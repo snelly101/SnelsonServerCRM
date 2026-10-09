@@ -9,7 +9,8 @@ import { getSessionCookie } from "better-auth/cookies";
  */
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  const isPublic = pathname.startsWith("/login") || pathname.startsWith("/api/auth") || pathname.startsWith("/api/webhooks") || pathname === "/api/health";
+  // The customer portal has its own session cookie and checks it in its layout; staff auth never applies there.
+  const isPublic = pathname.startsWith("/login") || pathname.startsWith("/api/auth") || pathname.startsWith("/api/webhooks") || pathname === "/api/health" || pathname.startsWith("/portal") || pathname.startsWith("/api/portal");
   const hasSession = Boolean(getSessionCookie(req));
   if (!isPublic && !hasSession) {
     const url = appUrl("/login", req.url);

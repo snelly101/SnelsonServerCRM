@@ -17,6 +17,8 @@ import { fmtDate } from "@/lib/format";
 import { fullName } from "@/lib/utils";
 import { listTickets } from "@/services/helpdesk";
 import { TicketTable } from "@/components/helpdesk/ticket-table";
+import { portalAccountForContact } from "@/services/portal";
+import { PortalAccessCard } from "@/components/portal/access-card";
 
 export default async function ContactPage({
   params,
@@ -25,13 +27,14 @@ export default async function ContactPage({
 }) {
   const me = await requirePermission("contact.read");
   const { id } = await params;
-  const [contact, defs, settings, contactTickets] = await Promise.all([
+  const [contact, defs, settings, contactTickets, portal] = await Promise.all([
     getContact(id),
     listCustomFieldDefs("contact"),
     getAppSettings(),
     can(me.role, "helpdesk.read")
       ? listTickets({ contactId: id, view: "all", pageSize: 25 })
       : Promise.resolve(null),
+    can(me.role, "helpdesk.read") ? portalAccountForContact(id) : Promise.resolve(null),
   ]);
   if (!contact) notFound();
   return (
@@ -126,6 +129,16 @@ export default async function ContactPage({
           </div>
         )}
       </Card>
+      {can(me.role, "helpdesk.read") && !contact.archivedAt && (
+        <Card title="Customer portal" className="mt-4 max-w-3xl">
+          <PortalAccessCard
+            contactId={id}
+            hasEmail={Boolean(contact.email)}
+            canManage={can(me.role, "helpdesk.agent")}
+            state={portal ? { invitedAt: portal.invitedAt.toISOString(), lastLoginAt: portal.lastLoginAt?.toISOString() ?? null, disabledAt: portal.disabledAt?.toISOString() ?? null, isCompanyAdmin: portal.isCompanyAdmin, invitedByName: null } : null}
+          />
+        </Card>
+      )}
       {contactTickets && (
         <Card
           title={`Helpdesk tickets (${contactTickets.total})`}

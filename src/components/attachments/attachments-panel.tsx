@@ -11,6 +11,7 @@ import { EmptyState } from "@/components/ui/page";
 import { ConfirmButton } from "@/components/ui/confirm-button";
 import { useToast } from "@/components/ui/toast";
 import { deleteAttachmentAction, updateAttachmentAction } from "@/actions/attachments";
+import { fmtBytes } from "@/lib/format";
 
 export type AttachmentItem = {
   id: string;
@@ -35,11 +36,6 @@ export type AttachmentItem = {
 
 export type SiteOption = { id: string; name: string };
 
-export function fmtBytes(n: number) {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
-  return `${(n / 1024 / 1024).toFixed(n < 10 * 1024 * 1024 ? 1 : 0)} MB`;
-}
 
 function kindOf(a: AttachmentItem): "photo" | "document" {
   return a.isImage ? "photo" : "document";

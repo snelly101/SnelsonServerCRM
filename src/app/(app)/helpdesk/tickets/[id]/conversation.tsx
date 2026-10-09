@@ -5,8 +5,7 @@ import {
   StickyNote,
   Cog,
   ArrowDownLeft,
-  ArrowUpRight,
-} from "lucide-react";
+  ArrowUpRight, Globe } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { MarkdownLite } from "@/lib/markdown-lite";
 import { fmtDateTime, fmtRelative, type DisplaySettings } from "@/lib/format";
@@ -87,7 +86,9 @@ function MessageCard({
       ? Mail
       : m.channel === "manual"
         ? Phone
-        : Cog;
+        : m.channel === "portal"
+          ? Globe
+          : Cog;
   const who =
     m.authorName ??
     m.fromName ??
@@ -110,7 +111,7 @@ function MessageCard({
         ) : m.direction === "inbound" ? (
           <Badge tone="slate">
             <ArrowDownLeft className="mr-0.5 h-3 w-3" />
-            from customer
+            {m.channel === "portal" ? "from customer (portal)" : "from customer"}
           </Badge>
         ) : (
           <Badge tone="blue">

@@ -59,6 +59,7 @@ export const ticketMessageChannelEnum = pgEnum("ticket_message_channel", [
   "manual",
   "note",
   "system",
+  "portal",
 ]);
 export const ticketMessageDirectionEnum = pgEnum("ticket_message_direction", [
   "inbound",

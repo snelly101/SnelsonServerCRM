@@ -97,8 +97,11 @@ export const mailboxOutbox = pgTable(
     toSummary: text("to_summary"),
     /** One row per logical send; repeated clicks reuse it. */
     idempotencyKey: text("idempotency_key").notNull(),
-    /** ack | reply | new | notification */
+    /** ack | reply | new | test | portal */
     kind: text("kind").notNull().default("reply"),
+    /** For mail with no ticket (portal sign-in links): the content lives here instead of on a ticket message. */
+    subject: text("subject"),
+    bodyMarkdown: text("body_markdown"),
     status: outboxStatusEnum("status").notNull().default("queued"),
     attempts: integer("attempts").notNull().default(0),
     nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).notNull().defaultNow(),

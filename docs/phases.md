@@ -433,3 +433,26 @@ The helpdesk is delivered in four stages, each its own pull request: **1** ticke
 - No attachments on vault items or tickets from this tab (helpdesk has its own).
 - HEIC from iPhones is accepted only when the server's libvips build decodes it; otherwise it is kept as a plain file without a thumbnail. Safari uploads JPEG by default for the camera.
 - No virus-scan retry button; an `error` scan status stays until re-uploaded.
+
+## Phase 16 — Helpdesk customer portal ✅
+
+### What works
+
+- **`/portal`** on the same hostname, with its own minimal frame (provider name, My requests, New request, Help articles, Sign out). Staff navigation, search and notifications never render there.
+- **Identity:** a portal account is a CRM contact an agent invited (Contact → Customer portal card). Sign-in is by e-mailed one-time link (invite 72 h, sign-in 20 min, single use, only hashes stored); sessions are our own rows (30 days) under a separate `crm_portal` cookie. The sign-in form never says whether an address is known; five links per account and thirty per IP per hour. Switching access off revokes every session; archiving the contact does too.
+- **Scope, enforced in one place:** `src/services/portal.ts` is the only code customers reach. Every ticket read and write filters by *requester is me, or I am CC'd, or (company administrator) the ticket is my company's*, and excludes merged and anonymised tickets. Only public, non-automated messages are selected, with a display name for the agent; BCC lists, internal notes, time entries, SLA fields and staff identities are not selectable. Attachments are served only when not restricted, scanned clean or skipped, and on a visible ticket, always as a sandboxed download.
+- **Tickets:** list (open / resolved / all, company-wide or only mine for administrators, search by subject or number), new request (subject, description, low/normal/high priority, up to 10 attachments) created with `source = portal` and the usual created hooks and agent notifications, ticket view with status explanation, resolution summary, conversation and attachments, reply with attachments that reopens resolved / closed / awaiting-customer tickets and raises *customer replied* for the assignee and followers, same as inbound e-mail.
+- **Knowledge base:** published, customer-visible articles only, with category chips and search; article views counted.
+- **Feedback:** 1 to 5 stars and a comment once a ticket is resolved or closed, one per ticket (editable); recorded in the ticket timeline and notified to the assignee.
+- **Agent side:** Customer portal card on the contact page (invite, company administrator toggle, re-send link, switch off, copy the one-time link); portal messages show a globe icon in the conversation; outbox kind `portal` for sign-in mail, which now carries its own subject and body when there is no ticket.
+
+### What was tested
+
+- Unit (`tests/unit/portal.test.ts`, 11 tests): invite and single-use redemption, token hashing, session resolution, sign-out, non-enumerating login requests, per-account rate limit, switch-off revoking sessions; scope (own / company administrator / other company / cross-company by id); **internal notes, restricted attachments, BCCs and time entries never leak** while the staff view still has them; portal ticket creation with a refused executable, critical priority downgraded, agent notification; portal reply reopening awaiting and resolved tickets, CC for an administrator's reply, refusal on a foreign ticket; feedback gating, one per ticket, assignee notification; knowledge base visibility (draft and internal articles hidden); token and session purge.
+
+### Known limitations
+
+- Magic link only: no password, passkey or SSO for customers; no self sign-up.
+- Customers cannot close their own tickets or change priority after raising one; they reply and the agent does the rest.
+- No e-mailed satisfaction survey; rating is offered in the portal only.
+- The portal uses the same hostname; a separate `support.` subdomain would need the proxy and `APP_URL` handling extended.
