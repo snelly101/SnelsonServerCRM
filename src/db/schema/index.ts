@@ -14,3 +14,4 @@ export * from "./mailbox";
 export * from "./helpdesk-sla";
 export * from "./helpdesk-kb";
 export * from "./service-links";
+export * from "./attachments";

@@ -70,6 +70,9 @@ export async function registerJobs(
     await runRetention();
     const { runHelpdeskRetention } = await import("@/services/helpdesk-retention");
     await runHelpdeskRetention();
+    // Company attachments removed more than ATTACHMENT_PURGE_DAYS ago lose their bytes.
+    const { purgeDeletedAttachments } = await import("@/services/attachments");
+    await purgeDeletedAttachments();
     // Nightly integrity check of the vault audit chain (hashing only; needs no key).
     const { verifyAuditChain } = await import("@/services/vault");
     const chain = await verifyAuditChain(null);

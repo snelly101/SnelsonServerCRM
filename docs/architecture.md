@@ -73,6 +73,7 @@ One codebase, two processes (`web` and `worker`) sharing the same database. Noth
 | Inbound webhook payloads (processed) | 30 days | `system.retention` nightly |
 | Helpdesk inbound-queue and outbox rows (finished), read notifications, automation run log | 90 days | `system.retention` nightly (`runHelpdeskRetention`) |
 | Helpdesk drafts | 30 days after last save | `system.retention` nightly |
+| Company files (photos, documents) | Indefinitely; *Remove* hides them, bytes and row purged `ATTACHMENT_PURGE_DAYS` (30) after removal; deleted with the company | A person (remove); `system.retention` nightly (purge) |
 | Closed/cancelled tickets | Kept; anonymised after `HELPDESK_ANONYMISE_AFTER_DAYS` (unset = never) or on an admin's data-subject request; never deleted by a job | `system.retention` nightly / Helpdesk → Administration → Operations |
 | pg-boss job rows | 1–30 days per queue | pg-boss |
 | Integration credentials | Until *Disconnect* | A person; the row is wiped, audit entry kept |

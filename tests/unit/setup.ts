@@ -9,6 +9,8 @@ process.env.APP_ENCRYPTION_KEY ??= Buffer.alloc(32, 7).toString("base64");
 process.env.VAULT_MASTER_KEY ??= Buffer.alloc(32, 9).toString("base64");
 process.env.VAULT_MASTER_KEY_VERSION ??= "1";
 process.env.BETTER_AUTH_SECRET ??= "test-secret-test-secret-test-secret";
+// Uploaded files go to a scratch directory, never the project's data folder.
+process.env.DATA_DIR ??= `${process.env.TMPDIR ?? "/tmp"}/crm-test-data-${process.pid}`;
 
 beforeAll(async () => {
   const { resetDatabase } = await import("@/db/reset");

@@ -51,6 +51,8 @@ import { DeviceCoverageControl } from "@/components/service-register";
 import { companyTicketSummary, listTickets } from "@/services/helpdesk";
 import { TicketTable } from "@/components/helpdesk/ticket-table";
 import { listCompanyNotes } from "@/services/notes";
+import { companyAttachmentUsage, listCompanyAttachments } from "@/services/attachments";
+import { AttachmentsPanel } from "@/components/attachments/attachments-panel";
 import { NotesPanel } from "@/components/notes/notes-panel";
 import { MarkdownLite } from "@/lib/markdown-lite";
 import {
@@ -72,7 +74,7 @@ export default async function CompanyPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ tab?: string; archived?: string }>;
+  searchParams: Promise<{ tab?: string; archived?: string; deleted?: string }>;
 }) {
   const me = await requirePermission("company.read");
   const { id } = await params;
@@ -96,6 +98,8 @@ export default async function CompanyPage({
     ticketSummary,
     companyTickets,
     notes,
+    attachments,
+    attachmentUsage,
   ] = await Promise.all([
     getCompany(id),
     getCompanyTimeline(id),
@@ -125,6 +129,8 @@ export default async function CompanyPage({
     listCompanyNotes(id, {
       includeArchived: sp.archived === "1" && sp.tab === "notes",
     }),
+    listCompanyAttachments(id, { includeDeleted: sp.deleted === "1" && sp.tab === "files" }),
+    companyAttachmentUsage(id),
   ]);
   if (!company) notFound();
   // The Billing tab joins this customer's slice of the Billing area; computed only when it is shown or its count is wanted.
@@ -167,6 +173,12 @@ export default async function CompanyPage({
       label: "Notes",
       href: `${base}?tab=notes`,
       count: notes.filter((n) => !n.archivedAt).length,
+    },
+    {
+      key: "files",
+      label: "Files",
+      href: `${base}?tab=files`,
+      count: attachments.filter((a) => !a.deletedAt).length,
     },
     {
       key: "contacts",
@@ -578,6 +590,36 @@ export default async function CompanyPage({
             }))}
             canWrite={canWrite}
             showArchived={sp.archived === "1"}
+          />
+        )}
+
+        {tab === "files" && (
+          <AttachmentsPanel
+            companyId={id}
+            items={attachments.map((a) => ({
+              id: a.id,
+              fileName: a.fileName,
+              contentType: a.contentType,
+              sizeBytes: a.sizeBytes,
+              width: a.width,
+              height: a.height,
+              caption: a.caption,
+              tags: a.tags,
+              isImage: a.isImage,
+              hasThumbnail: a.hasThumbnail,
+              scanStatus: a.scanStatus,
+              siteId: a.siteId,
+              siteName: a.siteName,
+              uploadedByName: a.uploadedByName,
+              createdAt: a.createdAt.toISOString(),
+              createdAtRelative: fmtRelative(a.createdAt),
+              deletedAt: a.deletedAt ? a.deletedAt.toISOString() : null,
+              deletedByName: a.deletedByName,
+            }))}
+            sites={company.sites.filter((s) => !s.archivedAt).map((s) => ({ id: s.id, name: s.name }))}
+            canWrite={canWrite}
+            showDeleted={sp.deleted === "1"}
+            usage={{ bytes: attachmentUsage.bytes, quotaBytes: attachmentUsage.quotaBytes }}
           />
         )}
 

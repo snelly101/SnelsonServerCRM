@@ -197,6 +197,13 @@
       "when": 1791444961201,
       "tag": "0027_proposal_items",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1791579231493,
+      "tag": "0028_company_attachments",
+      "breakpoints": true
     }
   ]
 }

@@ -83,6 +83,7 @@ services:
     volumes:
       - ./backups:/backups
       - ./deploy/backup.sh:/backup.sh:ro
+      - appdata:/appdata:ro
     entrypoint: ["/bin/sh", "-c", "while true; do /backup.sh; sleep 86400; done"]
     depends_on:
       db: { condition: service_healthy }
