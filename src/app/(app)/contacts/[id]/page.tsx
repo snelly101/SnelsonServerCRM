@@ -135,7 +135,7 @@ export default async function ContactPage({
             contactId={id}
             hasEmail={Boolean(contact.email)}
             canManage={can(me.role, "helpdesk.agent")}
-            state={portal ? { invitedAt: portal.invitedAt.toISOString(), lastLoginAt: portal.lastLoginAt?.toISOString() ?? null, disabledAt: portal.disabledAt?.toISOString() ?? null, isCompanyAdmin: portal.isCompanyAdmin, invitedByName: null } : null}
+            state={portal ? { invitedAt: portal.invitedAt.toISOString(), lastLoginAt: portal.lastLoginAt?.toISOString() ?? null, disabledAt: portal.disabledAt?.toISOString() ?? null, isCompanyAdmin: portal.isCompanyAdmin, invitedByName: null, totpEnrolledAt: portal.totpEnrolledAt?.toISOString() ?? null, recoveryCodesLeft: portal.recoveryCodes.length } : null}
           />
         </Card>
       )}

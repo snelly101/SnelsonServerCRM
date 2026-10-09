@@ -1,9 +1,11 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { and, asc, desc, eq, gt, gte, ilike, inArray, isNull, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
 import { companies, contacts, kbArticles, portalAccounts, portalLoginTokens, portalSessions, ticketAttachments, ticketFeedback, ticketMessages, ticketParticipants, tickets, user } from "@/db/schema";
 import { ActionError } from "@/lib/action-result";
+import { decryptSecret, encryptSecret } from "@/lib/crypto";
+import { base32Encode, totp } from "@/lib/totp";
 import { audit, logActivity } from "@/lib/audit";
 import { checkAttachmentPolicy, scanBytes, sha256, storeAttachmentBytes } from "@/lib/email/storage";
 import { logger } from "@/lib/logger";
@@ -192,13 +194,128 @@ export async function redeemPortalToken(token: string, ctx: { ip?: string | null
   if (!acct || acct.a.disabledAt || acct.archivedAt) throw new ActionError("This portal account is not active. Contact your provider.");
   const session = newToken();
   const expiresAt = new Date(Date.now() + PORTAL_SESSION_DAYS * 86400_000);
+  // The session starts pending: the link proves the inbox, the authenticator code (second factor) verifies it.
   await db.transaction(async (tx) => {
     await tx.update(portalLoginTokens).set({ usedAt: new Date() }).where(eq(portalLoginTokens.id, row.id));
-    await tx.insert(portalSessions).values({ accountId: acct.a.id, tokenHash: hashToken(session), expiresAt, userAgent: ctx.userAgent?.slice(0, 300) ?? null, ipAddress: ctx.ip ?? null });
-    await tx.update(portalAccounts).set({ lastLoginAt: new Date() }).where(eq(portalAccounts.id, acct.a.id));
-    await audit({ actorUserId: null, actorType: "system", action: "portal.login", entityType: "portal_account", entityId: acct.a.id, details: { purpose: row.purpose }, ipAddress: ctx.ip ?? null }, tx);
+    await tx.insert(portalSessions).values({ accountId: acct.a.id, tokenHash: hashToken(session), expiresAt, userAgent: ctx.userAgent?.slice(0, 300) ?? null, ipAddress: ctx.ip ?? null, verifiedAt: null });
+    await audit({ actorUserId: null, actorType: "system", action: "portal.link_redeemed", entityType: "portal_account", entityId: acct.a.id, details: { purpose: row.purpose }, ipAddress: ctx.ip ?? null }, tx);
   });
-  return { sessionToken: session, expiresAt };
+  return { sessionToken: session, expiresAt, needsSetup: !acct.a.totpEnrolledAt };
+}
+
+// ---------------------------------------------------------------------------
+// Second factor: authenticator app, mandatory
+// ---------------------------------------------------------------------------
+const MAX_CODE_ATTEMPTS = 5;
+const PENDING_SESSION_MINUTES = 15;
+
+async function pendingSessionRow(sessionToken: string | undefined | null) {
+  if (!sessionToken) return null;
+  const [row] = await db
+    .select({ s: portalSessions, a: portalAccounts, firstName: contacts.firstName, lastName: contacts.lastName, archivedAt: contacts.archivedAt, companyName: companies.name })
+    .from(portalSessions)
+    .innerJoin(portalAccounts, eq(portalAccounts.id, portalSessions.accountId))
+    .innerJoin(contacts, eq(contacts.id, portalAccounts.contactId))
+    .innerJoin(companies, eq(companies.id, portalAccounts.companyId))
+    .where(and(eq(portalSessions.tokenHash, hashToken(sessionToken)), isNull(portalSessions.revokedAt), isNull(portalSessions.verifiedAt), gt(portalSessions.createdAt, new Date(Date.now() - PENDING_SESSION_MINUTES * 60_000))))
+    .limit(1);
+  if (!row || row.a.disabledAt || row.archivedAt) return null;
+  return row;
+}
+
+/** A session that has redeemed its link but not yet given the authenticator code. */
+export async function pendingPortalSession(sessionToken: string | undefined | null) {
+  const row = await pendingSessionRow(sessionToken);
+  if (!row) return null;
+  return { accountId: row.a.id, email: row.a.email, name: fullName({ firstName: row.firstName, lastName: row.lastName }), companyName: row.companyName, enrolled: Boolean(row.a.totpEnrolledAt) };
+}
+
+const hashCode = (c: string) => createHash("sha256").update(c.toUpperCase().replace(/[^A-Z0-9]/g, "")).digest("hex");
+const newRecoveryCodes = () => Array.from({ length: 8 }, () => base32Encode(randomBytes(5)).slice(0, 8).replace(/(.{4})/, "$1-"));
+const codeMatches = (secretBase32: string, code: string) => {
+  const digits = code.replace(/\D/g, "");
+  if (digits.length !== 6) return false;
+  return [-1, 0, 1].some((step) => totp(secretBase32, { now: Date.now() + step * 30_000 }).code === digits);
+};
+
+/** First sign-in (or after an agent reset): a fresh secret for the authenticator app. Overwrites any unconfirmed one. */
+export async function beginPortalTotpSetup(sessionToken: string | undefined | null) {
+  const row = await pendingSessionRow(sessionToken);
+  if (!row) throw new ActionError("Your sign-in has expired. Request a new link.");
+  if (row.a.totpEnrolledAt) throw new ActionError("An authenticator is already set up for this account.");
+  const secret = base32Encode(randomBytes(20));
+  await db.update(portalAccounts).set({ totpSecretEnc: encryptSecret(secret), updatedAt: new Date() }).where(eq(portalAccounts.id, row.a.id));
+  const settings = await getAppSettings();
+  const issuer = `${settings.companyName} support`;
+  const uri = `otpauth://totp/${encodeURIComponent(issuer)}:${encodeURIComponent(row.a.email)}?secret=${secret}&issuer=${encodeURIComponent(issuer)}&digits=6&period=30&algorithm=SHA1`;
+  return { secret, uri, issuer };
+}
+
+/** Confirms the first code from the app, turns the second factor on, verifies this session, returns the one-time recovery codes. */
+export async function confirmPortalTotpSetup(sessionToken: string | undefined | null, code: string, ctx: { ip?: string | null } = {}) {
+  const row = await pendingSessionRow(sessionToken);
+  if (!row) throw new ActionError("Your sign-in has expired. Request a new link.");
+  if (row.a.totpEnrolledAt || !row.a.totpSecretEnc) throw new ActionError("Start the setup again.");
+  const secret = decryptSecret(row.a.totpSecretEnc);
+  if (!codeMatches(secret, code)) {
+    await bumpFailed(row.s.id, row.s.failedAttempts);
+    throw new ActionError("That code did not match. Check the time on your phone and try the current code.");
+  }
+  const codes = newRecoveryCodes();
+  const now = new Date();
+  await db.transaction(async (tx) => {
+    await tx.update(portalAccounts).set({ totpEnrolledAt: now, recoveryCodes: codes.map(hashCode), lastLoginAt: now, updatedAt: now }).where(eq(portalAccounts.id, row.a.id));
+    await tx.update(portalSessions).set({ verifiedAt: now, failedAttempts: 0 }).where(eq(portalSessions.id, row.s.id));
+    await audit({ actorUserId: null, actorType: "system", action: "portal.totp_enrolled", entityType: "portal_account", entityId: row.a.id, ipAddress: ctx.ip ?? null }, tx);
+    await audit({ actorUserId: null, actorType: "system", action: "portal.login", entityType: "portal_account", entityId: row.a.id, details: { factor: "setup" }, ipAddress: ctx.ip ?? null }, tx);
+  });
+  return { recoveryCodes: codes };
+}
+
+async function bumpFailed(sessionId: string, current: number) {
+  const next = current + 1;
+  await db.update(portalSessions).set({ failedAttempts: next, revokedAt: next >= MAX_CODE_ATTEMPTS ? new Date() : null }).where(eq(portalSessions.id, sessionId));
+  if (next >= MAX_CODE_ATTEMPTS) throw new ActionError("Too many wrong codes. Request a new sign-in link to try again.");
+}
+
+/** Second step of every later sign-in: a 6-digit authenticator code, or one of the recovery codes (used once). */
+export async function verifyPortalSecondFactor(sessionToken: string | undefined | null, code: string, ctx: { ip?: string | null } = {}) {
+  const row = await pendingSessionRow(sessionToken);
+  if (!row) throw new ActionError("Your sign-in has expired. Request a new link.");
+  if (!row.a.totpEnrolledAt || !row.a.totpSecretEnc) throw new ActionError("SETUP_REQUIRED");
+  const trimmed = code.trim();
+  let factor: "totp" | "recovery" | null = null;
+  let remainingCodes = row.a.recoveryCodes;
+  if (codeMatches(decryptSecret(row.a.totpSecretEnc), trimmed)) factor = "totp";
+  else {
+    const h = hashCode(trimmed);
+    if (trimmed.replace(/[^A-Za-z0-9]/g, "").length >= 8 && row.a.recoveryCodes.includes(h)) {
+      factor = "recovery";
+      remainingCodes = row.a.recoveryCodes.filter((x) => x !== h);
+    }
+  }
+  if (!factor) {
+    await bumpFailed(row.s.id, row.s.failedAttempts);
+    throw new ActionError("That code did not match.");
+  }
+  const now = new Date();
+  await db.transaction(async (tx) => {
+    await tx.update(portalSessions).set({ verifiedAt: now, failedAttempts: 0 }).where(eq(portalSessions.id, row.s.id));
+    await tx.update(portalAccounts).set({ lastLoginAt: now, recoveryCodes: remainingCodes, updatedAt: now }).where(eq(portalAccounts.id, row.a.id));
+    await audit({ actorUserId: null, actorType: "system", action: "portal.login", entityType: "portal_account", entityId: row.a.id, details: { factor, recoveryCodesLeft: remainingCodes.length }, ipAddress: ctx.ip ?? null }, tx);
+  });
+  return { factor, recoveryCodesLeft: remainingCodes.length };
+}
+
+/** Agent: the customer lost their phone. Clears the authenticator and recovery codes and ends every session; the next link walks them through setup again. */
+export async function resetPortalTotp(contactId: string, actorUserId: string) {
+  const existing = await portalAccountForContact(contactId);
+  if (!existing) throw new ActionError("This contact has not been invited to the portal.");
+  await db.transaction(async (tx) => {
+    await tx.update(portalAccounts).set({ totpSecretEnc: null, totpEnrolledAt: null, recoveryCodes: [], updatedAt: new Date() }).where(eq(portalAccounts.id, existing.id));
+    await tx.update(portalSessions).set({ revokedAt: new Date() }).where(and(eq(portalSessions.accountId, existing.id), isNull(portalSessions.revokedAt)));
+    await audit({ actorUserId, action: "portal.totp_reset", entityType: "contact", entityId: contactId }, tx);
+  });
 }
 
 export async function portalAccountFromSession(sessionToken: string | undefined | null): Promise<PortalAccount | null> {
@@ -209,7 +326,7 @@ export async function portalAccountFromSession(sessionToken: string | undefined 
     .innerJoin(portalAccounts, eq(portalAccounts.id, portalSessions.accountId))
     .innerJoin(contacts, eq(contacts.id, portalAccounts.contactId))
     .innerJoin(companies, eq(companies.id, portalAccounts.companyId))
-    .where(and(eq(portalSessions.tokenHash, hashToken(sessionToken)), isNull(portalSessions.revokedAt), gt(portalSessions.expiresAt, new Date())))
+    .where(and(eq(portalSessions.tokenHash, hashToken(sessionToken)), isNull(portalSessions.revokedAt), sql`${portalSessions.verifiedAt} is not null`, gt(portalSessions.expiresAt, new Date())))
     .limit(1);
   if (!row || row.a.disabledAt || row.archivedAt) return null;
   if (Date.now() - row.s.lastSeenAt.getTime() > 10 * 60_000) await db.update(portalSessions).set({ lastSeenAt: new Date() }).where(eq(portalSessions.id, row.s.id)).catch(() => undefined);

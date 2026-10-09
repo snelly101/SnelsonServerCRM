@@ -8,10 +8,11 @@ import { StatusBadge, PriorityBadge } from "@/components/helpdesk/badges";
 import { ButtonLink } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/form";
 import { Badge } from "@/components/ui/badge";
+import { Alert } from "@/components/ui/alert";
 
 export const metadata = { title: "My requests" };
 
-export default async function PortalHome({ searchParams }: { searchParams: Promise<{ view?: string; q?: string; scope?: string }> }) {
+export default async function PortalHome({ searchParams }: { searchParams: Promise<{ view?: string; q?: string; scope?: string; notice?: string }> }) {
   const account = await requirePortalAccount("/portal");
   const sp = await searchParams;
   const view = sp.view === "resolved" || sp.view === "all" ? sp.view : "open";
@@ -20,6 +21,7 @@ export default async function PortalHome({ searchParams }: { searchParams: Promi
   void getAppSettings;
   return (
     <div className="space-y-4">
+      {sp.notice && <Alert tone="warn">{sp.notice}</Alert>}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-slate-900">Hello {account.name.split(" ")[0]}</h1>

@@ -439,7 +439,7 @@ The helpdesk is delivered in four stages, each its own pull request: **1** ticke
 ### What works
 
 - **`/portal`** on the same hostname, with its own minimal frame (provider name, My requests, New request, Help articles, Sign out). Staff navigation, search and notifications never render there.
-- **Identity:** a portal account is a CRM contact an agent invited (Contact → Customer portal card). Sign-in is by e-mailed one-time link (invite 72 h, sign-in 20 min, single use, only hashes stored); sessions are our own rows (30 days) under a separate `crm_portal` cookie. The sign-in form never says whether an address is known; five links per account and thirty per IP per hour. Switching access off revokes every session; archiving the contact does too.
+- **Identity:** a portal account is a CRM contact an agent invited (Contact → Customer portal card). Sign-in is by e-mailed one-time link (invite 72 h, sign-in 20 min, single use, only hashes stored) **plus a mandatory authenticator app**: first sign-in sets it up (QR, confirm a code, eight hashed recovery codes), later sign-ins ask for the code after the link; five wrong codes end the attempt. Sessions are our own rows (30 days) under a separate `crm_portal` cookie and stay pending until the code is given. Agents can reset the authenticator from the contact card. The sign-in form never says whether an address is known; five links per account and thirty per IP per hour. Switching access off revokes every session; archiving the contact does too.
 - **Scope, enforced in one place:** `src/services/portal.ts` is the only code customers reach. Every ticket read and write filters by *requester is me, or I am CC'd, or (company administrator) the ticket is my company's*, and excludes merged and anonymised tickets. Only public, non-automated messages are selected, with a display name for the agent; BCC lists, internal notes, time entries, SLA fields and staff identities are not selectable. Attachments are served only when not restricted, scanned clean or skipped, and on a visible ticket, always as a sandboxed download.
 - **Tickets:** list (open / resolved / all, company-wide or only mine for administrators, search by subject or number), new request (subject, description, low/normal/high priority, up to 10 attachments) created with `source = portal` and the usual created hooks and agent notifications, ticket view with status explanation, resolution summary, conversation and attachments, reply with attachments that reopens resolved / closed / awaiting-customer tickets and raises *customer replied* for the assignee and followers, same as inbound e-mail.
 - **Knowledge base:** published, customer-visible articles only, with category chips and search; article views counted.
@@ -452,7 +452,7 @@ The helpdesk is delivered in four stages, each its own pull request: **1** ticke
 
 ### Known limitations
 
-- Magic link only: no password, passkey or SSO for customers; no self sign-up.
+- E-mailed link plus authenticator app only: no password, passkey or SSO for customers; no self sign-up.
 - Customers cannot close their own tickets or change priority after raising one; they reply and the agent does the rest.
 - No e-mailed satisfaction survey; rating is offered in the portal only.
 - The portal uses the same hostname; a separate `support.` subdomain would need the proxy and `APP_URL` handling extended.

@@ -12,9 +12,9 @@ export const dynamic = "force-dynamic";
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: string }> }) {
   const { token } = await ctx.params;
   try {
-    const { sessionToken, expiresAt } = await redeemPortalToken(token, await portalRequestContext());
+    const { sessionToken, expiresAt, needsSetup } = await redeemPortalToken(token, await portalRequestContext());
     (await cookies()).set(PORTAL_COOKIE, sessionToken, portalCookieOptions(expiresAt));
-    return NextResponse.redirect(appUrl("/portal", _req.url));
+    return NextResponse.redirect(appUrl(needsSetup ? "/portal/login/setup" : "/portal/login/verify", _req.url));
   } catch (err) {
     const url = appUrl("/portal/login", _req.url);
     url.searchParams.set("error", err instanceof ActionError ? err.message : "That sign-in link did not work. Request a new one.");
