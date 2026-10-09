@@ -84,7 +84,15 @@ describe("passphrase-protected file", () => {
     expect(sealed.subarray(0, 8).toString()).toBe("Salted__");
     expect(sealed.includes(plain)).toBe(false);
     expect(openWithPassphrase(sealed, "correct horse battery staple").equals(plain)).toBe(true);
-    expect(() => openWithPassphrase(sealed, "wrong passphrase here")).toThrow();
+    // CBC has no authentication tag: a wrong passphrase usually fails the padding check, but about one time
+    // in 256 it yields garbage instead. Either way the plaintext never comes back.
+    let wrong: Buffer | null = null;
+    try {
+      wrong = openWithPassphrase(sealed, "wrong passphrase here");
+    } catch {
+      wrong = null;
+    }
+    expect(wrong === null || !wrong.equals(plain)).toBe(true);
     expect(() => sealWithPassphrase(plain, "short")).toThrow(/12 characters/);
   });
 

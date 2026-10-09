@@ -99,11 +99,16 @@ describe("portal sign-in", () => {
     const [acct] = await db.select().from(portalAccounts).where(eq(portalAccounts.contactId, ann));
     const [t] = await db.select().from(portalLoginTokens).where(and(eq(portalLoginTokens.accountId, acct.id), eq(portalLoginTokens.purpose, "login")));
     expect(t.expiresAt.getTime() - t.createdAt.getTime()).toBeLessThanOrEqual(PORTAL_LOGIN_TOKEN_MINUTES * 60_000 + 1000);
-    // The demo mailbox queues the mail; a ticket-less outbox row carries its own subject and body with the link.
+    // With a (demo) mailbox the mail is queued as a ticket-less outbox row carrying its own subject and body with the link;
+    // without one (CI) nothing is queued and the customer still gets the same answer.
     const queued = await db.select().from(mailboxOutbox).where(eq(mailboxOutbox.kind, "portal"));
-    expect(queued.length).toBeGreaterThanOrEqual(1);
-    expect(queued.every((q) => q.ticketId === null && q.messageId === null && /support portal/.test(q.subject ?? "") && /\/portal\/login\//.test(q.bodyMarkdown ?? ""))).toBe(true);
-    expect(queued.some((q) => q.toSummary === `ann.${stamp}@portaltest.co.uk`)).toBe(true);
+    if (process.env.DEMO_MODE === "true") {
+      expect(queued.length).toBeGreaterThanOrEqual(1);
+      expect(queued.every((q) => q.ticketId === null && q.messageId === null && /support portal/.test(q.subject ?? "") && /\/portal\/login\//.test(q.bodyMarkdown ?? ""))).toBe(true);
+      expect(queued.some((q) => q.toSummary === `ann.${stamp}@portaltest.co.uk`)).toBe(true);
+    } else {
+      expect(queued.length).toBe(0);
+    }
     // Per-account limit: five an hour.
     for (let i = 0; i < 6; i++) await requestPortalLogin(`ann.${stamp}@portaltest.co.uk`, { ip: "198.51.100.1" });
     const tokens = await db.select().from(portalLoginTokens).where(and(eq(portalLoginTokens.accountId, acct.id), eq(portalLoginTokens.purpose, "login")));
