@@ -58,7 +58,7 @@ export function CompanyBillingTab({ companyId, data, picture, finance, xero, sub
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
-        <Stat label="Charge / month" value={fmtMoney(t.chargeMonthly, c)} hint={`${active.length} active agreement${active.length === 1 ? "" : "s"}, normalised`} />
+        <Stat label="Billed monthly" value={fmtMoney(t.billed.monthly, c)} hint={[t.billed.quarterly > 0 ? `+ ${fmtMoney(t.billed.quarterly, c)}/qtr` : null, t.billed.annual > 0 ? `+ ${fmtMoney(t.billed.annual, c)}/yr` : null, Math.abs(t.chargeMonthly - t.billed.monthly) >= 0.005 ? `MRR ${fmtMoney(t.chargeMonthly, c)} normalised` : `${active.length} active agreement${active.length === 1 ? "" : "s"}`].filter(Boolean).join(" · ")} />
         <Stat label="Supplier cost / month" value={t.costMonthly === null ? "unknown" : fmtMoney(t.costMonthly, c)} hint={t.unknownCostLines ? `${t.unknownCostLines} line${t.unknownCostLines === 1 ? "" : "s"} with cost unknown` : "from Pax8 where linked, else recorded"} />
         <Stat label="Margin / month" value={t.marginMonthly === null ? "—" : fmtMoney(t.marginMonthly, c)} tone={t.marginMonthly !== null && t.marginMonthly < 0 ? "danger" : t.marginMonthly !== null ? "good" : "default"} hint={t.chargeMonthly && t.marginMonthly !== null ? `${Math.round((t.marginMonthly / t.chargeMonthly) * 100)}% of charge` : undefined} />
         <Stat label="Next invoice" value={t.nextInvoiceOn ? fmtDate(t.nextInvoiceOn, settings) : "—"} hint={active[0] ? `${FREQUENCY_LABELS[active[0].billingFrequency as keyof typeof FREQUENCY_LABELS]}${active.length > 1 ? " and others" : ""}` : "no active agreement"} />
@@ -190,7 +190,7 @@ export function CompanyBillingTab({ companyId, data, picture, finance, xero, sub
       <details className="group rounded-lg border border-slate-200 bg-surface shadow-sm" open={Boolean(finance && (finance.drafts.length > 0 || Number(finance.xeroContact?.overdue ?? finance.overdue) > 0))}>
         <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold text-slate-800">
           Invoices
-          {finance && <span className="ml-2 text-xs font-normal text-slate-500">{finance.count} in Xero · {fmtMoney(finance.invoiced12m, c)} invoiced in 12 months</span>}
+          {finance && <span className="ml-2 text-xs font-normal text-slate-500">{finance.count} in Xero · {fmtMoney(finance.invoiced12m, c)} invoiced in 12 months{t.billed.perYear > 0 && <InvoicedVersusExpected invoiced={finance.invoiced12m} expected={t.billed.perYear} currency={c} />}</span>}
         </summary>
         <div className="border-t border-slate-200 p-4">
           <InvoicesSection finance={finance} xero={xero} settings={settings} id={companyId} />
@@ -273,5 +273,23 @@ export function CompanyBillingTab({ companyId, data, picture, finance, xero, sub
         </div>
       </details>
     </div>
+  );
+}
+
+/**
+ * Compares what Xero shows invoiced in the last 12 months with what a full
+ * year of the active agreements' invoices adds up to (monthly × 12 +
+ * quarterly × 4 + annual), never the normalised MRR. Agreements younger
+ * than a year, one-off work and price changes all move the figure, so it is
+ * a prompt to look, not a verdict.
+ */
+function InvoicedVersusExpected({ invoiced, expected, currency }: { invoiced: number; expected: number; currency: string }) {
+  const diff = invoiced - expected;
+  const pct = expected ? Math.round((diff / expected) * 100) : 0;
+  const tone = Math.abs(pct) <= 10 ? "text-slate-500" : "text-amber-700";
+  return (
+    <span className={tone} title="A year of the active agreements' invoices: monthly × 12 + quarterly × 4 + annual. Not the normalised MRR.">
+      {" "}· agreements expect {fmtMoney(expected, currency)}/yr{Math.abs(pct) > 10 ? ` (${diff > 0 ? "+" : ""}${pct}%)` : ""}
+    </span>
   );
 }

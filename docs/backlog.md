@@ -100,7 +100,7 @@ Ideas and requests not yet scheduled. Each item states what it is, why, and the 
 
 ## MRR shown for annually billed lines
 
-**Status:** built, option (c). Contract badges, the company Contracts card, the Contracts page stats and the dashboard lead with **what is billed monthly** (recurring lines billed monthly), list quarterly and annual lines per quarter / per year, and show **MRR normalised** only when it differs. Reports → MRR keeps the normalised formula and says so. Still open: the Xero invoice comparison on the company page compares against the normalised figure.
+**Status:** built, option (c). Contract badges, the company Contracts card, the Contracts page stats and the dashboard lead with **what is billed monthly** (recurring lines billed monthly), list quarterly and annual lines per quarter / per year, and show **MRR normalised** only when it differs. Reports → MRR keeps the normalised formula and says so. The company Billing tab and Billing → Customers now also lead with what is billed monthly (quarterly and annual lines per period, normalised MRR only when it differs), and the Invoices header on the company page compares the 12-month Xero total with a year of the active agreements' invoices (monthly × 12 + quarterly × 4 + annual), flagging a gap over 10%. Nothing remains open.
 
 **What:** contract and company headers show an MRR figure that includes lines billed annually (or quarterly), normalised to a monthly amount. Nothing is invoiced monthly for those lines, so the number reads as cash that is not arriving each month.
 

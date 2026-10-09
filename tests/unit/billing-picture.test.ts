@@ -57,6 +57,11 @@ describe("billing picture: what we bill, what it costs, where it comes from", ()
     const onboarding = a.lines.find((l) => l.description === "Onboarding")!;
     expect(onboarding.status).toBe("not_recurring");
     expect(a.chargeMonthly).toBe(14 * 12 + 18 * 12);
+    // Both lines are billed monthly, so what is invoiced equals the normalised figure and a year is 12 invoices.
+    expect(a.billed).toEqual({ monthly: a.chargeMonthly, quarterly: 0, annual: 0, perYear: a.chargeMonthly * 12 });
+    expect(p.totals.billed).toEqual(a.billed);
+    expect(m365.chargePerPeriod).toBe(14 * 12);
+    expect(onboarding.chargePerPeriod).toBe(0);
     expect(a.costMonthly).not.toBeNull();
     expect(a.marginMonthly).toBe(Math.round((a.chargeMonthly - a.costMonthly!) * 100) / 100);
     expect(p.totals.attention).toBeGreaterThanOrEqual(2);
