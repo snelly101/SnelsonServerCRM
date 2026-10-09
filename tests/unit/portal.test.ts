@@ -9,7 +9,8 @@ import { addMessage, addTimeEntry, assignTicket, changeStatus, createTicket, get
 import { saveArticle, setArticleStatus } from "@/services/helpdesk-kb";
 import { storeUpload } from "@/services/mailbox";
 import { hashToken, PORTAL_LOGIN_TOKEN_MINUTES } from "@/lib/portal-session";
-import { invitePortalAccount, listPortalAccounts, portalAccountFromSession, portalAttachment, portalCreateTicket, portalGetTicket, portalKbArticle, portalKbList, portalListTickets, portalReply, portalSubmitFeedback, portalTicketCounts, purgePortalTokens, redeemPortalToken, requestPortalLogin, setPortalAccess, signOutPortal, type PortalAccount } from "@/services/portal";
+import { totp } from "@/lib/totp";
+import { beginPortalTotpSetup, confirmPortalTotpSetup, invitePortalAccount, listPortalAccounts, pendingPortalSession, portalAccountFromSession, resetPortalTotp, verifyPortalSecondFactor, portalAttachment, portalCreateTicket, portalGetTicket, portalKbArticle, portalKbList, portalListTickets, portalReply, portalSubmitFeedback, portalTicketCounts, purgePortalTokens, redeemPortalToken, requestPortalLogin, setPortalAccess, signOutPortal, type PortalAccount } from "@/services/portal";
 import { ActionError } from "@/lib/action-result";
 import { makeUser } from "./helpers";
 
@@ -33,10 +34,31 @@ let strangerTicket: string;
 
 const stamp = Date.now().toString(36);
 
+/** Authenticator secrets per contact, as a customer's phone would hold them. */
+const secrets = new Map<string, string>();
+
+/** Completes the second factor on a pending session: sets up the authenticator the first time, otherwise gives the current code. */
+async function secondFactor(contactId: string, sessionToken: string) {
+  const pending = await pendingPortalSession(sessionToken);
+  if (!pending) throw new Error("no pending session");
+  if (!pending.enrolled) {
+    const { secret } = await beginPortalTotpSetup(sessionToken);
+    secrets.set(contactId, secret);
+    return (await confirmPortalTotpSetup(sessionToken, totp(secret).code)).recoveryCodes;
+  }
+  await verifyPortalSecondFactor(sessionToken, totp(secrets.get(contactId)!).code);
+  return null;
+}
+
+async function redeemAndVerify(contactId: string, token: string) {
+  const { sessionToken } = await redeemPortalToken(token, { ip: "203.0.113.7", userAgent: "vitest" });
+  await secondFactor(contactId, sessionToken);
+  return sessionToken;
+}
+
 async function signIn(contactId: string): Promise<PortalAccount> {
   const invite = await invitePortalAccount(contactId, {}, admin.id);
-  const token = invite.link.split("/portal/login/")[1];
-  const { sessionToken } = await redeemPortalToken(token, { ip: "203.0.113.7", userAgent: "vitest" });
+  const sessionToken = await redeemAndVerify(contactId, invite.link.split("/portal/login/")[1]);
   const account = await portalAccountFromSession(sessionToken);
   if (!account) throw new Error("session not created");
   return account;
@@ -78,16 +100,23 @@ describe("portal sign-in", () => {
     const [stored] = await db.select().from(portalLoginTokens).where(eq(portalLoginTokens.tokenHash, hashToken(token)));
     expect(stored.purpose).toBe("invite");
     expect(stored.tokenHash).not.toBe(token);
-    const { sessionToken } = await redeemPortalToken(token, { ip: "203.0.113.7", userAgent: "vitest" });
+    const { sessionToken, needsSetup } = await redeemPortalToken(token, { ip: "203.0.113.7", userAgent: "vitest" });
+    expect(needsSetup).toBe(true);
+    // The link alone opens nothing: the session is pending until the authenticator code is given.
+    expect(await portalAccountFromSession(sessionToken)).toBeNull();
+    expect(await pendingPortalSession(sessionToken)).toMatchObject({ email: `ann.${stamp}@portaltest.co.uk`, enrolled: false });
+    const recovery = await secondFactor(ann, sessionToken);
+    expect(recovery).toHaveLength(8);
     const account = await portalAccountFromSession(sessionToken);
     expect(account).toMatchObject({ contactId: ann, companyId, email: `ann.${stamp}@portaltest.co.uk`, name: "Ann Portal", isCompanyAdmin: false });
+    expect(await pendingPortalSession(sessionToken)).toBeNull();
     // Single use.
     await expect(redeemPortalToken(token, {})).rejects.toThrow(/expired or was already used/);
     await expect(redeemPortalToken("not-a-real-token", {})).rejects.toThrow(/expired or was already used/);
     annAccount = account!;
     bobAccount = await signIn(bob);
     await setPortalAccess(bob, { isCompanyAdmin: true }, admin.id);
-    bobAccount = (await portalAccountFromSession((await redeemPortalToken((await invitePortalAccount(bob, {}, admin.id)).link.split("/portal/login/")[1], {})).sessionToken))!;
+    bobAccount = (await portalAccountFromSession(await redeemAndVerify(bob, (await invitePortalAccount(bob, {}, admin.id)).link.split("/portal/login/")[1])))!;
     expect(bobAccount.isCompanyAdmin).toBe(true);
     strangerAccount = await signIn(stranger);
     expect((await listPortalAccounts(companyId)).map((a) => a.name).sort()).toEqual(["Ann Portal", "Bob Boss"]);
@@ -118,7 +147,7 @@ describe("portal sign-in", () => {
     const [row] = await db.select().from(portalSessions).where(eq(portalSessions.accountId, session.id)).orderBy(portalSessions.createdAt);
     void row;
     const fresh = (await invitePortalAccount(ann, {}, admin.id)).link.split("/portal/login/")[1];
-    const { sessionToken } = await redeemPortalToken(fresh, {});
+    const sessionToken = await redeemAndVerify(ann, fresh);
     expect(await portalAccountFromSession(sessionToken)).not.toBeNull();
     await signOutPortal(sessionToken);
     expect(await portalAccountFromSession(sessionToken)).toBeNull();
@@ -134,6 +163,45 @@ describe("portal sign-in", () => {
     expect(await requestPortalLogin(`sid.${stamp}@portalother.co.uk`, {})).toEqual({ sent: false });
     await setPortalAccess(stranger, { enabled: true }, admin.id);
     strangerAccount = await signIn(stranger);
+  });
+});
+
+describe("portal second factor", () => {
+  it("a later sign-in needs the authenticator code; wrong codes are limited; a recovery code works once", async () => {
+    const link = (await invitePortalAccount(ann, {}, admin.id)).link.split("/portal/login/")[1];
+    const { sessionToken, needsSetup } = await redeemPortalToken(link, {});
+    expect(needsSetup).toBe(false);
+    expect(await portalAccountFromSession(sessionToken)).toBeNull();
+    await expect(beginPortalTotpSetup(sessionToken)).rejects.toThrow(/already set up/);
+    await expect(verifyPortalSecondFactor(sessionToken, "000000")).rejects.toThrow(/did not match/);
+    const secret = secrets.get(ann)!;
+    const r = await verifyPortalSecondFactor(sessionToken, totp(secret).code);
+    expect(r.factor).toBe("totp");
+    expect(await portalAccountFromSession(sessionToken)).not.toBeNull();
+    // A code cannot be reused to verify a second pending session? Each session verifies independently; five wrong codes end the attempt.
+    const again = (await redeemPortalToken((await invitePortalAccount(ann, {}, admin.id)).link.split("/portal/login/")[1], {})).sessionToken;
+    for (let i = 0; i < 4; i++) await expect(verifyPortalSecondFactor(again, "111111")).rejects.toThrow(/did not match/);
+    await expect(verifyPortalSecondFactor(again, "111111")).rejects.toThrow(/Too many wrong codes/);
+    await expect(verifyPortalSecondFactor(again, totp(secret).code)).rejects.toThrow(/expired/);
+    // Recovery code: works once, then is gone.
+    const [acct] = await db.select().from(portalAccounts).where(eq(portalAccounts.contactId, ann));
+    expect(acct.recoveryCodes).toHaveLength(8);
+    expect(acct.totpSecretEnc).not.toContain(secret);
+    const fresh = (await redeemPortalToken((await invitePortalAccount(ann, {}, admin.id)).link.split("/portal/login/")[1], {})).sessionToken;
+    // The plaintext codes were returned at setup; we kept none, so mint a known one by resetting and re-enrolling below.
+    await resetPortalTotp(ann, admin.id);
+    expect(await portalAccountFromSession(fresh)).toBeNull(); // reset ends sessions, pending ones too
+    const after = (await redeemPortalToken((await invitePortalAccount(ann, {}, admin.id)).link.split("/portal/login/")[1], {}));
+    expect(after.needsSetup).toBe(true);
+    await expect(verifyPortalSecondFactor(after.sessionToken, "123456")).rejects.toThrow("SETUP_REQUIRED");
+    const codes = (await secondFactor(ann, after.sessionToken))!;
+    const s2 = (await redeemPortalToken((await invitePortalAccount(ann, {}, admin.id)).link.split("/portal/login/")[1], {})).sessionToken;
+    const used = await verifyPortalSecondFactor(s2, codes[0].toLowerCase());
+    expect(used).toMatchObject({ factor: "recovery", recoveryCodesLeft: 7 });
+    const s3 = (await redeemPortalToken((await invitePortalAccount(ann, {}, admin.id)).link.split("/portal/login/")[1], {})).sessionToken;
+    await expect(verifyPortalSecondFactor(s3, codes[0])).rejects.toThrow(/did not match/);
+    await verifyPortalSecondFactor(s3, codes[1]);
+    annAccount = (await portalAccountFromSession(s3))!;
   });
 });
 
@@ -159,7 +227,8 @@ describe("portal tickets: scope and leakage", () => {
     expect(dump).not.toContain(RESTRICTED_FILE);
     expect(dump).not.toContain(STAFF_BCC);
     expect(dump).not.toContain("timeSpent");
-    expect(dump).not.toContain("bcc");
+    // Field names only: a random id can contain "bcc" by chance.
+    expect(dump).not.toMatch(/"bcc[A-Za-z]*":/);
     expect(t.messages.map((m) => m.bodyText)).toEqual(expect.arrayContaining(["We have cleared the jam remotely, please try again."]));
     expect(t.messages.some((m) => m.bodyText.includes(SECRET_NOTE))).toBe(false);
     const visibleFiles = [...t.messages.flatMap((m) => m.attachments), ...t.looseAttachments].map((a) => a.fileName);

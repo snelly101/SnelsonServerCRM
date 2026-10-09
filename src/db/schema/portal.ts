@@ -28,6 +28,11 @@ export const portalAccounts = pgTable(
     invitedAt: timestamp("invited_at", { withTimezone: true }).notNull().defaultNow(),
     lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
     disabledAt: timestamp("disabled_at", { withTimezone: true }),
+    /** Second factor: authenticator app secret (base32, encrypted with APP_ENCRYPTION_KEY); set at setup, confirmed by totpEnrolledAt. */
+    totpSecretEnc: text("totp_secret_enc"),
+    totpEnrolledAt: timestamp("totp_enrolled_at", { withTimezone: true }),
+    /** sha256 hashes of unused recovery codes. */
+    recoveryCodes: text("recovery_codes").array().notNull().default([]),
     ...timestamps,
   },
   (t) => [uniqueIndex("portal_accounts_contact_unique").on(t.contactId), index("portal_accounts_email_idx").on(t.email), index("portal_accounts_company_idx").on(t.companyId)],
@@ -64,6 +69,9 @@ export const portalSessions = pgTable(
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
     userAgent: text("user_agent"),
     ipAddress: text("ip_address"),
+    /** Null until the second factor (authenticator code) has been given; pending sessions open nothing. */
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
+    failedAttempts: integer("failed_attempts").notNull().default(0),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

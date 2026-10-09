@@ -2,15 +2,15 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Globe, Link2, Send, ShieldCheck, Ban } from "lucide-react";
+import { Globe, Link2, Send, ShieldCheck, Ban, Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/form";
 import { ConfirmButton } from "@/components/ui/confirm-button";
 import { useToast } from "@/components/ui/toast";
-import { invitePortalAction, setPortalAccessAction } from "@/actions/portal-admin";
+import { invitePortalAction, resetPortalTotpAction, setPortalAccessAction } from "@/actions/portal-admin";
 
-export type PortalAccessState = { invitedAt: string; lastLoginAt: string | null; disabledAt: string | null; isCompanyAdmin: boolean; invitedByName: string | null } | null;
+export type PortalAccessState = { invitedAt: string; lastLoginAt: string | null; disabledAt: string | null; isCompanyAdmin: boolean; invitedByName: string | null; totpEnrolledAt: string | null; recoveryCodesLeft: number } | null;
 
 /**
  * Contact page card: give a contact access to the customer portal, make
@@ -52,7 +52,8 @@ export function PortalAccessCard({ contactId, hasEmail, state, canManage }: { co
       <div className="flex flex-wrap items-center gap-2">
         {!state ? <Badge>not invited</Badge> : active ? <Badge tone="green">active</Badge> : <Badge tone="red">switched off</Badge>}
         {state?.isCompanyAdmin && active && <Badge tone="indigo">company administrator</Badge>}
-        {state && <span className="text-xs text-slate-500">invited {new Date(state.invitedAt).toLocaleDateString("en-GB")}{state.invitedByName ? ` by ${state.invitedByName}` : ""} · {state.lastLoginAt ? `last signed in ${new Date(state.lastLoginAt).toLocaleString("en-GB")}` : "never signed in"}</span>}
+        {state && active && (state.totpEnrolledAt ? <Badge tone="green"><Smartphone className="mr-0.5 h-3 w-3" />authenticator on</Badge> : <Badge tone="amber">authenticator not set up yet</Badge>)}
+        {state && <span className="text-xs text-slate-500">invited {new Date(state.invitedAt).toLocaleDateString("en-GB")}{state.invitedByName ? ` by ${state.invitedByName}` : ""} · {state.lastLoginAt ? `last signed in ${new Date(state.lastLoginAt).toLocaleString("en-GB")}` : "never signed in"}{state.totpEnrolledAt ? ` · ${state.recoveryCodesLeft} recovery code${state.recoveryCodesLeft === 1 ? "" : "s"} left` : ""}</span>}
       </div>
       {!hasEmail && <p className="text-xs text-amber-700">Add an e-mail address to this contact first; the portal signs in by e-mailed link.</p>}
       {error && <p className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700" role="alert">{error}</p>}
@@ -63,6 +64,11 @@ export function PortalAccessCard({ contactId, hasEmail, state, canManage }: { co
             <Button size="sm" variant={state ? "secondary" : "primary"} onClick={invite} loading={pending}>
               {state ? <><Send className="h-4 w-4" /> Re-send sign-in link</> : <><Globe className="h-4 w-4" /> Give portal access</>}
             </Button>
+            {state && active && state.totpEnrolledAt && (
+              <ConfirmButton size="sm" variant="secondary" action={resetPortalTotpAction.bind(null, contactId)} title="Reset their authenticator?" description="For a lost or replaced phone. Their sessions end now and the next sign-in link walks them through setting up the authenticator app again. Confirm it is really them first." confirmLabel="Reset authenticator" successMessage="Authenticator reset">
+                <Smartphone className="h-4 w-4" /> Reset authenticator
+              </ConfirmButton>
+            )}
             {state && (
               <ConfirmButton size="sm" variant={active ? "danger-outline" : "secondary"} action={setPortalAccessAction.bind(null, contactId, { enabled: !active })} title={active ? "Switch off portal access?" : "Switch portal access back on?"} description={active ? "Their current sessions end immediately. Tickets and history are kept." : undefined} confirmLabel={active ? "Switch off" : "Switch on"} successMessage={active ? "Portal access switched off" : "Portal access switched on"}>
                 {active ? <><Ban className="h-4 w-4" /> Switch off</> : <><ShieldCheck className="h-4 w-4" /> Switch on</>}

@@ -18,6 +18,23 @@ export function base32Decode(input: string): Buffer {
   return Buffer.from(out);
 }
 
+export function base32Encode(buf: Buffer): string {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  let bits = 0;
+  let value = 0;
+  let out = "";
+  for (const byte of buf) {
+    value = (value << 8) | byte;
+    bits += 8;
+    while (bits >= 5) {
+      out += alphabet[(value >>> (bits - 5)) & 31];
+      bits -= 5;
+    }
+  }
+  if (bits > 0) out += alphabet[(value << (5 - bits)) & 31];
+  return out;
+}
+
 export function isValidBase32(input: string) {
   return /^[A-Za-z2-7 =]+$/.test(input) && base32Decode(input).length >= 10;
 }
