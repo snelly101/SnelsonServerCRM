@@ -84,6 +84,7 @@ rm /tmp/restore.sql
 To restore for real: stop `web` and `worker`, restore into `crm`, start them again.
 
 - **What a backup contains:** all CRM data, encrypted integration tokens (useless without `APP_ENCRYPTION_KEY`) and pg-boss job history. **Keep `.env` backed up separately** (password manager). Without `APP_ENCRYPTION_KEY` the integration credentials in a restored database cannot be decrypted and must be re-entered.
+- **Uploaded files** (company photos and documents, helpdesk attachments) are not in the database: they live on the `appdata` Docker volume under `/app/data/attachments`. The same nightly run archives that folder as `crm-files-<stamp>.tar.gz(.gpg)` beside the dump and ships it off-site with it. To restore files: `gpg -d crm-files-<stamp>.tar.gz.gpg | docker compose exec -T web tar -C /app/data -xzf -` (or extract into the volume with a throwaway container). Company files are capped per customer by `ATTACHMENT_COMPANY_QUOTA_MB` (default 2 GB); removed files stay restorable for `ATTACHMENT_PURGE_DAYS` (default 30) before the nightly job deletes the bytes. Watch disk with `docker system df -v`; an 80 GB VPS has room for a few thousand photos, and moving to object storage is the upgrade path when it does not.
 
 ## 5a. Secure Vault key custody
 

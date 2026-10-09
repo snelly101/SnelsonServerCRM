@@ -411,3 +411,25 @@ The helpdesk is delivered in four stages, each its own pull request: **1** ticke
 - Anonymisation keeps message text; if a requester wrote personal data into the body, edit or delete the message by hand.
 - No customer portal (backlog), no e-mail commands from Outlook, no satisfaction surveys.
 
+## Phase 15 — Company files (photos and documents) ✅
+
+### What works
+
+- **Files tab** on every company: upload from disk, the phone camera (*Take photo* uses the rear camera on mobile browsers) or by dropping files on the panel; up to 20 files per batch, each stored independently so one refused file does not fail the rest.
+- **Photos** are re-encoded on upload with sharp: EXIF orientation applied, every other tag (GPS, device, timestamps) dropped, downsized to 4000 px on the long edge, and a 480 px WebP thumbnail stored beside the original so the grid never serves full photos. Documents are stored as-is.
+- **Same guard rails as helpdesk attachments:** blocked executable extensions, size cap (`HELPDESK_MAX_ATTACHMENT_MB`), optional ClamAV scan; blocked or unscanned files are never served. Per-company allowance `ATTACHMENT_COMPANY_QUOTA_MB` (2 GB).
+- **Viewer** with full-size image or document card, caption, site, tags, rename (extension kept), download, open inline (images, PDF, text; served with a sandbox CSP so nothing runs in the app origin) and remove. Removed files are hidden, restorable from *Show removed*, and purged with their bytes after `ATTACHMENT_PURGE_DAYS` (30) by the nightly retention job.
+- Filters by photos / documents / site and a search over name, caption and tags.
+- **Storage:** the `appdata` Docker volume under `attachments/company/<companyId>`; the nightly backup now archives the attachments folder as `crm-files-<stamp>.tar.gz(.gpg)` beside the database dump and ships it off-site with it. `src/lib/email/storage.ts` is the one place to swap for object storage later.
+- Viewing needs `company.read`, changes `company.write`. Uploads, edits, removals, restores and downloads are audited; uploads and removals appear on the company timeline.
+
+### What was tested
+
+- Unit (`tests/unit/attachments.test.ts`): a phone-style JPEG with EXIF and GPS is stored without any EXIF, rotated per its orientation tag, with a WebP thumbnail; documents are stored byte-for-byte; blocked extensions, empty files and foreign sites are refused; a file claiming to be an image but undecodable is kept as a plain file; listing order, site filter, usage and the allowance; edits keep the extension; remove, restore, hide-by-default and purge after the retention period (bytes gone, other files untouched).
+- Browser: upload of a JPEG, PNG and PDF, thumbnail grid, viewer, edit caption/site/tags.
+
+### Known limitations
+
+- No attachments on vault items or tickets from this tab (helpdesk has its own).
+- HEIC from iPhones is accepted only when the server's libvips build decodes it; otherwise it is kept as a plain file without a thumbnail. Safari uploads JPEG by default for the camera.
+- No virus-scan retry button; an `error` scan status stays until re-uploaded.

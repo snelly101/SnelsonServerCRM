@@ -46,6 +46,8 @@ Ideas and requests not yet scheduled. Each item states what it is, why, and the 
 
 ## Photos and file attachments on a company
 
+**Status:** built. Company → **Files** tab: upload from disk, the phone camera (*Take photo*) or drag and drop; photos re-encoded on upload (EXIF including GPS stripped, downsized to 4000 px, WebP thumbnail), documents stored as-is; same blocked-extension and size policy and optional ClamAV scan as helpdesk attachments; per-company allowance (`ATTACHMENT_COMPANY_QUOTA_MB`); viewer with caption, site, tags, rename, download, open inline (images, PDF, text) and remove (restorable for `ATTACHMENT_PURGE_DAYS`, then purged nightly). Bytes on the `appdata` volume under `attachments/company/<id>`, included in the nightly backup as `crm-files-*.tar.gz`. Viewing needs `company.read`, changes `company.write`; uploads, edits, removals and downloads are audited and uploads appear on the timeline. Not built: attachments on vault items, object-storage backend (the storage helper is the one place to swap), virus-scan retry button.
+
 **What:** attach photos and documents to a company (and later a site or vault item): comms cabinet photos, floor plans, contracts, network diagrams. Thumbnail grid on the company page, full-size viewer, download, delete, who uploaded and when.
 
 **Design notes:**
