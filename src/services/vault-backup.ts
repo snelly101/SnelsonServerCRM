@@ -28,6 +28,7 @@ export const EXPORT_LIMIT_PER_HOUR = 2;
 export const EXPORT_ACKNOWLEDGEMENT = "EXPORT ALL SECRETS";
 export const IMPORT_ACKNOWLEDGEMENT = "IMPORT BACKUP";
 export const BACKUP_FORMAT = "snelson-crm-vault-backup";
+const normalisePhrase = (v: string) => v.toUpperCase().replace(/[^A-Z]+/g, " ").trim();
 export const BACKUP_VERSION = 1;
 
 export type BackupItem = {
@@ -217,7 +218,7 @@ async function notifyAdmins(actor: VaultActor, title: string, description: strin
 export async function exportVault(actor: VaultActor, opts: ExportOptions) {
   requireVaultAdmin(actor);
   assertVaultConfigured();
-  if (opts.acknowledgement.trim().toUpperCase() !== EXPORT_ACKNOWLEDGEMENT) throw new ActionError(`Type "${EXPORT_ACKNOWLEDGEMENT}" exactly to confirm.`);
+  if (normalisePhrase(opts.acknowledgement) !== EXPORT_ACKNOWLEDGEMENT) throw new ActionError(`Type "${EXPORT_ACKNOWLEDGEMENT}" exactly to confirm.`);
   const reason = opts.reason.trim();
   if (reason.length < 5) throw new ActionError("Give a reason for the export (at least 5 characters). It is recorded in the audit trail.");
   if (opts.passphrase && opts.passphrase.length < 12) throw new ActionError("The passphrase must be at least 12 characters.");
@@ -313,7 +314,7 @@ function secretKinds(s: VaultSecrets) {
 export async function importVaultBackup(actor: VaultActor, opts: ImportOptions): Promise<ImportResult> {
   requireVaultAdmin(actor);
   assertVaultConfigured();
-  if (opts.acknowledgement.trim().toUpperCase() !== IMPORT_ACKNOWLEDGEMENT) throw new ActionError(`Type "${IMPORT_ACKNOWLEDGEMENT}" exactly to confirm.`);
+  if (normalisePhrase(opts.acknowledgement) !== IMPORT_ACKNOWLEDGEMENT) throw new ActionError(`Type "${IMPORT_ACKNOWLEDGEMENT}" exactly to confirm.`);
   const reason = opts.reason.trim();
   if (reason.length < 5) throw new ActionError("Give a reason for the import (at least 5 characters).");
   await requireFreshStepUp(actor);

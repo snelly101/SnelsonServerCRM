@@ -15,6 +15,9 @@ export type BackupStatus = { usedThisHour: number; limitPerHour: number; allowed
 const EXPORT_ACK = "EXPORT ALL SECRETS";
 const IMPORT_ACK = "IMPORT BACKUP";
 
+/** Case, stray punctuation and doubled spaces (phone keyboards, autocorrect) must not block the phrase. */
+const normalisePhrase = (v: string) => v.toUpperCase().replace(/[^A-Z]+/g, " ").trim();
+
 type ExportSummary = { items: number; archived: number; companies: number; failed: number; sha256: string; encrypted: boolean; notified: number; filename: string };
 type ImportSummary = { created: number; skipped: number; companiesCreated: number; categoriesCreated: number; errors: { item: string; error: string }[]; sha256: string };
 
@@ -111,11 +114,18 @@ function ExportDialog({ open, onOpenChange, onDone, admins }: { open: boolean; o
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const reset = () => { setReason(""); setAck(""); setPassphrase(""); setConfirm(""); setPlainOk(false); setError(null); setProtect(true); };
-  const ready = reason.trim().length >= 5 && ack.trim().toUpperCase() === EXPORT_ACK && (protect ? passphrase.length >= 12 && passphrase === confirm : plainOk);
+  const missing: string[] = [];
+  if (reason.trim().length < 5) missing.push("a reason of at least 5 characters");
+  if (protect && passphrase.length < 12) missing.push("a passphrase of at least 12 characters");
+  if (protect && passphrase.length >= 12 && passphrase !== confirm) missing.push("the same passphrase in both boxes");
+  if (!protect && !plainOk) missing.push("the clear-text acknowledgement tick");
+  if (normalisePhrase(ack) !== EXPORT_ACK) missing.push(`the phrase ${EXPORT_ACK} typed exactly`);
+  const ready = missing.length === 0;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!ready || busy) return;
+    if (busy) return;
+    if (!ready) return setError(`Still needed: ${missing.join("; ")}.`);
     setBusy(true);
     setError(null);
     try {
@@ -170,13 +180,14 @@ function ExportDialog({ open, onOpenChange, onDone, admins }: { open: boolean; o
             <Checkbox label="I understand the downloaded file holds every secret in clear text and I will move it to offline storage immediately" checked={plainOk} onChange={(e) => setPlainOk(e.target.checked)} />
           )}
           <Field label={`Type ${EXPORT_ACK} to confirm`} htmlFor="ex-ack">
-            <Input id="ex-ack" value={ack} onChange={(e) => setAck(e.target.value)} autoComplete="off" spellCheck={false} placeholder={EXPORT_ACK} />
+            <Input id="ex-ack" value={ack} onChange={(e) => setAck(e.target.value)} autoComplete="off" autoCapitalize="characters" spellCheck={false} placeholder={EXPORT_ACK} />
           </Field>
+          {!ready && !error && <p className="text-xs text-slate-500">Still needed: {missing.join("; ")}.</p>}
           <div className="flex items-center justify-between gap-2">
             <Badge tone="red">plain text</Badge>
             <div className="flex gap-2">
               <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>Cancel</Button>
-              <Button type="submit" variant="danger" loading={busy} disabled={!ready}><Download className="h-4 w-4" /> Export and download</Button>
+              <Button type="submit" variant="danger" loading={busy}><Download className="h-4 w-4" /> Export and download</Button>
             </div>
           </div>
         </form>
@@ -192,11 +203,16 @@ function ImportDialog({ open, onOpenChange, onDone }: { open: boolean; onOpenCha
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const reset = () => { setFile(null); setReason(""); setAck(""); setError(null); };
-  const ready = Boolean(file) && reason.trim().length >= 5 && ack.trim().toUpperCase() === IMPORT_ACK;
+  const missing: string[] = [];
+  if (!file) missing.push("the vault-backup.json file");
+  if (reason.trim().length < 5) missing.push("a reason of at least 5 characters");
+  if (normalisePhrase(ack) !== IMPORT_ACK) missing.push(`the phrase ${IMPORT_ACK} typed exactly`);
+  const ready = missing.length === 0;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!ready || busy || !file) return;
+    if (busy) return;
+    if (!ready || !file) return setError(`Still needed: ${missing.join("; ")}.`);
     setBusy(true);
     setError(null);
     try {
@@ -232,11 +248,12 @@ function ImportDialog({ open, onOpenChange, onDone }: { open: boolean; onOpenCha
             <Textarea id="im-reason" rows={2} value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} required />
           </Field>
           <Field label={`Type ${IMPORT_ACK} to confirm`} htmlFor="im-ack">
-            <Input id="im-ack" value={ack} onChange={(e) => setAck(e.target.value)} autoComplete="off" spellCheck={false} placeholder={IMPORT_ACK} />
+            <Input id="im-ack" value={ack} onChange={(e) => setAck(e.target.value)} autoComplete="off" autoCapitalize="characters" spellCheck={false} placeholder={IMPORT_ACK} />
           </Field>
+          {!ready && !error && <p className="text-xs text-slate-500">Still needed: {missing.join("; ")}.</p>}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" loading={busy} disabled={!ready}><Upload className="h-4 w-4" /> Import</Button>
+            <Button type="submit" loading={busy}><Upload className="h-4 w-4" /> Import</Button>
           </div>
         </form>
       </DialogContent>
