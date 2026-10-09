@@ -77,6 +77,17 @@ Migrations are additive (new tables and columns only), so the database can stay 
 
 Always take a backup (`deploy/backup.sh`) before rolling forward or back, and include the `appdata` volume (attachments) in it.
 
+## 6a. Customer portal
+
+Customers can raise and follow requests at **`/portal`** on the same hostname. Nothing there uses staff accounts or roles: a portal account is a CRM **contact** an agent has invited, signed in by an e-mailed one-time link (no passwords), with its own session cookie (`crm_portal`).
+
+- **Give access:** Contact → **Customer portal** card → *Give portal access*. The contact needs an e-mail address. Tick *Company administrator* for someone who should see every request from their company (an IT lead or office manager); everyone else sees only tickets they raised or were CC'd on. The card shows the one-time link after sending, so you can pass it on when no support mailbox is connected or the e-mail did not arrive. Needs `helpdesk.agent`.
+- **Sign-in links** go out through the support mailbox (outbox kind `portal`, visible under Settings → Helpdesk → Operations). Invite links last 72 hours, sign-in links 20 minutes; each works once. The sign-in page answers the same way whether or not the address is known. Limits: five links per account and thirty per IP address per hour.
+- **What customers see:** their permitted tickets (open / resolved / all), the public conversation (agent replies and their own messages, never internal notes, BCCs, time entries or SLA data), attachments that are not *restricted* and have passed the scan, published articles marked *customer-visible*, and a 1 to 5 rating with comment once a ticket is resolved or closed. Ratings appear in the ticket timeline and notify the assignee.
+- **What agents see:** portal tickets carry `source = portal`; customer messages from the portal show a globe icon and "from customer (portal)". A customer reply reopens a resolved, closed or awaiting-customer ticket and raises the usual *customer replied* notification, exactly like an inbound e-mail. Replies you send by e-mail reach the customer as before; the portal shows the same public messages.
+- **Switch off:** the card's *Switch off* ends every session immediately and blocks new links; history is kept. Archiving the contact has the same effect. Every invite, sign-in and access change is in the audit log (`portal.*`).
+- **Housekeeping:** expired tokens and sessions are removed by the nightly retention job a week after expiry.
+
 ## 7. Known limitations
 
 - Live Microsoft 365 verification: exercised through the in-memory Graph double; the first live connection was used to correct the connect check (inbox read rather than user object). Watch the inbound queue on the first real messages.
@@ -84,4 +95,4 @@ Always take a backup (`deploy/backup.sh`) before rolling forward or back, and in
 - Article bodies use the safe Markdown subset (headings, lists, bold, italic, code, links); no tables or images.
 - Device links depend on the NinjaOne mirror; devices unmapped from a company cannot be linked to that company's tickets.
 - Anonymisation does not rewrite message text.
-- No customer portal, no Outlook e-mail commands, no satisfaction surveys (backlog).
+- No Outlook e-mail commands. The portal has no password or passkey option (magic link only) and no self sign-up: an agent must invite each contact.

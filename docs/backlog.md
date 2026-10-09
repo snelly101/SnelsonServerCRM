@@ -115,6 +115,8 @@ Ideas and requests not yet scheduled. Each item states what it is, why, and the 
 
 ## Helpdesk customer portal
 
+**Status:** built (Phase 16, see `docs/phases.md`). `/portal`: magic-link sign-in for invited contacts, own tickets or the company's for company administrators, new requests with attachments, replies that reopen tickets and notify agents, customer-visible knowledge base, 1 to 5 rating after resolution; agents invite from the contact page. Not built: self sign-up, passkeys, e-mailed satisfaction survey links, per-ticket "share with colleague".
+
 **What:** an authenticated customer-facing portal for the helpdesk (deferred from the helpdesk build): customers create tickets, see their own permitted tickets, add replies and attachments, follow status and the public conversation, search published customer-visible knowledge articles, and give optional satisfaction feedback after resolution. Designated company administrators may see their company's tickets only when explicitly authorised.
 
 **Why:** email covers most customer interaction; a portal adds self-service and visibility for larger customers without another inbox.

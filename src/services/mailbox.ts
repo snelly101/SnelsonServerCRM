@@ -1629,7 +1629,7 @@ async function queueAcknowledgement(
 export type QueueOutboundInput = {
   mailbox: Mailbox;
   ticketId: string | null;
-  kind: "ack" | "reply" | "new" | "test";
+  kind: "ack" | "reply" | "new" | "test" | "portal";
   subject: string;
   markdown: string;
   to: { name?: string | null; email: string }[];
@@ -1746,6 +1746,8 @@ export async function queueOutbound(input: QueueOutboundInput) {
         replyToExternalId: replyTo?.externalMessageId ?? null,
         replyAll: false,
         toSummary: input.to.map((r) => r.email).join(", "),
+        subject: input.ticketId ? null : input.subject,
+        bodyMarkdown: input.ticketId ? null : markdown,
         createdByUserId: input.actor.id,
       })
       .onConflictDoNothing({ target: mailboxOutbox.idempotencyKey })
@@ -1964,6 +1966,20 @@ async function buildDraft(
         `This is a test from the CRM helpdesk mailbox **${m.address}**. If you can read this, outbound mail works.`,
       ),
       text: `This is a test from the CRM helpdesk mailbox ${m.address}.`,
+      to: (ob.toSummary ?? "")
+        .split(",")
+        .map((e) => ({ email: e.trim() }))
+        .filter((r) => r.email),
+      cc: [],
+      bcc: [],
+      headers,
+      attachments,
+    };
+  if (!message && ob.subject && ob.bodyMarkdown)
+    return {
+      subject: ob.subject,
+      html: markdownToHtml(ob.bodyMarkdown),
+      text: markdownToPlainText(ob.bodyMarkdown),
       to: (ob.toSummary ?? "")
         .split(",")
         .map((e) => ({ email: e.trim() }))

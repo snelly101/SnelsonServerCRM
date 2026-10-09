@@ -73,6 +73,8 @@ export async function registerJobs(
     // Company attachments removed more than ATTACHMENT_PURGE_DAYS ago lose their bytes.
     const { purgeDeletedAttachments } = await import("@/services/attachments");
     await purgeDeletedAttachments();
+    const { purgePortalTokens } = await import("@/services/portal");
+    await purgePortalTokens();
     // Nightly integrity check of the vault audit chain (hashing only; needs no key).
     const { verifyAuditChain } = await import("@/services/vault");
     const chain = await verifyAuditChain(null);

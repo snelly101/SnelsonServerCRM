@@ -15,3 +15,4 @@ export * from "./helpdesk-sla";
 export * from "./helpdesk-kb";
 export * from "./service-links";
 export * from "./attachments";
+export * from "./portal";

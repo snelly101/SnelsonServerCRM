@@ -47,3 +47,10 @@ export function fmtPercent(n: number | string | null | undefined, digits = 0) {
   if (!Number.isFinite(v)) return "—";
   return `${v.toFixed(digits)}%`;
 }
+
+/** "512 B", "48 KB", "2.4 MB". */
+export function fmtBytes(n: number) {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${(n / 1024 / 1024).toFixed(n < 10 * 1024 * 1024 ? 1 : 0)} MB`;
+}
