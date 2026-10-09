@@ -12,8 +12,8 @@ import { param, toInt } from "@/lib/utils";
 export const metadata = { title: "Secure Vault audit" };
 export const dynamic = "force-dynamic";
 
-const ACTIONS = ["revealed", "copied", "totp_code", "created", "modified", "archived", "restored", "viewed", "grant_changed", "grant_revoked", "step_up_succeeded", "step_up_failed", "rate_limited", "rewrapped", "chain_verified", "category_changed"];
-const TONE: Record<string, string> = { revealed: "amber", copied: "amber", totp_code: "amber", archived: "red", rate_limited: "red", step_up_failed: "red", created: "green", modified: "blue" };
+const ACTIONS = ["revealed", "copied", "totp_code", "created", "modified", "archived", "restored", "viewed", "grant_changed", "grant_revoked", "step_up_succeeded", "step_up_failed", "rate_limited", "rewrapped", "chain_verified", "category_changed", "exported", "imported"];
+const TONE: Record<string, string> = { revealed: "amber", copied: "amber", totp_code: "amber", archived: "red", rate_limited: "red", step_up_failed: "red", exported: "red", imported: "amber", created: "green", modified: "blue" };
 
 export default async function VaultAuditPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const me = await requirePermission("vault.admin");

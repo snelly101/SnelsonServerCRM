@@ -82,7 +82,7 @@ export async function requireCapability(actor: VaultActor, companyId: string, ca
   return caps;
 }
 
-function requireVaultAdmin(actor: VaultActor) {
+export function requireVaultAdmin(actor: VaultActor) {
   if (!can(actor.role, "vault.admin")) throw new ActionError("Only administrators can manage the vault.");
 }
 
@@ -126,7 +126,7 @@ export async function vaultHealth() {
 // ---------------------------------------------------------------------------
 // Audit trail (append-only, hash-chained)
 // ---------------------------------------------------------------------------
-export type VaultAuditAction = "created" | "viewed" | "revealed" | "copied" | "totp_code" | "modified" | "archived" | "restored" | "grant_changed" | "grant_revoked" | "category_changed" | "step_up_succeeded" | "step_up_failed" | "rate_limited" | "rewrapped" | "chain_verified";
+export type VaultAuditAction = "created" | "viewed" | "revealed" | "copied" | "totp_code" | "modified" | "archived" | "restored" | "grant_changed" | "grant_revoked" | "category_changed" | "step_up_succeeded" | "step_up_failed" | "rate_limited" | "rewrapped" | "chain_verified" | "exported" | "imported";
 
 const GENESIS = "0".repeat(64);
 
@@ -231,6 +231,12 @@ export async function verifyStepUp(actor: VaultActor, password: string) {
 async function requireStepUp(actor: VaultActor) {
   const s = await stepUpStatus(actor.id);
   if (!s.verified) throw new ActionError("STEP_UP_REQUIRED");
+}
+
+/** Stricter than the normal window: the password must have been confirmed within the last few minutes (bulk operations). */
+export async function requireFreshStepUp(actor: VaultActor, maxAgeMinutes = 5) {
+  const [row] = await db.select({ verifiedAt: vaultStepUps.verifiedAt }).from(vaultStepUps).where(eq(vaultStepUps.userId, actor.id)).limit(1);
+  if (!row || Date.now() - row.verifiedAt.getTime() > maxAgeMinutes * 60_000) throw new ActionError("STEP_UP_REQUIRED");
 }
 
 async function enforceRevealLimit(actor: VaultActor, companyId: string, itemId: string, itemName: string) {
