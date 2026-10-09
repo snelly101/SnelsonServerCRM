@@ -44,6 +44,7 @@ Two different numbers are shown and they are deliberately not the same:
 
 - **Billed monthly / quarterly / annually**: what the invoice for each frequency actually carries. Monthly lines only, listed per month; quarterly lines listed per quarter; annual lines per year. This is what the contract page, company page, Contracts list and dashboard lead with, because it answers "what will the next invoice be?".
 - **MRR (normalised)**: every recurring line normalised to a month (annual ÷ 12, quarterly ÷ 3). Shown alongside only when it differs, and used on the Reports page for recurring revenue, margin, concentration and renewals. One-off and hardware lines are excluded and reported separately. ARR is MRR × 12.
+- **Billed per period**: the company Billing tab, Billing → Customers and each agreement's footer show what actually goes on the invoices (monthly lines per month, quarterly per quarter, annual per year). The Invoices header on the company page compares Xero's 12-month total with a year of those invoices (monthly × 12 + quarterly × 4 + annual) and flags a gap over 10%; it never compares against normalised MRR.
 
 ### 3.5 Draft invoices (`invoice_drafts`)
 
@@ -304,7 +305,6 @@ Proposals are built and signed in Better Proposals. **Line items.** The public A
 ## 12. Known gaps and open decisions
 
 - Pax8 credits and replacement invoices appear as their own lines or invoices; they are not yet netted against the original charge.
-- Xero's "invoiced vs contracted" comparison still uses normalised MRR rather than the billed-per-frequency figure.
 - Decreases in quantity are never credited mid-period (by design; they apply from the next period). Credit notes are not produced by the CRM.
 - Weekly and other non-standard Xero repeating-invoice schedules are listed but not imported as contracts.
 - Multi-currency: drafts carry the app's configured currency; there is no per-customer currency.

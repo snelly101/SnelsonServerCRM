@@ -48,6 +48,8 @@ export type LineView = {
   costBasis: "supplier" | "recorded" | "unknown";
   /** Charge, cost and margin per month for the agreed quantity. */
   chargeMonthly: number;
+  /** What the line puts on each invoice at its own frequency (quantity × unit price); 0 when not recurring. */
+  chargePerPeriod: number;
   costMonthly: number | null;
   marginMonthly: number | null;
   /** True when the recorded cost and the supplier's cost differ by more than a penny a month per unit. */
@@ -56,6 +58,18 @@ export type LineView = {
   pendingChanges: { id: string; field: string; previousValue: string | null; newValue: string | null; effectiveFrom: string }[];
   status: LineStatus;
 };
+
+/** What is actually invoiced, per period, by billing frequency, plus the total a full year of invoices adds up to. Not normalised. */
+export type Billed = { monthly: number; quarterly: number; annual: number; perYear: number };
+
+const billedOf = (parts: { months: number | null; charge: number }[]): Billed => {
+  const sum = (m: number) => round2(parts.filter((x) => x.months === m).reduce((a, x) => a + x.charge, 0));
+  const monthly = sum(1);
+  const quarterly = sum(3);
+  const annual = sum(12);
+  return { monthly, quarterly, annual, perYear: round2(monthly * 12 + quarterly * 4 + annual) };
+};
+const addBilled = (list: Billed[]): Billed => ({ monthly: round2(list.reduce((a, b) => a + b.monthly, 0)), quarterly: round2(list.reduce((a, b) => a + b.quarterly, 0)), annual: round2(list.reduce((a, b) => a + b.annual, 0)), perYear: round2(list.reduce((a, b) => a + b.perYear, 0)) });
 
 export type AgreementView = {
   id: string;
@@ -76,6 +90,8 @@ export type AgreementView = {
   chargeMonthly: number;
   costMonthly: number | null;
   marginMonthly: number | null;
+  /** What actually goes on the invoices, per period. */
+  billed: Billed;
   unknownCostLines: number;
   attention: number;
 };
@@ -99,6 +115,7 @@ function lineView(l: LineRow, register: RegisterRow[], disc: (typeof billingDisc
   const costMonthlyPerUnit = costBasis === "supplier" ? supplierPerUnit : costBasis === "recorded" ? recordedMonthlyPerUnit : null;
   const costStale = supplierPerUnit !== null && (recordedMonthlyPerUnit === null || Math.abs(supplierPerUnit - recordedMonthlyPerUnit) > 0.01);
   const chargeMonthly = recurring ? round2(qty * sellMonthlyPerUnit) : 0;
+  const chargePerPeriod = recurring ? round2(qty * Number(l.unitPrice)) : 0;
   const costMonthly = recurring && costMonthlyPerUnit !== null ? round2(qty * costMonthlyPerUnit) : null;
   const d = disc.find((x) => x.contractLineId === l.id && (x.status === "open" || x.status === "accepted")) ?? null;
   const discrepancy = d ? { id: d.id, source: d.source, status: d.status, contracted: Number(d.contractedQty), observed: d.observedQty, difference: Number(d.difference) } : null;
@@ -130,6 +147,7 @@ function lineView(l: LineRow, register: RegisterRow[], disc: (typeof billingDisc
     costMonthlyPerUnit,
     costBasis,
     chargeMonthly,
+    chargePerPeriod,
     costMonthly,
     marginMonthly: costMonthly === null ? null : round2(chargeMonthly - costMonthly),
     costStale,
@@ -170,6 +188,7 @@ function agreementView(c: ContractRow, lines: LineRow[], register: RegisterRow[]
     chargeMonthly,
     costMonthly,
     marginMonthly: costMonthly === null ? null : round2(chargeMonthly - costMonthly),
+    billed: billedOf(recurring.map((v) => ({ months: PERIOD_MONTHS[v.billingFrequency] ?? null, charge: v.chargePerPeriod }))),
     unknownCostLines: recurring.length - known.length,
     attention: views.filter((v) => v.status === "count_differs" || v.status === "proposed_change" || v.status === "cost_stale").length,
   };
@@ -197,7 +216,7 @@ export type CompanyBillingPicture = {
   /** Supplied services no active agreement line accounts for: unmapped, free, internal, commitment, investigate, or charged on a line of an inactive agreement. */
   otherServices: RegisterRow[];
   register: RegisterRow[];
-  totals: { chargeMonthly: number; costMonthly: number | null; marginMonthly: number | null; unknownCostLines: number; nextInvoiceOn: string | null; attention: number };
+  totals: { chargeMonthly: number; costMonthly: number | null; marginMonthly: number | null; billed: Billed; unknownCostLines: number; nextInvoiceOn: string | null; attention: number };
 };
 
 export async function companyBillingPicture(companyId: string, asOf = new Date().toISOString().slice(0, 10)): Promise<CompanyBillingPicture> {
@@ -220,7 +239,7 @@ export async function companyBillingPicture(companyId: string, asOf = new Date()
     agreements,
     otherServices,
     register,
-    totals: { chargeMonthly, costMonthly, marginMonthly: costMonthly === null ? null : round2(chargeMonthly - costMonthly), unknownCostLines: active.reduce((a, x) => a + x.unknownCostLines, 0), nextInvoiceOn, attention: active.reduce((a, x) => a + x.attention, 0) + otherServices.filter((r) => r.state === "unmapped" || r.state === "investigate" || r.reviewOverdue).length },
+    totals: { chargeMonthly, costMonthly, marginMonthly: costMonthly === null ? null : round2(chargeMonthly - costMonthly), billed: addBilled(active.map((a) => a.billed)), unknownCostLines: active.reduce((a, x) => a + x.unknownCostLines, 0), nextInvoiceOn, attention: active.reduce((a, x) => a + x.attention, 0) + otherServices.filter((r) => r.state === "unmapped" || r.state === "investigate" || r.reviewOverdue).length },
   };
 }
 
@@ -233,6 +252,7 @@ export type CustomerBillingRow = {
   chargeMonthly: number;
   costMonthly: number | null;
   marginMonthly: number | null;
+  billed: Billed;
   unknownCostLines: number;
   unmapped: number;
   attention: number;
@@ -274,6 +294,7 @@ export async function customersBillingPicture(asOf = new Date().toISOString().sl
       chargeMonthly,
       costMonthly,
       marginMonthly: costMonthly === null ? null : round2(chargeMonthly - costMonthly),
+      billed: addBilled(agreements.map((a) => a.billed)),
       unknownCostLines: agreements.reduce((a, x) => a + x.unknownCostLines, 0),
       unmapped,
       attention: agreements.reduce((a, x) => a + x.attention, 0) + unmapped + other.filter((r) => r.state === "investigate" || r.reviewOverdue).length,
