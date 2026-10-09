@@ -227,7 +227,8 @@ describe("portal tickets: scope and leakage", () => {
     expect(dump).not.toContain(RESTRICTED_FILE);
     expect(dump).not.toContain(STAFF_BCC);
     expect(dump).not.toContain("timeSpent");
-    expect(dump).not.toContain("bcc");
+    // Field names only: a random id can contain "bcc" by chance.
+    expect(dump).not.toMatch(/"bcc[A-Za-z]*":/);
     expect(t.messages.map((m) => m.bodyText)).toEqual(expect.arrayContaining(["We have cleared the jam remotely, please try again."]));
     expect(t.messages.some((m) => m.bodyText.includes(SECRET_NOTE))).toBe(false);
     const visibleFiles = [...t.messages.flatMap((m) => m.attachments), ...t.looseAttachments].map((a) => a.fileName);
