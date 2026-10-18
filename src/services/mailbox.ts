@@ -1629,7 +1629,7 @@ async function queueAcknowledgement(
 export type QueueOutboundInput = {
   mailbox: Mailbox;
   ticketId: string | null;
-  kind: "ack" | "reply" | "new" | "test" | "portal";
+  kind: "ack" | "reply" | "new" | "test" | "portal" | "nudge";
   subject: string;
   markdown: string;
   to: { name?: string | null; email: string }[];
@@ -1758,7 +1758,7 @@ export async function queueOutbound(input: QueueOutboundInput) {
         input.ticketId,
         input.isAutomated ? "system" : "message",
         input.isAutomated
-          ? `Acknowledgement queued to ${input.to.map((r) => r.email).join(", ")}`
+          ? `${input.kind === "nudge" ? "Reminder" : "Acknowledgement"} queued to ${input.to.map((r) => r.email).join(", ")}`
           : `E-mail queued to ${input.to.map((r) => r.email).join(", ")}`,
         input.actor,
         { outboxId: ob.id },
@@ -2145,6 +2145,110 @@ async function markFailed(
   return "failed" as const;
 }
 
+
+// ---------------------------------------------------------------------------
+// Awaiting-customer reminders (sent by the "Send reminder to customer" rule action)
+// ---------------------------------------------------------------------------
+export const DEFAULT_NUDGE_BODY = `Hello {{requester}},
+
+We are still waiting to hear back from you on **{{reference}} {{subject}}**. Could you reply to this e-mail with the information we asked for, or let us know if the problem has gone away?
+
+If we do not hear from you, we will close the request for now; you can reopen it at any time by replying.
+
+{{signature}}`;
+
+/**
+ * Sends one automated reminder to the requester of a ticket that is awaiting
+ * their reply. Guards: the ticket must still be awaiting the customer, not
+ * snoozed, have a requester address, and not have had a reminder in the last
+ * 20 hours (rule cooldowns govern the cadence; this is the floor). Returns
+ * false when nothing was sent.
+ */
+export async function sendCustomerReminder(
+  ticketId: string,
+  opts: { body?: string | null; ruleName?: string } = {},
+) {
+  const m = await getDefaultMailbox();
+  if (!m || (!mailboxIsLive(m) && process.env.DEMO_MODE !== "true"))
+    return false;
+  const t = await surviving(ticketId);
+  if (!t || t.id !== ticketId) return false;
+  if (t.status !== "awaiting_customer" || !t.requesterEmail) return false;
+  if (t.snoozedUntil && t.snoozedUntil.getTime() > Date.now()) return false;
+  const [recent] = await db
+    .select({ id: ticketMessages.id })
+    .from(ticketMessages)
+    .where(
+      and(
+        eq(ticketMessages.ticketId, ticketId),
+        eq(ticketMessages.isAutomated, true),
+        eq(ticketMessages.automatedReason, "nudge"),
+        sql`${ticketMessages.at} > now() - interval '20 hours'`,
+      ),
+    )
+    .limit(1);
+  if (recent) return false;
+  const [last] = await db
+    .select({ id: ticketMessages.id })
+    .from(ticketMessages)
+    .where(
+      and(
+        eq(ticketMessages.ticketId, ticketId),
+        eq(ticketMessages.channel, "email"),
+        sql`${ticketMessages.externalMessageId} is not null`,
+      ),
+    )
+    .orderBy(desc(ticketMessages.at))
+    .limit(1);
+  const ref = ticketReference(t.number);
+  const vars = {
+    reference: ref,
+    subject: t.subject,
+    requester: t.requesterName ?? t.requesterEmail,
+    signature: m.signature ?? "",
+  };
+  const body = fillTemplate(opts.body?.trim() || DEFAULT_NUDGE_BODY, vars);
+  const sent = await reminderCount(ticketId);
+  await queueOutbound({
+    mailbox: m,
+    ticketId,
+    kind: "nudge",
+    subject: t.subject.includes(ref) ? `Re: ${t.subject.replace(/^Re:\s*/i, "")}` : `Re: [${ref}] ${t.subject}`,
+    markdown: body,
+    to: [{ name: t.requesterName, email: t.requesterEmail }],
+    cc: [],
+    bcc: [],
+    replyToMessageId: last?.id ?? null,
+    attachmentIds: [],
+    actor: { id: null, type: "automation" },
+    isAutomated: true,
+    appendSignature: false,
+    idempotencyKey: `nudge:${ticketId}:${sent + 1}`,
+  });
+  await recordEvent(
+    ticketId,
+    "automation",
+    `Reminder sent to ${t.requesterEmail}${opts.ruleName ? ` (rule "${opts.ruleName}")` : ""}`,
+    { id: null, type: "automation" },
+    { reason: "nudge" },
+  );
+  return true;
+}
+
+/** How many reminders a ticket has had (used by rule conditions to cap them). */
+export async function reminderCount(ticketId: string) {
+  const [{ n }] = await db
+    .select({ n: sql<number>`count(*)`.mapWith(Number) })
+    .from(ticketMessages)
+    .where(
+      and(
+        eq(ticketMessages.ticketId, ticketId),
+        eq(ticketMessages.isAutomated, true),
+        eq(ticketMessages.automatedReason, "nudge"),
+      ),
+    );
+  return n;
+}
 // ---------------------------------------------------------------------------
 // Agent-facing helpers
 // ---------------------------------------------------------------------------

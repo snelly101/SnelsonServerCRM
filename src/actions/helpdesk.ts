@@ -16,6 +16,7 @@ import {
   ticketFieldsSchema,
   ticketLinkSchema,
   ticketMessageSchema,
+  ticketSnoozeSchema,
   ticketStatusSchema,
   timeEntrySchema,
 } from "@/lib/validation-helpdesk";
@@ -26,6 +27,8 @@ import {
   assignTicket,
   bulkUpdate,
   changeStatus,
+  snoozeTicket,
+  unsnoozeTicket,
   createTicket,
   deleteCategory,
   deleteTeam,
@@ -90,6 +93,33 @@ export async function updateTicketFieldsAction(
       id: u.id,
       type: "user",
     });
+    revalidate(id);
+    return { version: r.version };
+  });
+}
+
+export async function snoozeTicketAction(
+  id: string,
+  _prev: ActionResult<unknown> | null,
+  fd: FormData,
+): Promise<ActionResult<{ version: number }>> {
+  return runAction(async () => {
+    const u = await requireActionPermission("helpdesk.agent");
+    const input = ticketSnoozeSchema.parse(formToObject(fd));
+    const r = await snoozeTicket(
+      z.uuid().parse(id),
+      { until: input.until, reason: input.reason, version: input.version },
+      { id: u.id, type: "user" },
+    );
+    revalidate(id);
+    return { version: r.version };
+  });
+}
+
+export async function unsnoozeTicketAction(id: string): Promise<ActionResult<{ version: number }>> {
+  return runAction(async () => {
+    const u = await requireActionPermission("helpdesk.agent");
+    const r = await unsnoozeTicket(z.uuid().parse(id), { id: u.id, type: "user" });
     revalidate(id);
     return { version: r.version };
   });

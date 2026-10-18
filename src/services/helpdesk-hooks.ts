@@ -26,6 +26,14 @@ export async function afterTicketChange(
   actor: Actor | null,
   reason: string,
 ) {
+  if (trigger === "customer_replied") {
+    try {
+      const { wakeOnCustomerReply } = await import("./helpdesk");
+      await wakeOnCustomerReply(ticketId);
+    } catch (err) {
+      logger.warn({ err, ticketId }, "snooze wake on reply failed");
+    }
+  }
   try {
     const { recomputeTicketSla } = await import("./helpdesk-sla");
     await recomputeTicketSla(ticketId, reason);

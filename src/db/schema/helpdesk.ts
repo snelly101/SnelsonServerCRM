@@ -217,6 +217,12 @@ export const tickets = pgTable(
     mailboxId: uuid("mailbox_id"),
     /** Denormalised total of time entries in minutes. */
     timeSpentMinutes: integer("time_spent_minutes").notNull().default(0),
+    /** Parked until this instant: hidden from the active queues, woken by the worker, a customer reply or a status change. */
+    snoozedUntil: timestamp("snoozed_until", { withTimezone: true }),
+    snoozeReason: text("snooze_reason"),
+    snoozedByUserId: text("snoozed_by_user_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
     createdByUserId: text("created_by_user_id").references(() => user.id, {
       onDelete: "set null",
     }),

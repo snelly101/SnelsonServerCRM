@@ -9,7 +9,7 @@ import {
 import { PageHeader, Card } from "@/components/ui/page";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmButton } from "@/components/ui/confirm-button";
-import { deleteRuleAction } from "@/actions/helpdesk-admin";
+import { addReminderRuleAction, deleteRuleAction } from "@/actions/helpdesk-admin";
 import { fmtDateTime } from "@/lib/format";
 import {
   AUTOMATION_TRIGGER_LABELS,
@@ -45,7 +45,24 @@ export default async function AutomationAdminPage() {
       <PageHeader
         title="Automation rules"
         description="Rules run in order for their trigger. Each rule runs at most once per ticket within its cooldown, a rule can stop later rules, and a rule's own changes never re-trigger rules beyond three chained steps. Every run is logged below and on the ticket."
-        actions={<RuleDialog options={opts} />}
+        actions={
+          <>
+            {!rules.some((r) => r.actions.some((a) => a.type === "nudge_customer")) && (
+              <ConfirmButton
+                variant="secondary"
+                size="sm"
+                action={addReminderRuleAction}
+                title="Add the customer reminder rule?"
+                description="While a ticket is awaiting the customer, the requester is e-mailed a reminder two business days after our last message, at most twice, one per day. You can edit the wording and timing afterwards."
+                confirmLabel="Add rule"
+                successMessage="Reminder rule added"
+              >
+                Add customer reminders
+              </ConfirmButton>
+            )}
+            <RuleDialog options={opts} />
+          </>
+        }
       />
       <Card title="Rules" padded={false}>
         {rules.length === 0 ? (

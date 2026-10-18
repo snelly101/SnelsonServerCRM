@@ -182,3 +182,6 @@ Ideas and requests not yet scheduled. Each item states what it is, why, and the 
 
 
 _Status (October 2026): the interface was restyled to the V14 design language (icon rail, pill navigation, orange feature cards, Inter, blur-fade transitions); see `docs/design-system.md`._
+
+
+_Helpdesk (October 2026): ticket snooze (park until a date, auto-wake on customer reply) and automated awaiting-customer reminders as a rule action are built; see `docs/helpdesk-operations.md` §6b._

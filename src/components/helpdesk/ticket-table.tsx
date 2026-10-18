@@ -45,6 +45,7 @@ export type TicketRow = {
   createdAt: Date;
   timeSpentMinutes: number;
   tags: string[];
+  snoozedUntil?: Date | null;
 };
 
 const minutes = (n: number) =>
@@ -347,6 +348,11 @@ export function TicketTable({
                       </Link>
                       <span className="ml-1 inline-flex gap-1 align-middle">
                         {t.needsReview && <Badge tone="amber">review</Badge>}
+                        {t.snoozedUntil && new Date(t.snoozedUntil).getTime() > Date.now() && (
+                          <Badge tone="slate" title={`Snoozed until ${new Date(t.snoozedUntil).toLocaleString("en-GB")}`}>
+                            snoozed
+                          </Badge>
+                        )}
                         {t.tags.slice(0, 3).map((tag) => (
                           <Badge key={tag} tone="slate">
                             {tag}

@@ -49,6 +49,10 @@ export const RULE_FIELDS = [
   "hoursSinceActivity",
   "hoursSinceCreated",
   "hoursSinceResolved",
+  "hoursSinceCustomerMessage",
+  "businessHoursSinceAgentMessage",
+  "reminderCount",
+  "snoozed",
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -180,12 +184,25 @@ async function snapshot(
   if (!t) return null;
   const h = (d: Date | null) =>
     d ? (Date.now() - d.getTime()) / 3600000 : null;
+  // Business time since the agent last wrote, on the customer's SLA calendar (round the clock without a policy).
+  let businessHoursSinceAgentMessage: number | null = null;
+  if (t.lastAgentMessageAt) {
+    const { resolvePolicy, businessHoursFor } = await import("./helpdesk-sla");
+    const { businessMinutesBetween } = await import("@/lib/helpdesk/business-hours");
+    const bh = await businessHoursFor(await resolvePolicy(t.companyId));
+    businessHoursSinceAgentMessage = businessMinutesBetween(t.lastAgentMessageAt, new Date(), bh) / 60;
+  }
+  const { reminderCount } = await import("./mailbox");
   return {
     ...t,
     requesterDomain: t.requesterEmail?.split("@")[1] ?? null,
     hoursSinceActivity: h(t.lastActivityAt),
     hoursSinceCreated: h(t.createdAt),
     hoursSinceResolved: h(t.resolvedAt),
+    hoursSinceCustomerMessage: h(t.lastCustomerMessageAt),
+    businessHoursSinceAgentMessage,
+    reminderCount: await reminderCount(ticketId),
+    snoozed: Boolean(t.snoozedUntil && t.snoozedUntil.getTime() > Date.now()),
   };
 }
 
@@ -373,6 +390,10 @@ async function applyAction(
       if (next.length === tags.length) return false;
       await db.update(tickets).set({ tags: next }).where(eq(tickets.id, id));
       return true;
+    }
+    case "nudge_customer": {
+      const { sendCustomerReminder } = await import("./mailbox");
+      return sendCustomerReminder(id, { body: val, ruleName: rule.name });
     }
     case "set_status":
       if (!val || snap.status === val) return false;

@@ -175,6 +175,13 @@ export const ticketFieldsSchema = z.object({
 });
 export type TicketFieldsInput = z.infer<typeof ticketFieldsSchema>;
 
+export const ticketSnoozeSchema = z.object({
+  until: z.coerce.date(),
+  reason: optionalText,
+  version,
+});
+export type TicketSnoozeInput = z.infer<typeof ticketSnoozeSchema>;
+
 export const ticketStatusSchema = z.object({
   status: z.enum(TICKET_STATUSES),
   resolutionSummary: optionalLong,
@@ -265,6 +272,7 @@ export const TICKET_VIEWS = [
   "open",
   "awaiting_customer",
   "awaiting_third_party",
+  "snoozed",
   "overdue",
   "recent",
   "resolved",
@@ -278,6 +286,7 @@ export const TICKET_VIEW_LABELS: Record<TicketView, string> = {
   open: "All open",
   awaiting_customer: "Awaiting customer",
   awaiting_third_party: "Awaiting third party",
+  snoozed: "Snoozed",
   overdue: "Overdue",
   recent: "Recently updated",
   resolved: "Resolved",
@@ -452,6 +461,7 @@ export const RULE_ACTION_TYPES = [
   "add_note",
   "notify_users",
   "notify_assignee",
+  "nudge_customer",
   "close",
 ] as const;
 export const RULE_ACTION_LABELS: Record<
@@ -469,6 +479,7 @@ export const RULE_ACTION_LABELS: Record<
   add_note: "Add internal note",
   notify_users: "Notify users",
   notify_assignee: "Notify assignee",
+  nudge_customer: "Send reminder to customer",
   close: "Close (if resolved)",
 };
 const ruleConditionSchema = z.object({

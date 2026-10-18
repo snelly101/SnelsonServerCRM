@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useActionState, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { cn } from "@/lib/utils";
+import { useToast } from "@/components/ui/toast";
 import {
   Pencil,
   UserCheck,
@@ -14,6 +16,7 @@ import {
   Bell,
   BellOff,
   X,
+  AlarmClock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -39,6 +42,8 @@ import {
   addTimeEntryAction,
   assignTicketAction,
   changeStatusAction,
+  snoozeTicketAction,
+  unsnoozeTicketAction,
   deleteTimeEntryAction,
   followTicketAction,
   linkTicketAction,
@@ -57,6 +62,7 @@ import {
   TICKET_TYPES,
   TICKET_TYPE_LABELS,
   type TicketStatus,
+  OPEN_STATUSES,
 } from "@/lib/validation-helpdesk";
 import { fmtDateTime, fmtRelative, type DisplaySettings } from "@/lib/format";
 import { TRANSITIONS } from "@/lib/helpdesk-transitions";
@@ -105,6 +111,8 @@ export type SidePanelTicket = {
   resolutionSummary: string | null;
   resolutionCategory: string | null;
   timeSpentMinutes: number;
+  snoozedUntil: Date | null;
+  snoozeReason: string | null;
   customFields: Record<string, unknown>;
   mergedInto: { id: string; reference: string; subject: string } | null;
   parent: {
@@ -213,7 +221,12 @@ export function SidePanel({
           <h3 className="text-xs font-medium uppercase tracking-wide text-slate-500">
             Status
           </h3>
-          {editable && <StatusDialog t={t} />}
+          {editable && (
+            <div className="flex items-center gap-1">
+              {OPEN_STATUSES.includes(t.status as TicketStatus) && <SnoozeDialog t={t} settings={settings} />}
+              <StatusDialog t={t} />
+            </div>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <StatusBadge status={t.status} />
@@ -225,6 +238,9 @@ export function SidePanel({
             </Badge>
           )}
         </div>
+        {t.snoozedUntil && new Date(t.snoozedUntil).getTime() > Date.now() && (
+          <SnoozedNotice t={t} settings={settings} editable={editable} />
+        )}
         <dl className="mt-2 space-y-1 text-xs text-slate-600">
           <div className="flex justify-between gap-2">
             <dt>First response</dt>
@@ -717,6 +733,123 @@ function ParticipantsBlock({
           />
           <SubmitButton size="sm">Add CC</SubmitButton>
         </form>
+      )}
+    </div>
+  );
+}
+
+
+/** Quick choices for the snooze dialog, computed when it opens. */
+function snoozeChoices(now = new Date()) {
+  const at = (d: Date, h: number) => {
+    const x = new Date(d);
+    x.setHours(h, 0, 0, 0);
+    return x;
+  };
+  const tomorrow = new Date(now);
+  tomorrow.setDate(now.getDate() + 1);
+  const monday = new Date(now);
+  monday.setDate(now.getDate() + ((8 - now.getDay()) % 7 || 7));
+  const week = new Date(now);
+  week.setDate(now.getDate() + 7);
+  const laterToday = new Date(now.getTime() + 4 * 3600000);
+  return [
+    { label: "In 4 hours", when: laterToday },
+    { label: "Tomorrow 9:00", when: at(tomorrow, 9) },
+    { label: "Next Monday 9:00", when: at(monday, 9) },
+    { label: "In a week", when: at(week, 9) },
+  ];
+}
+
+const toLocalInput = (d: Date) => {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
+function SnoozeDialog({ t, settings }: { t: SidePanelTicket; settings: DisplaySettings }) {
+  const [open, setOpen] = useState(false);
+  const [until, setUntil] = useState("");
+  const [result, formAction] = useActionState(snoozeTicketAction.bind(null, t.id), null);
+  const router = useRouter();
+  useEffect(() => {
+    if (result?.ok) {
+      setOpen(false);
+      router.refresh();
+    }
+  }, [result, router]);
+  const choices = snoozeChoices();
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={() => {
+          setUntil(toLocalInput(choices[1].when));
+          setOpen(true);
+        }}
+      >
+        <AlarmClock className="h-3.5 w-3.5" /> Snooze
+      </Button>
+      <DialogContent title={`Snooze ${t.reference}`} description="Hide it from the queues until then. It comes back on time, or sooner if the customer replies. The status and SLA clocks are not changed.">
+        <form action={formAction} className="space-y-3">
+          <input type="hidden" name="version" value={t.version} />
+          <input type="hidden" name="until" value={until ? new Date(until).toISOString() : ""} />
+          <FormMessage result={result && !result.ok ? result : null} />
+          <div className="flex flex-wrap gap-1.5">
+            {choices.map((c) => {
+              const active = until === toLocalInput(c.when);
+              return (
+                <button key={c.label} type="button" onClick={() => setUntil(toLocalInput(c.when))} className={cn("pill h-8", active && "pill-active")}>
+                  {c.label}
+                </button>
+              );
+            })}
+          </div>
+          <Field label="Until" htmlFor="sn-until" error={fieldErrors(result, "until")} help={until ? `Wakes ${fmtDateTime(new Date(until), settings)}` : undefined}>
+            <Input id="sn-until" type="datetime-local" value={until} onChange={(e) => setUntil(e.target.value)} required min={toLocalInput(new Date())} />
+          </Field>
+          <Field label="Reason" htmlFor="sn-reason" help="Shown on the ticket and in the wake-up notification.">
+            <Input id="sn-reason" name="reason" placeholder="e.g. parts due Tuesday, customer on holiday" maxLength={500} />
+          </Field>
+          <div className="flex justify-end">
+            <SubmitButton disabled={!until}>Snooze</SubmitButton>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function SnoozedNotice({ t, settings, editable }: { t: SidePanelTicket; settings: DisplaySettings; editable: boolean }) {
+  const router = useRouter();
+  const toast = useToast();
+  const [pending, start] = useTransition();
+  return (
+    <div className="mt-2 flex items-start justify-between gap-2 rounded-lg bg-amber-50 px-2.5 py-2 text-xs text-amber-900">
+      <div className="min-w-0">
+        <div className="flex items-center gap-1.5 font-medium">
+          <AlarmClock className="h-3.5 w-3.5 shrink-0" aria-hidden /> Snoozed until {fmtDateTime(t.snoozedUntil!, settings)}
+        </div>
+        {t.snoozeReason && <div className="mt-0.5 opacity-90">{t.snoozeReason}</div>}
+      </div>
+      {editable && (
+        <Button
+          size="sm"
+          variant="ghost"
+          className="shrink-0 text-amber-900"
+          loading={pending}
+          onClick={() =>
+            start(async () => {
+              const r = await unsnoozeTicketAction(t.id);
+              if (r.ok) {
+                toast("Ticket is back in the queue");
+                router.refresh();
+              } else toast(r.error, "error");
+            })
+          }
+        >
+          Wake now
+        </Button>
       )}
     </div>
   );

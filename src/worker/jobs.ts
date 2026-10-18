@@ -331,7 +331,7 @@ export async function registerJobs(
     { retryLimit: 1, singletonKey: "m365-subscriptions" },
   );
 
-  // SLA deadlines: flag breaches, warn assignees an hour ahead, then let rules react.
+  // SLA deadlines: wake snoozed tickets, flag breaches, warn assignees an hour ahead, then let rules react.
   await boss.createQueue(QUEUES.helpdeskSla, {
     deleteAfterSeconds: 7 * 24 * 3600,
     retryLimit: 0,
@@ -340,6 +340,12 @@ export async function registerJobs(
   await boss.work(QUEUES.helpdeskSla, async () => {
     const { checkSlaDeadlines } = await import("@/services/helpdesk-sla");
     const { runAutomation } = await import("@/services/helpdesk-automation");
+    const { wakeSnoozedTickets } = await import("@/services/helpdesk");
+    const woken = await wakeSnoozedTickets().catch((err) => {
+      logger.warn({ err }, "snooze wake failed");
+      return { woken: 0 };
+    });
+    if (woken.woken) logger.info(woken, "helpdesk snoozed tickets woken");
     const res = await checkSlaDeadlines();
     for (const b of res.breaches)
       await runAutomation("sla_breached", b.ticketId).catch((err) =>
@@ -357,6 +363,7 @@ export async function registerJobs(
     await setSystemStatus("helpdesk.sla.last", {
       breaches: res.breaches.length,
       dueSoon: res.dueSoon.length,
+      woken: woken.woken,
     });
   });
   await boss.schedule(

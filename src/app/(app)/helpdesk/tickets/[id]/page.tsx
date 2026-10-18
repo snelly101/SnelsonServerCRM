@@ -16,6 +16,8 @@ import { getDefaultMailbox, mailboxIsLive } from "@/services/mailbox";
 import { Card } from "@/components/ui/page";
 import { Alert } from "@/components/ui/alert";
 import { StatusBadge, PriorityBadge } from "@/components/helpdesk/badges";
+import { Badge } from "@/components/ui/badge";
+import { fmtDateTime } from "@/lib/format";
 import { Conversation } from "./conversation";
 import { Composer } from "./composer";
 import { SidePanel } from "./side-panel";
@@ -128,6 +130,9 @@ export default async function TicketPage({
           <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
             <StatusBadge status={t.status} />
             <PriorityBadge priority={t.priority} />
+            {t.snoozedUntil && t.snoozedUntil.getTime() > Date.now() && (
+              <Badge tone="amber">snoozed until {fmtDateTime(t.snoozedUntil, settings)}</Badge>
+            )}
             <span>
               {t.messages.length} message{t.messages.length === 1 ? "" : "s"}
             </span>

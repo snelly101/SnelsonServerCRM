@@ -87,6 +87,7 @@ export default async function TicketsPage({
     awaiting_customer: counts.awaitingCustomer,
     awaiting_third_party: counts.awaitingThirdParty,
     overdue: counts.overdue,
+    snoozed: counts.snoozed,
     review: counts.review,
   };
   const keep = new URLSearchParams();
@@ -107,7 +108,7 @@ export default async function TicketsPage({
         role="tablist"
         aria-label="Ticket views"
       >
-        {TICKET_VIEWS.filter((v) => v !== "review" || counts.review > 0).map(
+        {TICKET_VIEWS.filter((v) => (v !== "review" || counts.review > 0) && (v !== "snoozed" || counts.snoozed > 0 || view === "snoozed")).map(
           (v) => (
             <Link
               key={v}

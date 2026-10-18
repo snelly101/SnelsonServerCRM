@@ -166,6 +166,36 @@ export async function saveRuleAction(
     return { id: rid };
   });
 }
+/** Creates the recommended "awaiting customer" reminder rule: two business days after our last message, at most two reminders, one per day. */
+export async function addReminderRuleAction(): Promise<ActionResult<{ id: string }>> {
+  return runAction(async () => {
+    const u = await requireActionPermission("helpdesk.admin");
+    const id = await saveRule(
+      null,
+      {
+        name: "Remind the customer after two business days",
+        description: "While a ticket is awaiting the customer, e-mail the requester a reminder two business days after our last message, up to twice. Pair with a rule that resolves after the second reminder if you want tickets to close themselves.",
+        trigger: "schedule",
+        match: "all",
+        conditions: [
+          { field: "status", op: "eq", value: "awaiting_customer" },
+          { field: "businessHoursSinceAgentMessage", op: "gt", value: 16 },
+          { field: "reminderCount", op: "lt", value: 2 },
+        ],
+        actions: [{ type: "nudge_customer", value: null }],
+        sortOrder: 100,
+        stopProcessing: false,
+        cooldownMinutes: 1440,
+        afterMinutes: 0,
+        active: true,
+      },
+      u.id,
+    );
+    revalidate();
+    return { id };
+  });
+}
+
 export async function deleteRuleAction(id: string): Promise<ActionResult<undefined>> {
   return runAction(async () => {
     const u = await requireActionPermission("helpdesk.admin");
