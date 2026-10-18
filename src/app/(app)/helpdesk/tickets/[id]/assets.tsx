@@ -50,10 +50,10 @@ export function AssetsPanel({
     });
   const name = (d: { displayName: string | null; systemName: string | null }) => d.displayName ?? d.systemName ?? "device";
   return (
-    <section className="rounded-lg border border-slate-200 bg-surface p-3 text-sm" aria-label="Devices">
+    <section className="card p-3 text-sm" aria-label="Devices">
       <div className="mb-2 flex items-center justify-between">
         <h3 className="text-xs font-medium uppercase tracking-wide text-slate-500">Devices</h3>
-        <Link href="/devices" className="text-xs text-brand-700 hover:underline">
+        <Link href="/devices" className="text-xs link">
           all devices
         </Link>
       </div>

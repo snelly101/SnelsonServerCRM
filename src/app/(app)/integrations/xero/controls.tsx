@@ -154,7 +154,7 @@ export function MappingTable({ rows, canManage, configured }: { rows: Row[]; can
     <div>
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-4 py-2 text-sm">
         {(["all", "unlinked", "linked"] as const).map((f) => (
-          <button key={f} type="button" onClick={() => setFilter(f)} className={`rounded px-2 py-0.5 ${filter === f ? "bg-fg text-surface" : "text-slate-600 hover:bg-slate-100"}`}>
+          <button key={f} type="button" onClick={() => setFilter(f)} className={`rounded-full px-2.5 py-0.5 ${filter === f ? "bg-selection text-selection-fg" : "text-slate-600 hover:bg-slate-100"}`}>
             {f}
           </button>
         ))}
@@ -174,7 +174,7 @@ export function MappingTable({ rows, canManage, configured }: { rows: Row[]; can
           {shown.map((r) => (
             <tr key={r.id}>
               <td>
-                <Link href={`/companies/${r.id}`} className="font-medium text-brand-700 hover:underline">
+                <Link href={`/companies/${r.id}`} className="font-medium link">
                   {r.name}
                 </Link>
                 <div className="text-xs text-slate-500">{r.status}</div>
@@ -199,7 +199,7 @@ export function MappingTable({ rows, canManage, configured }: { rows: Row[]; can
                         <Badge tone={s.confidence === "high" ? "green" : s.confidence === "medium" ? "amber" : "slate"}>{s.reason.replace("_", " ")}</Badge>
                         <span>{s.name}</span>
                         {canManage && (
-                          <button type="button" className="inline-flex items-center gap-0.5 text-brand-700 hover:underline" onClick={() => run(() => linkXeroContactAction(r.id, s.contactId))}>
+                          <button type="button" className="inline-flex items-center gap-0.5 link" onClick={() => run(() => linkXeroContactAction(r.id, s.contactId))}>
                             <Link2 className="h-3 w-3" /> Link
                           </button>
                         )}
@@ -291,7 +291,7 @@ export function UnlinkedCustomersTable({ rows, canManage, currency }: { rows: Un
                 {r.match ? (
                   <span>
                     <Badge tone={r.match.confidence === "high" ? "green" : r.match.confidence === "medium" ? "amber" : "slate"}>{r.match.reason.replace(/_/g, " ")}</Badge>{" "}
-                    <Link href={`/companies/${r.match.id}`} className="text-brand-700 hover:underline">
+                    <Link href={`/companies/${r.match.id}`} className="link">
                       {r.match.name}
                     </Link>
                     {r.match.alreadyLinked && <span className="text-slate-400"> (linked to another Xero contact)</span>}
@@ -371,7 +371,7 @@ export function RepeatingInvoicesTable({ rows, canWrite, currency }: { rows: Rep
             <tr key={r.id}>
               <td>
                 {r.companyId ? (
-                  <Link href={`/companies/${r.companyId}`} className="font-medium text-brand-700 hover:underline">
+                  <Link href={`/companies/${r.companyId}`} className="font-medium link">
                     {r.companyName}
                   </Link>
                 ) : (
@@ -396,7 +396,7 @@ export function RepeatingInvoicesTable({ rows, canWrite, currency }: { rows: Rep
               <td className="text-right tabular-nums">{r.monthlyValue === null ? "—" : money(r.monthlyValue)}</td>
               <td>
                 {r.contractId ? (
-                  <Link href={`/contracts/${r.contractId}`} className="text-brand-700 hover:underline">
+                  <Link href={`/contracts/${r.contractId}`} className="link">
                     imported
                   </Link>
                 ) : (

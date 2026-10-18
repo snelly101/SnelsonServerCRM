@@ -133,7 +133,7 @@ export function NotificationList({
                 {!r.readAt && (
                   <button
                     type="button"
-                    className="shrink-0 text-xs text-brand-700 hover:underline"
+                    className="shrink-0 text-xs link"
                     onClick={() => mark([r.id])}
                   >
                     Mark read

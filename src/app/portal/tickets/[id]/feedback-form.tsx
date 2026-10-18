@@ -11,11 +11,11 @@ export function FeedbackForm({ ticketId, existing }: { ticketId: string; existin
   const [open, setOpen] = useState(!existing);
   if (!open)
     return (
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-surface px-4 py-3 text-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2 card px-4 py-3 text-sm">
         <span className="text-slate-700">
           Thanks for rating this request {Array.from({ length: 5 }, (_, i) => <Star key={i} className={`inline h-4 w-4 ${i < (existing?.rating ?? 0) ? "fill-amber-400 text-amber-400" : "text-slate-300"}`} />)}
         </span>
-        <button type="button" className="text-xs text-brand-700 hover:underline" onClick={() => setOpen(true)}>Change</button>
+        <button type="button" className="text-xs link" onClick={() => setOpen(true)}>Change</button>
       </div>
     );
   return (

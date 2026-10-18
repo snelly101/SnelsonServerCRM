@@ -179,7 +179,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
                   {mrr.byCompany.map((r) => (
                     <tr key={r.companyId}>
                       <td>
-                        <Link href={`/companies/${r.companyId}`} className="font-medium text-brand-700 hover:underline">
+                        <Link href={`/companies/${r.companyId}`} className="font-medium link">
                           {r.companyName}
                         </Link>
                       </td>
@@ -246,7 +246,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
                   {renewals.rows.map((r) => (
                     <tr key={r.id}>
                       <td>
-                        <Link href={`/contracts/${r.id}`} className="font-medium text-brand-700 hover:underline">
+                        <Link href={`/contracts/${r.id}`} className="font-medium link">
                           {r.name}
                         </Link>
                         <div className="text-xs text-slate-500">{r.companyName}</div>
@@ -320,7 +320,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
                           </Link>{" "}
                           {t.priority !== "normal" && <Badge tone={t.priority === "urgent" ? "red" : t.priority === "high" ? "amber" : "slate"}>{t.priority}</Badge>}
                         </td>
-                        <td>{t.companyId ? <Link href={`/companies/${t.companyId}`} className="text-brand-700 hover:underline">{t.companyName}</Link> : "—"}</td>
+                        <td>{t.companyId ? <Link href={`/companies/${t.companyId}`} className="link">{t.companyName}</Link> : "—"}</td>
                         <td>{t.owner ?? "Unassigned"}</td>
                         <td className="whitespace-nowrap text-red-700">{fmtDate(t.dueDate, settings)}</td>
                       </tr>
@@ -362,7 +362,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
                   <tbody>
                     {invoices.byCompany.map((r) => (
                       <tr key={r.companyId ?? r.companyName}>
-                        <td>{r.companyId ? <Link href={`/companies/${r.companyId}`} className="font-medium text-brand-700 hover:underline">{r.companyName}</Link> : <span className="text-amber-700">{r.companyName}</span>}</td>
+                        <td>{r.companyId ? <Link href={`/companies/${r.companyId}`} className="font-medium link">{r.companyName}</Link> : <span className="text-amber-700">{r.companyName}</span>}</td>
                         <td className="text-right tabular-nums">{r.count}</td>
                         <td className="text-right tabular-nums">{fmtMoney(r.outstanding, c)}</td>
                         <td className={`text-right tabular-nums ${r.overdue > 0 ? "text-red-700" : ""}`}>{fmtMoney(r.overdue, c)}</td>
@@ -373,7 +373,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
                 </table>
               )}
               <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500">
-                Balances come from the Xero invoice mirror (hourly sync + webhooks). Xero is the source of truth; see the <Link href="/billing" className="text-brand-700 hover:underline">Finance</Link> page for invoice detail.
+                Balances come from the Xero invoice mirror (hourly sync + webhooks). Xero is the source of truth; see the <Link href="/billing" className="link">Finance</Link> page for invoice detail.
               </p>
             </Card>
           </TabsContent>
@@ -398,10 +398,10 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
               <Card title="Where to act">
                 <ul className="list-disc space-y-1 pl-5 text-sm text-slate-700">
                   <li>
-                    Review discrepancies and device detail on the <Link href="/devices" className="text-brand-700 hover:underline">Devices</Link> page. {devices.discrepancies.accepted} items are accepted and will re-open if the gap grows.
+                    Review discrepancies and device detail on the <Link href="/devices" className="link">Devices</Link> page. {devices.discrepancies.accepted} items are accepted and will re-open if the gap grows.
                   </li>
                   <li>
-                    Map remaining organisations on <Link href="/integrations/ninjaone" className="text-brand-700 hover:underline">Integrations → NinjaOne</Link>.
+                    Map remaining organisations on <Link href="/integrations/ninjaone" className="link">Integrations → NinjaOne</Link>.
                   </li>
                   <li>Estimates use each line&apos;s unit price × difference; actual billing changes only when a contract is amended.</li>
                 </ul>
@@ -435,7 +435,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
                 {health.providers.map((p) => (
                   <tr key={p.provider}>
                     <td>
-                      <Link href={`/integrations/${p.provider}`} className="font-medium text-brand-700 hover:underline">
+                      <Link href={`/integrations/${p.provider}`} className="font-medium link">
                         {p.label}
                       </Link>
                       {p.lastError && !p.demo && <div className="max-w-xs truncate text-[11px] text-red-700">{p.lastError}</div>}
@@ -455,7 +455,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
               </tbody>
             </table>
             <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500">
-              Uptime monitors can poll <code>/api/health</code> (200 when the database answers and a heartbeat landed in the last 15 minutes, otherwise 503). Run history and error detail are on the <Link href="/integrations" className="text-brand-700 hover:underline">Integrations</Link> page.
+              Uptime monitors can poll <code>/api/health</code> (200 when the database answers and a heartbeat landed in the last 15 minutes, otherwise 503). Run history and error detail are on the <Link href="/integrations" className="link">Integrations</Link> page.
             </p>
           </Card>
         </TabsContent>

@@ -198,7 +198,7 @@ export function TicketTable({
           </Button>
           {chooser && (
             <div
-              className="absolute right-0 z-20 mt-1 w-44 rounded-md border border-slate-200 bg-surface p-2 shadow-lg"
+              className="absolute right-0 z-20 mt-1 w-44 card p-2 shadow-pop"
               role="group"
               aria-label="Choose columns"
             >
@@ -390,7 +390,7 @@ export function TicketTable({
                       {t.companyId ? (
                         <Link
                           href={`/companies/${t.companyId}?tab=tickets`}
-                          className="text-brand-700 hover:underline"
+                          className="link"
                         >
                           {t.companyName}
                         </Link>

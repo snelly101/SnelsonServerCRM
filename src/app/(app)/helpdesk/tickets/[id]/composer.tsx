@@ -319,7 +319,7 @@ export function Composer({
           ) : (
             <button
               type="button"
-              className="justify-self-start text-xs text-brand-700 hover:underline"
+              className="justify-self-start text-xs link"
               onClick={() => setShowBcc(true)}
             >
               Add BCC
@@ -329,7 +329,7 @@ export function Composer({
       )}
       {preview && email ? (
         <div
-          className="rounded-md border border-slate-200 bg-surface p-3 text-sm"
+          className="card p-3 text-sm"
           aria-live="polite"
         >
           <p className="mb-1 text-xs text-slate-500">

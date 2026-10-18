@@ -46,7 +46,7 @@ export default async function DevicesPage({ searchParams }: { searchParams: Prom
           icon={<MonitorSmartphone className="h-6 w-6" />}
           title="NinjaOne is not connected"
           description="Enter the API client id and secret on the Integrations page to start mirroring organisations, locations and devices."
-          action={can(me.role, "integration.manage") ? <Link href="/integrations/ninjaone" className="text-brand-700 hover:underline">Open NinjaOne settings</Link> : undefined}
+          action={can(me.role, "integration.manage") ? <Link href="/integrations/ninjaone" className="link">Open NinjaOne settings</Link> : undefined}
         />
       </>
     );
@@ -64,7 +64,7 @@ export default async function DevicesPage({ searchParams }: { searchParams: Prom
         description={
           <>
             Mirrored from NinjaOne (read-only){totals.lastFetched ? <>, last fetched {fmtRelative(new Date(totals.lastFetched))}</> : null}. Active = seen within {totals.activeDays} days.{" "}
-            <Link href="/integrations/ninjaone" className="text-brand-700 hover:underline">
+            <Link href="/integrations/ninjaone" className="link">
               Mapping and settings
             </Link>
           </>
@@ -93,7 +93,7 @@ export default async function DevicesPage({ searchParams }: { searchParams: Prom
         actions={
           <span className="flex gap-1 text-xs">
             {["open", "accepted", "resolved", "dismissed", "all"].map((s) => (
-              <Link key={s} href={`/devices?disc=${s}`} className={`rounded px-2 py-0.5 ${discStatus === s ? "bg-fg text-surface" : "text-slate-600 hover:bg-slate-100"}`}>
+              <Link key={s} href={`/devices?disc=${s}`} className={`rounded-full px-2.5 py-0.5 ${discStatus === s ? "bg-selection text-selection-fg" : "text-slate-600 hover:bg-slate-100"}`}>
                 {s}
               </Link>
             ))}
@@ -101,7 +101,7 @@ export default async function DevicesPage({ searchParams }: { searchParams: Prom
         }
       >
         <DiscrepancyTable rows={discrepancies} canReview={canReview} currency={settings.currency} />
-        <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500">Observed = active devices in billable classes at the linked organisation (and location, for site-specific lines). Resolve offers amend, reduce at renewal, exception or dismiss with the money consequence first. Together with licence discrepancies and billing findings in <Link href="/billing" className="text-brand-700 hover:underline">Billing → Exceptions</Link>.</p>
+        <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500">Observed = active devices in billable classes at the linked organisation (and location, for site-specific lines). Resolve offers amend, reduce at renewal, exception or dismiss with the money consequence first. Together with licence discrepancies and billing findings in <Link href="/billing" className="link">Billing → Exceptions</Link>.</p>
       </Card>
 
       <FilterBar

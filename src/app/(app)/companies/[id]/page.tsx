@@ -292,13 +292,13 @@ export default async function CompanyPage({
         <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
           <div className="flex min-w-0 flex-1 items-start gap-3">
             <span
-              className="grid h-[38px] w-[38px] shrink-0 place-items-center rounded-md bg-brand-100 text-sm font-semibold text-brand-800"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-500 text-[13px] font-semibold text-white"
               aria-hidden
             >
               {initials(company.name)}
             </span>
             <div className="min-w-0">
-              <h1 className="[overflow-wrap:anywhere] text-[22px] font-semibold leading-7 tracking-tight text-slate-900">
+              <h1 className="[overflow-wrap:anywhere] text-[24px] font-semibold leading-7 tracking-[-0.02em] text-slate-900">
                 {company.name}
               </h1>
               <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-slate-600">
@@ -406,7 +406,7 @@ export default async function CompanyPage({
             >
               Overview
             </h2>
-            <div className="grid divide-y divide-slate-200 rounded-md border border-slate-200 bg-surface md:grid-cols-3 md:divide-x md:divide-y-0">
+            <div className="grid divide-y divide-slate-200 card md:grid-cols-3 md:divide-x md:divide-y-0">
               <div className="px-4 py-3">
                 <h3 className="mb-1 text-xs font-medium text-slate-500">
                   Company information
@@ -457,7 +457,7 @@ export default async function CompanyPage({
                             <Link
                               key={h.id}
                               href={`${base}?tab=billing#services`}
-                              className="[overflow-wrap:anywhere] text-brand-700 hover:underline"
+                              className="[overflow-wrap:anywhere] link"
                               title={HOSTING_KIND_LABEL[h.kind]}
                             >
                               {h.name}
@@ -478,7 +478,7 @@ export default async function CompanyPage({
                     {subscriptions ? (
                       <Link
                         href={`${base}?tab=billing#services`}
-                        className="text-brand-700 hover:underline"
+                        className="link"
                       >
                         {plural(subscriptions.totals.licences, "licence")} on{" "}
                         {plural(
@@ -492,7 +492,7 @@ export default async function CompanyPage({
                     {ticketSummary && ticketSummary.total > 0 ? (
                       <Link
                         href={`${base}?tab=tickets`}
-                        className="text-brand-700 hover:underline"
+                        className="link"
                       >
                         {plural(ticketSummary.open, "open ticket")} of{" "}
                         {ticketSummary.total}
@@ -503,7 +503,7 @@ export default async function CompanyPage({
                     {devices ? (
                       <Link
                         href={`${base}?tab=devices`}
-                        className="text-brand-700 hover:underline"
+                        className="link"
                       >
                         {plural(devices.totals.active, "device")}
                         <span className="text-slate-500"> · NinjaOne</span>
@@ -514,7 +514,7 @@ export default async function CompanyPage({
                     {finance?.link ? (
                       <Link
                         href={`${base}?tab=billing`}
-                        className="text-brand-700 hover:underline"
+                        className="link"
                       >
                         {plural(finance.count, "invoice")}
                         <span className="text-slate-500"> · Xero</span>
@@ -526,7 +526,7 @@ export default async function CompanyPage({
                       {vaultActive > 0 ? (
                         <Link
                           href={`${base}?tab=vault`}
-                          className="text-brand-700 hover:underline"
+                          className="link"
                         >
                           {plural(vaultActive, "item")}
                         </Link>
@@ -541,7 +541,7 @@ export default async function CompanyPage({
                 {pinnedNotes.map((n) => (
                   <div
                     key={n.id}
-                    className="rounded-md border border-slate-200 bg-surface px-4 py-3"
+                    className="card px-4 py-3"
                   >
                     <div className="mb-1 flex items-center justify-between gap-2">
                       <h3 className="text-xs font-medium text-slate-500">
@@ -568,7 +568,7 @@ export default async function CompanyPage({
               </span>
               <Link
                 href={`${base}?tab=activity`}
-                className="inline-flex items-center gap-1 text-brand-700 hover:underline"
+                className="inline-flex items-center gap-1 link"
               >
                 View activity <ArrowRight className="h-3 w-3" aria-hidden />
               </Link>
@@ -675,7 +675,7 @@ export default async function CompanyPage({
                         <td>
                           <Link
                             href={`/contacts/${c.id}`}
-                            className="font-medium text-brand-700 hover:underline"
+                            className="font-medium link"
                           >
                             {fullName(c)}
                           </Link>
@@ -835,7 +835,7 @@ export default async function CompanyPage({
                         <td>
                           <Link
                             href={`/pipeline/${o.id}`}
-                            className="font-medium text-brand-700 hover:underline"
+                            className="font-medium link"
                           >
                             {o.title}
                           </Link>
@@ -913,7 +913,7 @@ export default async function CompanyPage({
                         <td>
                           <Link
                             href={`/contracts/${c.id}`}
-                            className="font-medium text-brand-700 hover:underline"
+                            className="font-medium link"
                           >
                             {c.name}
                           </Link>
@@ -977,7 +977,7 @@ export default async function CompanyPage({
                     >
                       <Link
                         href={`/tasks/onboarding/${o.id}`}
-                        className="font-medium text-brand-700 hover:underline"
+                        className="font-medium link"
                       >
                         {o.name}
                       </Link>
@@ -1120,7 +1120,7 @@ export default async function CompanyPage({
                           href={devices.consoleUrl}
                           target="_blank"
                           rel="noreferrer"
-                          className="inline-flex items-center gap-1 text-xs text-brand-700 hover:underline"
+                          className="inline-flex items-center gap-1 text-xs link"
                         >
                           Open in NinjaOne <ExternalLink className="h-3 w-3" />
                         </a>

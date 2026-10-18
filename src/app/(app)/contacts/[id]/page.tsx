@@ -58,7 +58,7 @@ export default async function ContactPage({
             {contact.jobTitle && <>{contact.jobTitle} at </>}
             <Link
               href={`/companies/${contact.companyId}`}
-              className="text-brand-700 hover:underline"
+              className="link"
             >
               {contact.companyName}
             </Link>

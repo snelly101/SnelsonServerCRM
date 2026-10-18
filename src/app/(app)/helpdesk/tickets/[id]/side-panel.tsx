@@ -208,7 +208,7 @@ export function SidePanel({
           {msg}
         </p>
       )}
-      <section className="rounded-lg border border-slate-200 bg-surface p-3">
+      <section className="card p-3">
         <div className="mb-2 flex items-center justify-between">
           <h3 className="text-xs font-medium uppercase tracking-wide text-slate-500">
             Status
@@ -276,7 +276,7 @@ export function SidePanel({
         )}
       </section>
 
-      <section className="rounded-lg border border-slate-200 bg-surface p-3">
+      <section className="card p-3">
         <div className="mb-2 flex items-center justify-between">
           <h3 className="text-xs font-medium uppercase tracking-wide text-slate-500">
             Assignment
@@ -398,7 +398,7 @@ export function SidePanel({
         </div>
       </section>
 
-      <section className="rounded-lg border border-slate-200 bg-surface p-3">
+      <section className="card p-3">
         <div className="mb-2 flex items-center justify-between">
           <h3 className="text-xs font-medium uppercase tracking-wide text-slate-500">
             Requester
@@ -430,7 +430,7 @@ export function SidePanel({
           <div className="text-xs text-slate-600">
             <Link
               href={`/contacts/${t.contact.id}`}
-              className="text-brand-700 hover:underline"
+              className="link"
             >
               {t.contact.name}
             </Link>
@@ -442,7 +442,7 @@ export function SidePanel({
           {t.companyId ? (
             <Link
               href={`/companies/${t.companyId}?tab=tickets`}
-              className="text-brand-700 hover:underline"
+              className="link"
             >
               {t.companyName}
             </Link>
@@ -495,7 +495,7 @@ export function SidePanel({
         <ParticipantsBlock t={t} editable={editable} run={run} />
       </section>
 
-      <section className="rounded-lg border border-slate-200 bg-surface p-3">
+      <section className="card p-3">
         <div className="mb-2 flex items-center justify-between">
           <h3 className="text-xs font-medium uppercase tracking-wide text-slate-500">
             Time · {minutes(t.timeSpentMinutes)}
@@ -561,7 +561,7 @@ export function SidePanel({
         )}
       </section>
 
-      <section className="rounded-lg border border-slate-200 bg-surface p-3">
+      <section className="card p-3">
         <div className="mb-2 flex items-center justify-between">
           <h3 className="text-xs font-medium uppercase tracking-wide text-slate-500">
             Linked tickets
@@ -573,7 +573,7 @@ export function SidePanel({
             Merged into{" "}
             <Link
               href={`/helpdesk/tickets/${t.mergedInto.id}`}
-              className="text-brand-700 hover:underline"
+              className="link"
             >
               {t.mergedInto.reference}
             </Link>
@@ -584,7 +584,7 @@ export function SidePanel({
             Child of{" "}
             <Link
               href={`/helpdesk/tickets/${t.parent.id}`}
-              className="text-brand-700 hover:underline"
+              className="link"
             >
               {t.parent.reference}
             </Link>{" "}
@@ -596,7 +596,7 @@ export function SidePanel({
             Child:{" "}
             <Link
               href={`/helpdesk/tickets/${c.id}`}
-              className="text-brand-700 hover:underline"
+              className="link"
             >
               {c.reference}
             </Link>{" "}
@@ -618,7 +618,7 @@ export function SidePanel({
                 </Badge>
                 <Link
                   href={`/helpdesk/tickets/${l.ticketId}`}
-                  className="text-brand-700 hover:underline"
+                  className="link"
                 >
                   {l.reference}
                 </Link>
@@ -671,7 +671,7 @@ function ParticipantsBlock({
         {editable && (
           <button
             type="button"
-            className="text-brand-700 hover:underline"
+            className="link"
             onClick={() => setOpen((o) => !o)}
           >
             {open ? "cancel" : "add"}

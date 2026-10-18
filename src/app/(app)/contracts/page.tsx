@@ -73,7 +73,7 @@ export default async function ContractsPage({ searchParams }: { searchParams: Pr
           { key: "renewing", label: "Renewing", options: [{ value: "30", label: "within 30 days" }, { value: "60", label: "within 60 days" }, { value: "90", label: "within 90 days" }, { value: "180", label: "within 6 months" }] },
         ]}
         trailing={
-          <Link href={archived ? "/contracts" : "/contracts?archived=1"} className="text-brand-700 hover:underline">
+          <Link href={archived ? "/contracts" : "/contracts?archived=1"} className="link">
             {archived ? "Back to current contracts" : "Show archived"}
           </Link>
         }
@@ -106,7 +106,7 @@ export default async function ContractsPage({ searchParams }: { searchParams: Pr
                 {data.rows.map((r) => (
                   <tr key={r.id}>
                     <td>
-                      <Link href={`/contracts/${r.id}`} className="font-medium text-brand-700 hover:underline">
+                      <Link href={`/contracts/${r.id}`} className="font-medium link">
                         {r.name}
                       </Link>
                       {r.reference && <div className="text-xs text-slate-500">{r.reference}</div>}

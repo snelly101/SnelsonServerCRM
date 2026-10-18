@@ -39,7 +39,7 @@ export function NewRequestForm() {
   };
 
   return (
-    <form className="space-y-4 rounded-lg border border-slate-200 bg-surface p-4" onSubmit={submit}>
+    <form className="space-y-4 card p-4" onSubmit={submit}>
       {error && <Alert tone="error">{error}</Alert>}
       <Field label="Subject" htmlFor="nr-subject" help="A short summary, e.g. “Printer on 2nd floor offline”">
         <Input id="nr-subject" value={subject} onChange={(e) => setSubject(e.target.value)} maxLength={300} required />

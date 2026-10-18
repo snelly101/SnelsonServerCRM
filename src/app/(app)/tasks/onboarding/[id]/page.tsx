@@ -37,7 +37,7 @@ export default async function OnboardingPage({ params }: { params: Promise<{ id:
           </span>
         }
         description={
-          <Link href={`/companies/${ob.companyId}`} className="text-brand-700 hover:underline">
+          <Link href={`/companies/${ob.companyId}`} className="link">
             {company?.name}
           </Link>
         }
@@ -65,7 +65,7 @@ export default async function OnboardingPage({ params }: { params: Promise<{ id:
               { label: "Owner", value: ob.ownerName },
               { label: "Template", value: ob.templateName },
               { label: "Source", value: ob.sourceKey?.split(":")[0] },
-              { label: "Opportunity", value: ob.opportunityId ? <Link href={`/pipeline/${ob.opportunityId}`} className="text-brand-700 hover:underline">Open</Link> : null },
+              { label: "Opportunity", value: ob.opportunityId ? <Link href={`/pipeline/${ob.opportunityId}`} className="link">Open</Link> : null },
             ]}
           />
         </Card>

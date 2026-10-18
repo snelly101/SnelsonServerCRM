@@ -57,7 +57,7 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
         }
         description={
           <>
-            <Link href={`/companies/${contract.companyId}`} className="text-brand-700 hover:underline">
+            <Link href={`/companies/${contract.companyId}`} className="link">
               {contract.companyName}
             </Link>
             {contract.reference && <> · {contract.reference}</>}
@@ -151,7 +151,7 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
                       </td>
                       <td className="text-xs">
                         {h.settledByDraftId ? (
-                          <Link href={`/billing/drafts/${h.settledByDraftId}`} className="text-brand-700 hover:underline">
+                          <Link href={`/billing/drafts/${h.settledByDraftId}`} className="link">
                             {h.draftReference} <span className="text-slate-500">({h.draftStatus})</span>
                           </Link>
                         ) : (
@@ -185,7 +185,7 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
                   ))}
                 </ul>
                 {can(me.role, "integration.manage") && (
-                  <Link href="/integrations/ninjaone" className="mt-2 inline-block text-xs text-brand-700 hover:underline">
+                  <Link href="/integrations/ninjaone" className="mt-2 inline-block text-xs link">
                     Link on Integrations → NinjaOne
                   </Link>
                 )}
@@ -237,7 +237,7 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
                 <p className="mt-1 text-xs text-slate-600">Planned: {renewal.planned.map((p) => `${p.lineDescription} ${p.field === "unit_price" ? "price " : ""}${p.previousValue ?? "—"} → ${p.newValue ?? "—"} from ${p.effectiveFrom}`).join("; ")}</p>
               )}
               {canWrite && (
-                <Link href={`/contracts/${id}/edit?effectiveFrom=${renewal.renewalDate}`} className="mt-2 inline-block text-xs text-brand-700 hover:underline">
+                <Link href={`/contracts/${id}/edit?effectiveFrom=${renewal.renewalDate}`} className="mt-2 inline-block text-xs link">
                   Prepare an amendment from the renewal date
                 </Link>
               )}
@@ -257,12 +257,12 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
                 { label: "Next review", value: fmtDate(contract.nextReviewDate, settings) },
                 { label: "Review interval", value: `${contract.reviewIntervalMonths} months` },
                 { label: "Owner", value: contract.ownerName },
-                { label: "Linked opportunity", value: contract.opportunityId ? <Link href={`/pipeline/${contract.opportunityId}`} className="text-brand-700 hover:underline">Open</Link> : null },
+                { label: "Linked opportunity", value: contract.opportunityId ? <Link href={`/pipeline/${contract.opportunityId}`} className="link">Open</Link> : null },
                 {
                   label: "Proposal",
                   value: proposal ? (
                     <span>
-                      {proposal.viewUrl ? <a href={proposal.viewUrl} target="_blank" rel="noreferrer" className="text-brand-700 hover:underline">{proposal.subjectLine ?? contract.externalProposalId}</a> : (proposal.subjectLine ?? contract.externalProposalId)}
+                      {proposal.viewUrl ? <a href={proposal.viewUrl} target="_blank" rel="noreferrer" className="link">{proposal.subjectLine ?? contract.externalProposalId}</a> : (proposal.subjectLine ?? contract.externalProposalId)}
                       {proposal.signedAt && <span className="text-xs text-slate-500"> · signed {fmtDate(proposal.signedAt, settings)}{proposal.signedBy ? ` by ${proposal.signedBy}` : ""}</span>}
                       {proposal.termsChangedAfterSignature ? <Badge className="ml-1" tone="red" title="The opportunity's lines were edited after the signature and before the contract was drafted; check the contract against the signed proposal">terms changed after signature</Badge> : proposal.acceptedTerms ? <Badge className="ml-1" tone="green" title="The contract was drafted from the lines captured at acceptance">signed terms captured</Badge> : null}
                     </span>

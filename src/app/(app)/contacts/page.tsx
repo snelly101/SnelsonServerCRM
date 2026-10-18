@@ -85,7 +85,7 @@ export default async function ContactsPage({ searchParams }: { searchParams: Pro
                 {data.rows.map((c) => (
                   <tr key={c.id}>
                     <td>
-                      <Link href={`/contacts/${c.id}`} className="font-medium text-brand-700 hover:underline">
+                      <Link href={`/contacts/${c.id}`} className="font-medium link">
                         {fullName(c)}
                       </Link>
                       {c.jobTitle && <div className="text-xs text-slate-500">{c.jobTitle}</div>}

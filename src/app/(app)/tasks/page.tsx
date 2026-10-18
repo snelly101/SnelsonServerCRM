@@ -65,7 +65,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
             {active.map((o) => (
               <li key={o.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
                 <ListChecks className="h-4 w-4 text-slate-400" />
-                <Link href={`/tasks/onboarding/${o.id}`} className="font-medium text-brand-700 hover:underline">
+                <Link href={`/tasks/onboarding/${o.id}`} className="font-medium link">
                   {o.name}
                 </Link>
                 <span className="text-xs text-slate-500">started {fmtDate(o.startedAt, settings)}{o.ownerName ? ` · ${o.ownerName}` : ""}</span>
@@ -109,7 +109,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
               .filter((o) => o.status !== "in_progress")
               .map((o) => (
                 <li key={o.id}>
-                  <Link href={`/tasks/onboarding/${o.id}`} className="text-brand-700 hover:underline">
+                  <Link href={`/tasks/onboarding/${o.id}`} className="link">
                     {o.name}
                   </Link>{" "}
                   <Badge tone={o.status === "completed" ? "green" : "slate"}>{o.status}</Badge>

@@ -127,7 +127,7 @@ export function OrgMappingTable({ rows, companies, canManage }: { rows: OrgRow[]
     <div>
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-4 py-2 text-sm">
         {(["all", "unlinked", "linked"] as const).map((f) => (
-          <button key={f} type="button" onClick={() => setFilter(f)} className={`rounded px-2 py-0.5 ${filter === f ? "bg-fg text-surface" : "text-slate-600 hover:bg-slate-100"}`}>
+          <button key={f} type="button" onClick={() => setFilter(f)} className={`rounded-full px-2.5 py-0.5 ${filter === f ? "bg-selection text-selection-fg" : "text-slate-600 hover:bg-slate-100"}`}>
             {f}
           </button>
         ))}
@@ -164,7 +164,7 @@ export function OrgMappingTable({ rows, companies, canManage }: { rows: OrgRow[]
               <td className="text-right tabular-nums">{r.deviceCount}</td>
               <td>
                 {r.link ? (
-                  <Link href={`/companies/${r.link.localId}`} className="text-brand-700 hover:underline">
+                  <Link href={`/companies/${r.link.localId}`} className="link">
                     {companyName(r.link.localId)}
                   </Link>
                 ) : canManage ? (
@@ -175,7 +175,7 @@ export function OrgMappingTable({ rows, companies, canManage }: { rows: OrgRow[]
                           <li key={s.id} className="flex items-center gap-2 text-xs">
                             <Badge tone={s.score >= 2 ? "green" : "amber"}>{s.score >= 2 ? "exact name" : "similar name"}</Badge>
                             <span>{s.name}</span>
-                            <button type="button" className="inline-flex items-center gap-0.5 text-brand-700 hover:underline" onClick={() => run(() => linkOrganizationAction(r.orgId, s.id))}>
+                            <button type="button" className="inline-flex items-center gap-0.5 link" onClick={() => run(() => linkOrganizationAction(r.orgId, s.id))}>
                               <Link2 className="h-3 w-3" /> Link
                             </button>
                           </li>

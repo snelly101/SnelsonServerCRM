@@ -29,12 +29,12 @@ export default async function PortalKbPage({ searchParams }: { searchParams: Pro
         )}
       </form>
       {articles.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-slate-300 bg-surface px-6 py-10 text-center text-sm text-slate-500">No articles match.</p>
+        <p className="rounded-xl border border-dashed border-slate-300 bg-surface px-6 py-10 text-center text-sm text-slate-500">No articles match.</p>
       ) : (
-        <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200 bg-surface">
+        <ul className="divide-y divide-slate-100 card">
           {articles.map((a) => (
             <li key={a.id} className="px-4 py-3">
-              <Link href={`/portal/kb/${a.slug}`} className="text-sm font-medium text-brand-700 hover:underline">{a.title}</Link>
+              <Link href={`/portal/kb/${a.slug}`} className="text-sm font-medium link">{a.title}</Link>
               {a.category && <Badge className="ml-2">{a.category}</Badge>}
               {a.excerpt && <p className="text-xs text-slate-500">{a.excerpt}</p>}
             </li>

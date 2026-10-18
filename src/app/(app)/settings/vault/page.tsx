@@ -58,7 +58,7 @@ export default async function VaultSettingsPage() {
               { label: "Master key", value: health.configured ? <Badge tone={health.keyMatches ? "green" : "red"}>{health.keyMatches ? `present · version ${health.keyVersion}` : "mismatch"}</Badge> : <Badge tone="red">missing</Badge> },
               { label: "Items stored", value: health.items },
               { label: "Audit chain", value: chain ? <span><Badge tone={chain.value.ok ? "green" : "red"}>{chain.value.ok ? "intact" : "BROKEN"}</Badge> <span className="text-xs text-slate-500">{chain.value.checked} entries, checked {chain.updatedAt.toLocaleString("en-GB")}</span></span> : "not yet verified" },
-              { label: "Audit log", value: <Link href="/settings/vault/audit" className="text-brand-700 hover:underline">Who revealed what, when</Link> },
+              { label: "Audit log", value: <Link href="/settings/vault/audit" className="link">Who revealed what, when</Link> },
             ]}
           />
           <div className="mt-4 border-t border-slate-100 pt-4"><MaintenanceButtons /></div>

@@ -38,10 +38,10 @@ export default async function PipelinePage({ searchParams }: { searchParams: Pro
         actions={
           <>
             <div className="inline-flex rounded-md border border-slate-300 bg-surface p-0.5">
-              <Link href={toggle("board")} className={`inline-flex items-center gap-1 rounded px-2.5 py-1 text-sm ${view === "board" ? "bg-fg text-surface" : "text-slate-600"}`} aria-current={view === "board" ? "page" : undefined}>
+              <Link href={toggle("board")} className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-[13px] font-medium ${view === "board" ? "bg-selection text-selection-fg" : "text-slate-600"}`} aria-current={view === "board" ? "page" : undefined}>
                 <LayoutGrid className="h-4 w-4" /> Board
               </Link>
-              <Link href={toggle("table")} className={`inline-flex items-center gap-1 rounded px-2.5 py-1 text-sm ${view === "table" ? "bg-fg text-surface" : "text-slate-600"}`} aria-current={view === "table" ? "page" : undefined}>
+              <Link href={toggle("table")} className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-[13px] font-medium ${view === "table" ? "bg-selection text-selection-fg" : "text-slate-600"}`} aria-current={view === "table" ? "page" : undefined}>
                 <List className="h-4 w-4" /> Table
               </Link>
             </div>
@@ -135,7 +135,7 @@ async function TableView({ sp, currency, settings }: { sp: Record<string, string
             {data.rows.map((o) => (
               <tr key={o.id}>
                 <td>
-                  <Link href={`/pipeline/${o.id}`} className="font-medium text-brand-700 hover:underline">
+                  <Link href={`/pipeline/${o.id}`} className="font-medium link">
                     {o.title}
                   </Link>
                   {o.status !== "open" && <Badge className="ml-1" tone={o.status === "won" ? "green" : "red"}>{o.status}</Badge>}

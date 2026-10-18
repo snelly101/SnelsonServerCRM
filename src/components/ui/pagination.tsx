@@ -16,17 +16,17 @@ export function Pagination({ page, pageCount, total, pageSize }: { page: number;
   const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const to = Math.min(page * pageSize, total);
   return (
-    <div className="flex items-center justify-between gap-3 px-3 py-2 text-sm text-slate-600">
+    <div className="flex items-center justify-between gap-3 px-4 py-2.5 text-xs text-slate-500">
       <span>
         {from}–{to} of {total}
       </span>
       <div className="flex items-center gap-1">
         {page > 1 ? (
-          <Link href={link(page - 1)} className={buttonClass("secondary", "sm")} aria-label="Previous page">
+          <Link href={link(page - 1)} className={buttonClass("secondary", "icon", "h-7 w-7")} aria-label="Previous page">
             <ChevronLeft className="h-4 w-4" />
           </Link>
         ) : (
-          <span className={buttonClass("secondary", "sm", "opacity-50")}>
+          <span className={buttonClass("secondary", "icon", "h-7 w-7 opacity-40")}>
             <ChevronLeft className="h-4 w-4" />
           </span>
         )}
@@ -34,11 +34,11 @@ export function Pagination({ page, pageCount, total, pageSize }: { page: number;
           Page {page} of {pageCount}
         </span>
         {page < pageCount ? (
-          <Link href={link(page + 1)} className={buttonClass("secondary", "sm")} aria-label="Next page">
+          <Link href={link(page + 1)} className={buttonClass("secondary", "icon", "h-7 w-7")} aria-label="Next page">
             <ChevronRight className="h-4 w-4" />
           </Link>
         ) : (
-          <span className={buttonClass("secondary", "sm", "opacity-50")}>
+          <span className={buttonClass("secondary", "icon", "h-7 w-7 opacity-40")}>
             <ChevronRight className="h-4 w-4" />
           </span>
         )}

@@ -44,7 +44,7 @@ export default async function SecuritySettingsPage() {
         </table>
         <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500">
           {outstanding.length ? `${outstanding.length} user${outstanding.length === 1 ? "" : "s"} still need to enrol. ` : "Everyone covered by the policy has enrolled. "}
-          Lost phone? Reset a user&apos;s second factor from <Link href="/settings/users" className="text-brand-700 hover:underline">Users &amp; roles</Link>. Users who sign in with Microsoft only are covered by Entra multi-factor authentication and are not counted.
+          Lost phone? Reset a user&apos;s second factor from <Link href="/settings/users" className="link">Users &amp; roles</Link>. Users who sign in with Microsoft only are covered by Entra multi-factor authentication and are not counted.
         </p>
       </Card>
     </div>

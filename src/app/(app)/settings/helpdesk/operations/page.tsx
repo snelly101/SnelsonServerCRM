@@ -75,7 +75,7 @@ export default async function HelpdeskOperationsPage() {
                     <Badge tone={health.mailbox.subscription === "active" || health.mailbox.subscription === "demo" ? "green" : "amber"}>subscription {health.mailbox.subscription}</Badge>
                     {health.mailbox.staleInbound && <Badge tone="red">inbound stale</Badge>}
                     {health.mailbox.credentialExpiringSoon && <Badge tone="amber">credential expiring</Badge>}
-                    <Link href="/settings/helpdesk/mailbox" className="text-xs text-brand-700 hover:underline">
+                    <Link href="/settings/helpdesk/mailbox" className="text-xs link">
                       queues and replay
                     </Link>
                   </span>

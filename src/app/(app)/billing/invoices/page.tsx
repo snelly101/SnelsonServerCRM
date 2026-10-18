@@ -145,7 +145,7 @@ async function SupplierBills({ me, settings }: { me: { role: string }; settings:
             {recon.coverage.count ? `${recon.coverage.count} Pax8 invoice${recon.coverage.count === 1 ? "" : "s"} from ${fmtDate(recon.coverage.oldest!, settings)} to ${fmtDate(recon.coverage.newest!, settings)}` : "none"}
             {recon.coverage.lastFetched ? ` · last fetched ${fmtRelative(recon.coverage.lastFetched)}` : ""}
             {recon.totals.olderBills ? ` · ${recon.totals.olderBills} supplier bill${recon.totals.olderBills === 1 ? "" : "s"} older than the imported history (not a finding until their invoices are imported)` : ""}
-            . The routine sync keeps the last {conn.effectiveConfig.invoiceCount} invoices fresh; older invoices stay once imported. Sync settings are on the <Link href="/integrations/pax8" className="text-brand-700 hover:underline">Pax8 integration page</Link>.
+            . The routine sync keeps the last {conn.effectiveConfig.invoiceCount} invoices fresh; older invoices stay once imported. Sync settings are on the <Link href="/integrations/pax8" className="link">Pax8 integration page</Link>.
           </p>
           {canManage && conn.configured && <Pax8ImportForm oldest={recon.coverage.oldest} />}
         </div>

@@ -146,7 +146,7 @@ export function AttachmentsPanel({ companyId, items, sites, canWrite, showDelete
 
       {live.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 text-xs">
-          <div className="inline-flex rounded-md border border-slate-200 bg-surface p-0.5">
+          <div className="inline-flex card p-0.5">
             {(["all", "photo", "document"] as const).map((k) => (
               <button key={k} type="button" onClick={() => setFilter(k)} className={`rounded px-2 py-1 ${filter === k ? "bg-slate-800 text-white" : "text-slate-600 hover:bg-slate-100"}`}>
                 {k === "all" ? "All" : k === "photo" ? "Photos" : "Documents"}

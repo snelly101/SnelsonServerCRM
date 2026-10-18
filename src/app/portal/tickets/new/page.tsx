@@ -16,12 +16,12 @@ export default async function NewRequestPage() {
         <NewRequestForm />
       </div>
       {articles.length > 0 && (
-        <aside className="rounded-lg border border-slate-200 bg-surface p-4">
+        <aside className="card p-4">
           <h2 className="text-sm font-semibold text-slate-800">Might solve it faster</h2>
           <ul className="mt-2 space-y-2 text-sm">
             {articles.map((a) => (
               <li key={a.id}>
-                <Link href={`/portal/kb/${a.slug}`} className="text-brand-700 hover:underline">{a.title}</Link>
+                <Link href={`/portal/kb/${a.slug}`} className="link">{a.title}</Link>
                 {a.excerpt && <p className="text-xs text-slate-500">{a.excerpt}</p>}
               </li>
             ))}

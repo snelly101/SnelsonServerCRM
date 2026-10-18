@@ -179,3 +179,6 @@ Ideas and requests not yet scheduled. Each item states what it is, why, and the 
 - Creditsafe credit checks via Creditsafe Connect (manual "Run credit check" on the company page, score/limit/band history, optional scheduled refresh). Needs a Connect API subscription; each report consumes credits.
 - Bulk "Activate imported drafts" button on the Contracts page for contracts created from Xero repeating invoices.
 - Weekly and every-N-months Xero repeating invoices converted to a monthly-equivalent contract line with the true cycle noted.
+
+
+_Status (October 2026): the interface was restyled to the V14 design language (icon rail, pill navigation, orange feature cards, Inter, blur-fade transitions); see `docs/design-system.md`._

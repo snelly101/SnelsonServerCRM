@@ -32,7 +32,7 @@ export function CompanyHeaderMenu({ companyId, archived, canArchive }: { company
           </Button>
         </DropdownMenu.Trigger>
         <DropdownMenu.Portal>
-          <DropdownMenu.Content align="end" sideOffset={4} className="z-40 min-w-[180px] rounded-md border border-slate-200 bg-surface p-1 shadow-lg">
+          <DropdownMenu.Content align="end" sideOffset={4} className="menu min-w-[180px]">
             <DropdownMenu.Item
               onSelect={() => setConfirm(true)}
               className={`flex cursor-default items-center gap-2 rounded px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-slate-100 ${archived ? "text-slate-700" : "text-red-700"}`}

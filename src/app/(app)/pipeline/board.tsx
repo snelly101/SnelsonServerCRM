@@ -120,7 +120,7 @@ export function Board({ columns, canWrite, currency }: { columns: Column[]; canW
                     e.stopPropagation();
                     onDrop(col.stage.id, over?.index ?? idx);
                   }}
-                  className={cn("rounded-md border border-slate-200 bg-surface p-2.5 shadow-sm", canWrite && "cursor-grab active:cursor-grabbing", dragging === o.id && "opacity-40", over?.stageId === col.stage.id && over.index === idx && "border-t-2 border-t-brand-500")}
+                  className={cn("card p-2.5 shadow-lift", canWrite && "cursor-grab active:cursor-grabbing", dragging === o.id && "opacity-40", over?.stageId === col.stage.id && over.index === idx && "border-t-2 border-t-brand-500")}
                 >
                   <Link href={`/pipeline/${o.id}`} className="block text-sm font-medium text-slate-900 hover:text-brand-700" draggable={false}>
                     {o.title}

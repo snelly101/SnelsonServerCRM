@@ -156,7 +156,7 @@ export function HostingPanel({
             {canManageIntegrations && (
               <Link
                 href="/integrations/twentyi"
-                className="text-brand-700 hover:underline"
+                className="link"
               >
                 mapping
               </Link>
@@ -253,7 +253,7 @@ export function HostingPanel({
                           href={i.onlineInvoiceUrl}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-brand-700 hover:underline"
+                          className="link"
                         >
                           {i.invoiceNumber ?? i.invoiceId.slice(0, 8)}
                         </a>

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
+import "@fontsource-variable/inter";
 import "./globals.css";
 import { parseThemePref, THEME_COOKIE, THEME_INIT_SCRIPT } from "@/lib/theme";
 

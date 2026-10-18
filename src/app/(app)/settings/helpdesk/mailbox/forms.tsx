@@ -571,7 +571,7 @@ export function QueueTable({
                 {r.ticketId ? (
                   <a
                     href={`/helpdesk/tickets/${r.ticketId}`}
-                    className="text-brand-700 hover:underline"
+                    className="link"
                   >
                     {r.reference} {r.ticketSubject}
                   </a>

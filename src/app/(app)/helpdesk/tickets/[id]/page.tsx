@@ -187,7 +187,7 @@ export default async function TicketPage({
             actions={
               <Link
                 href={showEvents ? `${base}?events=0` : base}
-                className="text-xs text-brand-700 hover:underline"
+                className="text-xs link"
               >
                 {showEvents ? "hide events" : "show events"}
               </Link>

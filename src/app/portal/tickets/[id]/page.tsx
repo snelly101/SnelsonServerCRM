@@ -33,7 +33,7 @@ export default async function PortalTicketPage({ params, searchParams }: { param
   return (
     <div className="space-y-4">
       <Link href="/portal" className="inline-flex items-center gap-1 text-sm text-slate-500 hover:underline"><ArrowLeft className="h-4 w-4" /> All requests</Link>
-      <div className="rounded-lg border border-slate-200 bg-surface p-4">
+      <div className="card p-4">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
             <div className="font-mono text-xs text-slate-500">{t.reference}</div>
@@ -81,7 +81,7 @@ export default async function PortalTicketPage({ params, searchParams }: { param
           </li>
         ))}
         {t.looseAttachments.length > 0 && (
-          <li className="rounded-lg border border-slate-200 bg-surface p-4">
+          <li className="card p-4">
             <div className="mb-2 text-xs font-medium text-slate-800">Files on this request</div>
             <ul className="flex flex-wrap gap-2">
               {t.looseAttachments.map((a) => (
@@ -96,7 +96,7 @@ export default async function PortalTicketPage({ params, searchParams }: { param
         )}
       </ol>
 
-      {t.canReply ? <ReplyForm ticketId={t.id} reopens={["resolved", "closed"].includes(t.status)} /> : <p className="text-sm text-slate-500">This request was cancelled. <Link href="/portal/tickets/new" className="text-brand-700 hover:underline">Raise a new one</Link> if you still need help.</p>}
+      {t.canReply ? <ReplyForm ticketId={t.id} reopens={["resolved", "closed"].includes(t.status)} /> : <p className="text-sm text-slate-500">This request was cancelled. <Link href="/portal/tickets/new" className="link">Raise a new one</Link> if you still need help.</p>}
     </div>
   );
 }

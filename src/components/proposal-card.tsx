@@ -121,7 +121,7 @@ export function ProposalCard({
                 <div className="mt-2 flex items-center justify-between text-[11px] text-slate-500">
                   <span title="Status is polled every 15 minutes">{stale ? "⚠ cached, may be stale" : "cached"} · updated {fmtDate(p.fetchedAt, settings)}</span>
                   {p.viewUrl && (
-                    <a href={p.viewUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-brand-700 hover:underline">
+                    <a href={p.viewUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 link">
                       Open in Better Proposals <ExternalLink className="h-3 w-3" />
                     </a>
                   )}
@@ -186,7 +186,7 @@ export function ProposalCard({
         </Dialog>
       )}
       {proposals.length > 0 && (
-        <Link href="/proposals" className="block text-xs text-brand-700 hover:underline">
+        <Link href="/proposals" className="block text-xs link">
           All proposals
         </Link>
       )}

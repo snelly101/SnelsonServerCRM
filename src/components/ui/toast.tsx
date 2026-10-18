@@ -10,9 +10,9 @@ type Toast = { id: number; tone: Tone; message: string };
 const ToastContext = createContext<((message: string, tone?: Tone) => void) | null>(null);
 
 const styles: Record<Tone, { box: string; Icon: typeof Info }> = {
-  success: { box: "border-green-200 bg-green-50 text-green-900", Icon: CheckCircle2 },
-  error: { box: "border-red-200 bg-red-50 text-red-900", Icon: XCircle },
-  info: { box: "border-slate-200 bg-surface text-slate-900", Icon: Info },
+  success: { box: "text-green-600", Icon: CheckCircle2 },
+  error: { box: "text-red-600", Icon: XCircle },
+  info: { box: "text-slate-500", Icon: Info },
 };
 
 /**
@@ -53,10 +53,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         {toasts.map((t) => {
           const { box, Icon } = styles[t.tone];
           return (
-            <div key={t.id} role="status" className={cn("pointer-events-auto flex items-start gap-2 rounded-md border px-3 py-2 text-sm shadow-lg", box)}>
-              <Icon className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+            <div key={t.id} role="status" className="pointer-events-auto flex animate-rise items-start gap-2.5 rounded-xl border border-slate-200 bg-surface px-3.5 py-2.5 text-[13px] text-slate-900 shadow-pop">
+              <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", box)} aria-hidden />
               <div className="flex-1">{t.message}</div>
-              <button type="button" onClick={() => dismiss(t.id)} className="rounded p-0.5 opacity-70 hover:opacity-100" aria-label="Dismiss">
+              <button type="button" onClick={() => dismiss(t.id)} className="rounded-full p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Dismiss">
                 <X className="h-3.5 w-3.5" />
               </button>
             </div>

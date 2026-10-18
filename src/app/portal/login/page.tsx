@@ -11,7 +11,7 @@ export default async function PortalLoginPage({ searchParams }: { searchParams: 
   const settings = await getAppSettings();
   return (
     <div className="mx-auto max-w-md">
-      <div className="rounded-lg border border-slate-200 bg-surface p-6 shadow-sm">
+      <div className="card p-6">
         <h1 className="text-lg font-semibold text-slate-900">Sign in to {settings.companyName} support</h1>
         <p className="mb-5 text-sm text-slate-500">Enter the e-mail address we hold for you and we will send a one-time sign-in link. No password needed.</p>
         <LoginRequestForm initialError={sp.error} />

@@ -236,7 +236,7 @@ export default async function Pax8Page() {
                 quantity changes while that setting is off) stay in the{" "}
                 <Link
                   href="https://app.pax8.com"
-                  className="text-brand-700 hover:underline"
+                  className="link"
                   target="_blank"
                   rel="noreferrer"
                 >
@@ -293,12 +293,12 @@ export default async function Pax8Page() {
           currency={settings.currency}
           kind="licence"
         />
-        <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500">All open licence and device discrepancies, with findings and accepted exceptions, are together in <Link href="/billing" className="text-brand-700 hover:underline">Billing → Exceptions</Link>.</p>
+        <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500">All open licence and device discrepancies, with findings and accepted exceptions, are together in <Link href="/billing" className="link">Billing → Exceptions</Link>.</p>
       </Card>
 
       <Card title="Pax8 invoices vs Xero bills" className="mt-4">
         <p className="text-sm text-slate-700">
-          {recon.totals.matched} total-matched, {recon.totals.differs} differ, {recon.totals.noBill} without a bill{recon.totals.extraBills ? `, ${recon.totals.extraBills} bill${recon.totals.extraBills === 1 ? "" : "s"} without an invoice` : ""}. The reconciliation, supplier contact, hand matches and historical import live in <Link href="/billing/invoices?view=supplier" className="text-brand-700 hover:underline">Billing → Invoices → Supplier bills</Link>.
+          {recon.totals.matched} total-matched, {recon.totals.differs} differ, {recon.totals.noBill} without a bill{recon.totals.extraBills ? `, ${recon.totals.extraBills} bill${recon.totals.extraBills === 1 ? "" : "s"} without an invoice` : ""}. The reconciliation, supplier contact, hand matches and historical import live in <Link href="/billing/invoices?view=supplier" className="link">Billing → Invoices → Supplier bills</Link>.
         </p>
       </Card>
 
