@@ -5,6 +5,7 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Sun, Moon, Monitor, Check } from "lucide-react";
 import { setThemeAction } from "@/actions/account";
 import { THEME_COOKIE, type ThemePref } from "@/lib/theme";
+import { RailLabel } from "./rail-label";
 
 const OPTIONS: { value: ThemePref; label: string; Icon: typeof Sun }[] = [
   { value: "system", label: "System", Icon: Monitor },
@@ -66,7 +67,7 @@ export function ThemeSync({ pref }: { pref: ThemePref }) {
 }
 
 /** The vertical light / dark / system cluster at the top of the icon rail. */
-export function ThemeRail({ initial }: { initial: ThemePref }) {
+export function ThemeRail({ initial, labels = true }: { initial: ThemePref; /** Pop-out labels beside each button (off when the cluster is laid out horizontally). */ labels?: boolean }) {
   const [pref, setPref] = useState<ThemePref>(initial);
   const [pending, start] = useTransition();
   return (
@@ -78,9 +79,9 @@ export function ThemeRail({ initial }: { initial: ThemePref }) {
           role="radio"
           aria-checked={o.value === pref}
           aria-label={`${o.label} theme`}
-          title={`${o.label} theme`}
+          title={labels ? undefined : `${o.label} theme`}
           disabled={pending}
-          className={`pill-icon h-8 w-8 ${o.value === pref ? "pill-active" : ""}`}
+          className={`group relative pill-icon h-8 w-8 ${o.value === pref ? "pill-active" : ""}`}
           onClick={() => {
             setPref(o.value);
             applyTheme(o.value);
@@ -90,6 +91,7 @@ export function ThemeRail({ initial }: { initial: ThemePref }) {
           }}
         >
           <o.Icon className="h-4 w-4" aria-hidden />
+          {labels && <RailLabel>{o.label === "System" ? "Follow system theme" : `${o.label} theme`}</RailLabel>}
         </button>
       ))}
     </div>
