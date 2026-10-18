@@ -14,6 +14,7 @@ import { ToastProvider } from "./ui/toast";
 import { PillNav } from "./ui/pill-nav";
 import { PageTransition } from "./page-transition";
 import { PRIMARY_NAV, sectionItems, type SectionCounts } from "./nav-config";
+import { RailLabel } from "./rail-label";
 import type { ThemePref } from "@/lib/theme";
 
 /**
@@ -67,9 +68,7 @@ export function AppShell({
             className={cn("group relative pill-icon h-9 w-9", active && "pill-active")}
           >
             <item.icon className="h-4 w-4" aria-hidden />
-            <span className="pointer-events-none absolute left-full top-1/2 z-30 ml-2.5 -translate-y-1/2 whitespace-nowrap rounded-lg bg-selection px-2 py-1 text-xs font-medium text-selection-fg opacity-0 shadow-pop transition-opacity duration-100 group-hover:opacity-100 group-focus-visible:opacity-100">
-              {item.label}
-            </span>
+            <RailLabel>{item.label}</RailLabel>
           </Link>
         );
       })}
@@ -79,16 +78,18 @@ export function AppShell({
   return (
     <div className="flex min-h-screen">
       {/* Icon rail (desktop) */}
-      <aside className="sticky top-0 hidden h-screen w-[68px] shrink-0 flex-col items-center gap-3 self-start overflow-y-auto px-3 pb-4 pt-4 no-scrollbar lg:flex">
+      <aside className="sticky top-0 z-30 hidden h-screen w-[68px] shrink-0 flex-col items-center gap-3 self-start px-3 pb-4 pt-4 lg:flex">
         <ThemeRail initial={user.theme} />
         <div className="my-auto">{rail}</div>
         <div className="flex flex-col items-center gap-0.5 rounded-full border border-slate-200 bg-surface p-1">
           <Link href="/helpdesk/notifications" aria-label="Notifications" className="group relative pill-icon h-8 w-8">
             <Bell className="h-4 w-4" aria-hidden />
             {unreadNotifications > 0 && <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-brand-500 ring-2 ring-surface" />}
+            <RailLabel>{unreadNotifications ? `Notifications · ${unreadNotifications} unread` : "Notifications"}</RailLabel>
           </Link>
-          <button type="button" aria-label="Sign out" title="Sign out" className="pill-icon h-8 w-8" onClick={doSignOut}>
+          <button type="button" aria-label="Sign out" className="group relative pill-icon h-8 w-8" onClick={doSignOut}>
             <LogOut className="h-4 w-4" aria-hidden />
+            <RailLabel>Sign out</RailLabel>
           </button>
         </div>
       </aside>
@@ -224,7 +225,7 @@ export function AppShell({
 function ThemeRailInline({ initial }: { initial: ThemePref }) {
   return (
     <div className="[&>div]:flex-row">
-      <ThemeRail initial={initial} />
+      <ThemeRail initial={initial} labels={false} />
     </div>
   );
 }
