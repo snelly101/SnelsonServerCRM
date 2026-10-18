@@ -15,7 +15,7 @@ How to keep the helpdesk healthy day to day, what the jobs do, how to recover, h
 | `m365.tick` | every minute | inbound rows leave *pending* within a minute or two; outbox rows go *queued → accepted* |
 | `m365.delta` | every 5 min | *last inbound sync* on the mailbox page is under 20 minutes old |
 | `m365.subscriptions` | every 30 min | subscription state *active*, expiry in the future |
-| `helpdesk.sla` | every 5 min | Operations shows a check within the last 30 minutes while tickets are open |
+| `helpdesk.sla` | every 5 min | Operations shows a check within the last 30 minutes while tickets are open; snoozed tickets whose time has passed are woken on the same run |
 | `helpdesk.rules` | every 15 min | Operations shows a run; the Automation page's *Recent runs* has no errors |
 | `system.retention` | nightly 03:15 | Operations shows last night's counts |
 
@@ -88,6 +88,11 @@ Customers can raise and follow requests at **`/portal`** on the same hostname. N
 - **What agents see:** portal tickets carry `source = portal`; customer messages from the portal show a globe icon and "from customer (portal)". A customer reply reopens a resolved, closed or awaiting-customer ticket and raises the usual *customer replied* notification, exactly like an inbound e-mail. Replies you send by e-mail reach the customer as before; the portal shows the same public messages.
 - **Switch off:** the card's *Switch off* ends every session immediately and blocks new links; history is kept. Archiving the contact has the same effect. Every invite, sign-in and access change is in the audit log (`portal.*`).
 - **Housekeeping:** expired tokens and sessions are removed by the nightly retention job a week after expiry.
+
+## 6b. Snooze and customer reminders
+
+- **Snooze** (ticket page → Status → *Snooze*): parks an open ticket until a chosen time (quick picks or a date, up to 90 days) with an optional reason. It leaves the *My tickets*, *Unassigned*, *Open*, *Awaiting* and *Overdue* queues and their counts; the *Snoozed* view and *All* still show it. The status and the SLA clocks are not changed, so pick *awaiting customer* as well when the clock should pause. It comes back when the time passes (`helpdesk.sla` run), when the customer replies by e-mail or in the portal, or when an agent presses *Wake now*; resolving or closing ends the snooze. Whoever snoozed it and the assignee get a notification when it wakes. Everything is recorded as `snooze` / `unsnooze` events.
+- **Customer reminders**: the rule action *Send reminder to customer* e-mails the requester from the support mailbox while the ticket is *awaiting customer* (never when snoozed, never more than once per 20 hours, threaded on the ticket, marked automated so auto-replies are suppressed). The wording is the standard text unless the action carries its own, with `{{requester}}`, `{{reference}}`, `{{subject}}` and `{{signature}}` placeholders. Conditions *Business hours since we last wrote* (on the customer's SLA calendar) and *Reminders already sent* set the cadence and cap; Settings → Helpdesk → Automation rules → *Add customer reminders* creates the recommended rule (two business days, at most two, one per day). A follow-on scheduled rule with *Reminders already sent ≥ 2* and *Set status → resolved* closes the loop if wanted; it is not created by default.
 
 ## 7. Known limitations
 

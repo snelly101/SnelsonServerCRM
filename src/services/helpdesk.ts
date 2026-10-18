@@ -1,19 +1,6 @@
-import {
-  and,
-  asc,
-  desc,
-  eq,
-  gte,
-  inArray,
-  isNull,
-  lt,
-  ne,
-  or,
-  sql,
-  count,
-  type SQL,
-} from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, gte, inArray, isNull, lt, lte, ne, or, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
+import { getAppSettings } from "@/lib/settings";
 import { db, type Tx } from "@/db";
 import {
   companies,
@@ -335,9 +322,16 @@ export type TicketListParams = {
   me?: { id: string; teamIds?: string[] };
 };
 
+/** Not parked, or parked until a time that has passed. */
+const NOT_SNOOZED = or(isNull(tickets.snoozedUntil), lte(tickets.snoozedUntil, sql`now()`));
+const SNOOZED = gt(tickets.snoozedUntil, sql`now()`);
+
 function listWhere(p: TicketListParams): SQL | undefined {
   const conds: (SQL | undefined)[] = [isNull(tickets.mergedIntoTicketId)];
   const view = p.view ?? "open";
+  // Snoozed tickets stay out of the working queues until they wake; "snoozed" and "all" show them.
+  if (["my", "unassigned", "open", "awaiting_customer", "awaiting_third_party", "overdue"].includes(view)) conds.push(NOT_SNOOZED);
+  if (view === "snoozed") conds.push(SNOOZED, inArray(tickets.status, OPEN_STATUSES));
   if (view === "my")
     conds.push(
       or(
@@ -462,6 +456,7 @@ const listRow = {
   lastCustomerMessageAt: tickets.lastCustomerMessageAt,
   createdAt: tickets.createdAt,
   timeSpentMinutes: tickets.timeSpentMinutes,
+  snoozedUntil: tickets.snoozedUntil,
   version: tickets.version,
 };
 export type TicketListRow = {
@@ -525,10 +520,13 @@ export async function myTeamIds(userId: string) {
 }
 
 export async function ticketCounts(userId: string) {
-  const open = sql`${tickets.status} in ('new','open','in_progress','awaiting_customer','awaiting_third_party')`;
+  const anyOpen = sql`${tickets.status} in ('new','open','in_progress','awaiting_customer','awaiting_third_party')`;
+  // Working counts leave out snoozed tickets, which have their own count.
+  const open = sql`${anyOpen} and (${tickets.snoozedUntil} is null or ${tickets.snoozedUntil} <= now())`;
   const [row] = await db
     .select({
       open: sql<number>`count(*) filter (where ${open})`.mapWith(Number),
+      snoozed: sql<number>`count(*) filter (where ${anyOpen} and ${tickets.snoozedUntil} > now())`.mapWith(Number),
       mine: sql<number>`count(*) filter (where ${open} and ${tickets.assigneeUserId} = ${userId})`.mapWith(
         Number,
       ),
@@ -1083,6 +1081,8 @@ export async function changeStatus(
         resolutionCategory: opts.resolutionCategory ?? t.resolutionCategory,
         reopenCount: reopening ? t.reopenCount + 1 : t.reopenCount,
         needsReview: status === "cancelled" ? false : t.needsReview,
+        // Leaving the open statuses ends any snooze; nothing should wake a resolved ticket.
+        ...(OPEN_STATUSES.includes(status) ? {} : { snoozedUntil: null, snoozeReason: null, snoozedByUserId: null }),
       })
       .where(eq(tickets.id, id));
     await recordEvent(
@@ -1150,6 +1150,119 @@ export async function changeStatus(
     `status ${t.status} → ${status}`,
   );
   return { changed: true, version, reopened: reopening };
+}
+
+
+// ---------------------------------------------------------------------------
+// Snooze: park a ticket until a date without changing its status
+// ---------------------------------------------------------------------------
+export const SNOOZE_MAX_DAYS = 90;
+
+/**
+ * Hides an open ticket from the working queues until `until`. The status and
+ * SLA clocks are untouched (choose "awaiting customer" as well when the clock
+ * should pause). The worker wakes it on time; a customer reply or a move out
+ * of the open statuses wakes it early.
+ */
+export async function snoozeTicket(
+  id: string,
+  input: { until: Date; reason?: string | null; version?: number },
+  actor: Actor,
+) {
+  const t = await getTicketRow(id);
+  if (t.mergedIntoTicketId)
+    throw new ActionError("This ticket was merged; work on the surviving ticket instead.");
+  if (!OPEN_STATUSES.includes(t.status))
+    throw new ActionError("Only open tickets can be snoozed.");
+  const now = Date.now();
+  if (!(input.until instanceof Date) || Number.isNaN(input.until.getTime()) || input.until.getTime() <= now + 60_000)
+    throw new ActionError("Choose a time in the future.", { until: ["Must be in the future"] });
+  if (input.until.getTime() > now + SNOOZE_MAX_DAYS * 86400000)
+    throw new ActionError(`Snooze for at most ${SNOOZE_MAX_DAYS} days.`, { until: [`At most ${SNOOZE_MAX_DAYS} days`] });
+  const reason = input.reason?.trim() || null;
+  const settings = await getAppSettings();
+  const untilText = input.until.toLocaleString("en-GB", { timeZone: settings.timezone || "Europe/London", dateStyle: "medium", timeStyle: "short" });
+  const version = await db.transaction(async (tx) => {
+    const v = await bumpVersion(id, input.version, tx);
+    await tx
+      .update(tickets)
+      .set({ snoozedUntil: input.until, snoozeReason: reason, snoozedByUserId: actor.id })
+      .where(eq(tickets.id, id));
+    await recordEvent(
+      id,
+      "snooze",
+      `Snoozed until ${untilText}${reason ? ` (${reason})` : ""}`,
+      actor,
+      { until: input.until.toISOString(), reason, previous: t.snoozedUntil?.toISOString() ?? null },
+      tx,
+    );
+    return v;
+  });
+  return { version, until: input.until };
+}
+
+/** Ends a snooze now. `why` is recorded on the event ("woken by agent", "customer replied", "snooze ended"). */
+export async function unsnoozeTicket(id: string, actor: Actor, why = "woken by agent", opts: { version?: number } = {}) {
+  const t = await getTicketRow(id);
+  if (!t.snoozedUntil) return { changed: false, version: t.version };
+  const version = await db.transaction(async (tx) => {
+    const v = await bumpVersion(id, opts.version, tx);
+    await tx
+      .update(tickets)
+      .set({ snoozedUntil: null, snoozeReason: null, snoozedByUserId: null })
+      .where(eq(tickets.id, id));
+    await recordEvent(id, "unsnooze", `Snooze ended: ${why}`, actor, { why, until: t.snoozedUntil?.toISOString() ?? null }, tx);
+    return v;
+  });
+  return { changed: true, version };
+}
+
+/** A customer reply wakes a snoozed ticket early and tells the assignee (the reply itself notifies the audience too). */
+export async function wakeOnCustomerReply(id: string) {
+  const t = await getTicketRow(id);
+  if (!t.snoozedUntil || t.snoozedUntil.getTime() <= Date.now()) return false;
+  await unsnoozeTicket(id, SYSTEM, "customer replied");
+  const { notifyUsers } = await import("./helpdesk-notifications");
+  await notifyUsers([t.snoozedByUserId, t.assigneeUserId], {
+    kind: "snoozed",
+    title: `${ticketReference(t.number)} woke early: the customer replied`,
+    body: t.subject,
+    ticketId: id,
+  });
+  return true;
+}
+
+/** Worker: wakes every ticket whose snooze has run out and tells whoever snoozed it (and the assignee). */
+export async function wakeSnoozedTickets(limit = 200) {
+  const due = await db
+    .select({
+      id: tickets.id,
+      number: tickets.number,
+      subject: tickets.subject,
+      reason: tickets.snoozeReason,
+      snoozedByUserId: tickets.snoozedByUserId,
+      assigneeUserId: tickets.assigneeUserId,
+      until: tickets.snoozedUntil,
+    })
+    .from(tickets)
+    .where(and(lte(tickets.snoozedUntil, sql`now()`), isNull(tickets.mergedIntoTicketId)))
+    .orderBy(asc(tickets.snoozedUntil))
+    .limit(limit);
+  const { notifyUsers } = await import("./helpdesk-notifications");
+  for (const t of due) {
+    await db
+      .update(tickets)
+      .set({ snoozedUntil: null, snoozeReason: null, snoozedByUserId: null, lastActivityAt: new Date() })
+      .where(eq(tickets.id, t.id));
+    await recordEvent(t.id, "unsnooze", `Snooze ended${t.reason ? `: ${t.reason}` : ""}`, SYSTEM, { why: "snooze ended", until: t.until?.toISOString() ?? null });
+    await notifyUsers([t.snoozedByUserId, t.assigneeUserId], {
+      kind: "snoozed",
+      title: `${ticketReference(t.number)} is back: ${t.reason ?? "snooze ended"}`,
+      body: t.subject,
+      ticketId: t.id,
+    });
+  }
+  return { woken: due.length };
 }
 
 export async function assignTicket(

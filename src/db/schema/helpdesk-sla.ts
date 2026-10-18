@@ -134,6 +134,7 @@ export type RuleAction = {
     | "notify_users"
     | "notify_assignee"
     | "set_type"
+    | "nudge_customer"
     | "close";
   value?: string | string[] | null;
 };

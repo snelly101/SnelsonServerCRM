@@ -12,7 +12,8 @@ export type NotificationKind =
   | "followed_update"
   | "automation"
   | "bounce"
-  | "checklist";
+  | "checklist"
+  | "snoozed";
 
 /** Writes one in-app notification per user (never to the actor themselves). Deduplicates same kind+ticket per user within 10 minutes. */
 export async function notifyUsers(

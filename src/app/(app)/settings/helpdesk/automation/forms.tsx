@@ -70,6 +70,10 @@ const FIELDS: { key: string; label: string; kind: "status" | "priority" | "type"
   { key: "hoursSinceActivity", label: "Hours since last activity", kind: "number" },
   { key: "hoursSinceCreated", label: "Hours since created", kind: "number" },
   { key: "hoursSinceResolved", label: "Hours since resolved", kind: "number" },
+  { key: "hoursSinceCustomerMessage", label: "Hours since the customer last wrote", kind: "number" },
+  { key: "businessHoursSinceAgentMessage", label: "Business hours since we last wrote", kind: "number" },
+  { key: "reminderCount", label: "Reminders already sent", kind: "number" },
+  { key: "snoozed", label: "Snoozed", kind: "bool" },
 ];
 
 function ValueInput({
@@ -128,7 +132,7 @@ function ValueInput({
   }
 }
 
-const actionKind = (t: Action["type"]): (typeof FIELDS)[number]["kind"] | "none" | "note" | "users" => {
+const actionKind = (t: Action["type"]): (typeof FIELDS)[number]["kind"] | "none" | "note" | "users" | "reminder" => {
   switch (t) {
     case "assign_user":
       return "agent";
@@ -149,6 +153,8 @@ const actionKind = (t: Action["type"]): (typeof FIELDS)[number]["kind"] | "none"
       return "note";
     case "notify_users":
       return "users";
+    case "nudge_customer":
+      return "reminder";
     default:
       return "none";
   }
@@ -307,6 +313,11 @@ export function RuleDialog({ rule, options }: { rule?: RuleForm; options: Option
                     <div>
                       {kind === "note" ? (
                         <Textarea aria-label="Note text" rows={2} value={toStr(a.value)} onChange={(e) => setAct(i, { value: e.target.value })} className="text-xs" placeholder="Internal note added to the ticket" />
+                      ) : kind === "reminder" ? (
+                        <div>
+                          <Textarea aria-label="Reminder text" rows={3} value={toStr(a.value)} onChange={(e) => setAct(i, { value: e.target.value })} className="text-xs" placeholder="Leave empty for the standard reminder. Placeholders: {{requester}} {{reference}} {{subject}} {{signature}}" />
+                          <p className="mt-1 text-[11px] text-slate-500">E-mailed to the requester only while the ticket is awaiting the customer and not snoozed; at most one every 20 hours. Pair it with “Business hours since we last wrote” and “Reminders already sent”.</p>
+                        </div>
                       ) : kind === "users" ? (
                         <select
                           aria-label="Users to notify"

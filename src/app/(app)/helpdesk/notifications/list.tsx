@@ -13,6 +13,7 @@ import {
   Zap,
   MailX,
   ListChecks,
+  AlarmClockCheck,
   Bell,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,7 @@ const ICONS: Record<string, typeof Bell> = {
   automation: Zap,
   bounce: MailX,
   checklist: ListChecks,
+  snoozed: AlarmClockCheck,
 };
 
 export function NotificationList({

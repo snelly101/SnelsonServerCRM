@@ -92,7 +92,7 @@ export async function deleteBusinessHours(id: string, actorUserId: string) {
     entityId: id,
   });
 }
-async function businessHoursFor(
+export async function businessHoursFor(
   policy: SlaPolicy | null,
 ): Promise<BusinessHours> {
   const settings = await getAppSettings();
