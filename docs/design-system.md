@@ -48,7 +48,8 @@ figures and tight tracking.
 * **Page transitions**: routes cross-fade with a touch of blur
   (`PageTransition`); cards rise in with a short stagger (`card-rise`);
   tabs and pills slide their active background with Framer Motion. All
-  motion respects `prefers-reduced-motion`.
+  motion respects `prefers-reduced-motion`. There is deliberately no
+  route-level loading skeleton (see Components).
 
 ## Components (`src/components/ui`)
 
@@ -70,8 +71,11 @@ figures and tight tracking.
 * Inputs (`.input`): soft grey background, hairline border, white on focus
   with a faint orange ring; 36px tall. Filter bars use pill-shaped search
   fields and selects.
-* `Skeleton` / `PageSkeleton`: soft placeholders used by the route-level
-  `loading.tsx`.
+* `Skeleton` / `PageSkeleton`: soft placeholders for use inside a page.
+  Do not add a route-level `loading.tsx` under `(app)`: the Suspense
+  boundary it wraps around every page makes React transitions after a
+  server action hang intermittently (the status dialog, Follow and similar
+  controls never learned the action had finished), so it was removed.
 
 ## Rules of thumb
 
