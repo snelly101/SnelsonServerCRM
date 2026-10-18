@@ -205,7 +205,7 @@ export default async function HelpdeskDashboard() {
           actions={
             <Link
               href="/helpdesk/tickets?view=my"
-              className="text-xs text-brand-700 hover:underline"
+              className="text-xs link"
             >
               all
             </Link>
@@ -219,7 +219,7 @@ export default async function HelpdeskDashboard() {
           actions={
             <Link
               href="/helpdesk/tickets?view=unassigned"
-              className="text-xs text-brand-700 hover:underline"
+              className="text-xs link"
             >
               all
             </Link>
@@ -233,7 +233,7 @@ export default async function HelpdeskDashboard() {
           actions={
             <Link
               href="/helpdesk/tickets?view=recent"
-              className="text-xs text-brand-700 hover:underline"
+              className="text-xs link"
             >
               all
             </Link>

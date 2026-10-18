@@ -23,7 +23,7 @@ export default async function VaultAuditPage({ searchParams }: { searchParams: P
   return (
     <div className="space-y-4">
       <p className="text-sm text-slate-500">
-        <Link href="/settings/vault" className="text-brand-700 hover:underline">Secure Vault</Link> · append-only audit trail. Secrets are never recorded; the free-text filter searches nothing here.
+        <Link href="/settings/vault" className="link">Secure Vault</Link> · append-only audit trail. Secrets are never recorded; the free-text filter searches nothing here.
       </p>
       <FilterBar
         page="vault-audit"
@@ -59,7 +59,7 @@ export default async function VaultAuditPage({ searchParams }: { searchParams: P
                   <td className="whitespace-nowrap text-slate-500">{r.at.toLocaleString("en-GB")}</td>
                   <td>{r.actorName ?? <span className="text-slate-400">system</span>}</td>
                   <td><Badge tone={TONE[r.action] ?? "slate"}>{r.action.replace(/_/g, " ")}</Badge></td>
-                  <td>{r.companyId ? <Link href={`/companies/${r.companyId}?tab=vault`} className="text-brand-700 hover:underline">{r.companyName ?? "customer"}</Link> : ""}</td>
+                  <td>{r.companyId ? <Link href={`/companies/${r.companyId}?tab=vault`} className="link">{r.companyName ?? "customer"}</Link> : ""}</td>
                   <td>{r.itemName ?? ""}</td>
                   <td className="font-mono text-xs">{r.field ?? ""}</td>
                   <td className="font-mono text-xs text-slate-500" title={r.userAgent ?? ""}>{r.ipAddress ?? ""}</td>

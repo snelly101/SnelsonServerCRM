@@ -283,6 +283,7 @@ Built to the brief in the owner's redesign document: a compact company summary w
 - **No flash**: the root layout renders `data-theme` from the cookie for explicit choices and an inline script resolves "system" before first paint.
 - **How the styling works**: instead of editing every colour class, `[data-theme="dark"]` in `globals.css` redefines the palette variables that Tailwind utilities point at (the slate scale, the brand scale, the status hues used by badges and alerts) plus four semantic tokens (`page`, `surface`, `fg`, `sidebar`). `bg-white` surfaces became `bg-surface`, dark filter pills became `bg-fg text-surface`, overlays use `bg-black/50`. The sidebar carries `data-theme="light"` so its own dark design is untouched in both modes. Native controls follow via `color-scheme`.
 - **Print** forces the light palette.
+- **October 2026 restyle**: the light and dark palettes, radii, type and shell were reworked to the V14 design language (warm greys, one orange accent, icon rail and pill navigation, Inter). The mechanism is unchanged; the token values and the component rules now live in `docs/design-system.md`. The sidebar no longer carries its own dark design, so the `data-theme="light"` island is only used for content that must stay light.
 
 ### What was tested
 

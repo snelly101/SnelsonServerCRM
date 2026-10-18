@@ -47,16 +47,16 @@ export default async function PortalHome({ searchParams }: { searchParams: Promi
           </Select>
         )}
         <Input name="q" defaultValue={sp.q ?? ""} placeholder="Search by subject or number" aria-label="Search" className="w-64" />
-        <button type="submit" className="rounded-md border border-slate-300 bg-surface px-3 py-2 text-sm hover:bg-slate-50">Filter</button>
+        <button type="submit" className="inline-flex h-9 items-center rounded-full border border-slate-200 bg-surface px-4 text-[13px] font-medium text-slate-800 hover:bg-slate-50">Filter</button>
       </form>
 
       {rows.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-slate-300 bg-surface px-6 py-12 text-center text-sm text-slate-500">
+        <div className="rounded-xl border border-dashed border-slate-300 bg-surface px-6 py-12 text-center text-sm text-slate-500">
           {view === "open" ? "No open requests. " : "Nothing here. "}
-          <Link href="/portal/tickets/new" className="text-brand-700 hover:underline">Raise a new request</Link> or <Link href="/portal/kb" className="text-brand-700 hover:underline">browse the help articles</Link>.
+          <Link href="/portal/tickets/new" className="link">Raise a new request</Link> or <Link href="/portal/kb" className="link">browse the help articles</Link>.
         </div>
       ) : (
-        <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200 bg-surface">
+        <ul className="divide-y divide-slate-100 card">
           {rows.map((t) => (
             <li key={t.id}>
               <Link href={`/portal/tickets/${t.id}`} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 hover:bg-slate-50">

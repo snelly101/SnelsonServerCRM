@@ -64,6 +64,7 @@ test("admin can create a prospect and a contact, and see them on the overview", 
 
   // Global search finds the company
   await page.goto("/");
+  await page.getByRole("button", { name: /^Search/ }).first().click();
   await page.getByRole("combobox", { name: "Search companies and contacts" }).fill(`E2E Prospect ${stamp}`);
   await expect(page.getByRole("option", { name: new RegExp(name) })).toBeVisible();
 });

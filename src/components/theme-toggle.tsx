@@ -25,15 +25,15 @@ export function ThemeToggle({ initial }: { initial: ThemePref }) {
   const current = OPTIONS.find((o) => o.value === pref) ?? OPTIONS[0];
   return (
     <DropdownMenu.Root>
-      <DropdownMenu.Trigger className="rounded p-1.5 text-slate-600 hover:bg-slate-100" aria-label={`Theme: ${current.label}`} title="Theme">
+      <DropdownMenu.Trigger className="pill-icon h-8 w-8" aria-label={`Theme: ${current.label}`} title="Theme">
         <current.Icon className="h-4 w-4" aria-hidden />
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
-        <DropdownMenu.Content align="end" sideOffset={4} className="z-40 min-w-[150px] rounded-md border border-slate-200 bg-surface p-1 shadow-lg">
+        <DropdownMenu.Content align="end" sideOffset={4} className="menu">
           {OPTIONS.map((o) => (
             <DropdownMenu.Item
               key={o.value}
-              className="flex cursor-default items-center gap-2 rounded px-2 py-1.5 text-sm text-slate-700 outline-none data-[highlighted]:bg-slate-100"
+              className="menu-item"
               disabled={pending}
               onSelect={() => {
                 setPref(o.value);
@@ -63,4 +63,35 @@ export function ThemeSync({ pref }: { pref: ThemePref }) {
     }
   }, [pref]);
   return null;
+}
+
+/** The vertical light / dark / system cluster at the top of the icon rail. */
+export function ThemeRail({ initial }: { initial: ThemePref }) {
+  const [pref, setPref] = useState<ThemePref>(initial);
+  const [pending, start] = useTransition();
+  return (
+    <div className="flex flex-col items-center gap-0.5 rounded-full border border-slate-200 bg-surface p-1" role="radiogroup" aria-label="Theme">
+      {[OPTIONS[1], OPTIONS[2], OPTIONS[0]].map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          role="radio"
+          aria-checked={o.value === pref}
+          aria-label={`${o.label} theme`}
+          title={`${o.label} theme`}
+          disabled={pending}
+          className={`pill-icon h-8 w-8 ${o.value === pref ? "pill-active" : ""}`}
+          onClick={() => {
+            setPref(o.value);
+            applyTheme(o.value);
+            start(async () => {
+              await setThemeAction(o.value);
+            });
+          }}
+        >
+          <o.Icon className="h-4 w-4" aria-hidden />
+        </button>
+      ))}
+    </div>
+  );
 }

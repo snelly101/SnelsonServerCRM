@@ -191,7 +191,7 @@ function MessageCard({
               {a.scanStatus === "clean" || a.scanStatus === "skipped" ? (
                 <a
                   href={`/api/helpdesk/attachments/${a.id}`}
-                  className="text-brand-700 hover:underline"
+                  className="link"
                 >
                   {a.fileName}
                 </a>

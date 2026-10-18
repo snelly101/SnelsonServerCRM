@@ -169,7 +169,7 @@ export default async function HelpdeskAdminPage() {
         Custom fields for tickets are managed under{" "}
         <Link
           href="/settings/fields"
-          className="text-brand-700 hover:underline"
+          className="link"
         >
           Settings → Tags &amp; custom fields
         </Link>{" "}

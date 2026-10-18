@@ -118,7 +118,7 @@ async function IssuedStep({ settings }: { settings: { currency: string; dateForm
             <tbody>
               {changed.map((d) => (
                 <tr key={d.id}>
-                  <td><Link href={`/billing/drafts/${d.id}`} className="font-medium text-brand-700 hover:underline">{d.reference}</Link></td>
+                  <td><Link href={`/billing/drafts/${d.id}`} className="font-medium link">{d.reference}</Link></td>
                   <td><Link href={`/companies/${d.companyId}`} className="hover:underline">{d.companyName}</Link></td>
                   <td className="text-xs text-slate-600">{d.xeroInvoiceNumber ?? "—"}</td>
                   <td className="text-right tabular-nums">{fmtMoney(d.diff!.approvedSubTotal, d.currencyCode)}</td>
@@ -149,18 +149,18 @@ async function IssuedStep({ settings }: { settings: { currency: string; dateForm
             <tbody>
               {recent.map((d) => (
                 <tr key={d.id}>
-                  <td><Link href={`/billing/drafts/${d.id}`} className="font-medium text-brand-700 hover:underline">{d.reference}</Link></td>
+                  <td><Link href={`/billing/drafts/${d.id}`} className="font-medium link">{d.reference}</Link></td>
                   <td><Link href={`/companies/${d.companyId}`} className="hover:underline">{d.companyName}</Link></td>
                   <td className="text-xs text-slate-600">{d.xeroInvoiceNumber ?? d.xeroInvoiceId ?? "—"}</td>
                   <td className="text-right tabular-nums">{fmtMoney(d.subTotal, d.currencyCode)}</td>
                   <td className="text-xs text-slate-500" title={d.createdInXeroAt ? fmtDateTime(d.createdInXeroAt, settings) : ""}>{d.createdInXeroAt ? fmtRelative(d.createdInXeroAt) : "—"}</td>
-                  <td className="text-right"><Link href={`/billing/drafts/${d.id}/schedule`} className="text-xs text-brand-700 hover:underline">Customer schedule</Link></td>
+                  <td className="text-right"><Link href={`/billing/drafts/${d.id}/schedule`} className="text-xs link">Customer schedule</Link></td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
-        <p className="px-4 py-2 text-[11px] text-slate-500">Approve and send from Xero. Payments and status flow back through the hourly sync and webhooks into <Link href="/billing/invoices" className="text-brand-700 hover:underline">Invoices</Link>.</p>
+        <p className="px-4 py-2 text-[11px] text-slate-500">Approve and send from Xero. Payments and status flow back through the hourly sync and webhooks into <Link href="/billing/invoices" className="link">Invoices</Link>.</p>
       </Card>
     </>
   );

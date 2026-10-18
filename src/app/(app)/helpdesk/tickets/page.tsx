@@ -103,7 +103,7 @@ export default async function TicketsPage({
         }
       />
       <div
-        className="mb-3 flex flex-wrap gap-1"
+        className="pill-group mb-3 max-w-full overflow-x-auto no-scrollbar"
         role="tablist"
         aria-label="Ticket views"
       >
@@ -114,16 +114,11 @@ export default async function TicketsPage({
               role="tab"
               aria-selected={view === v}
               href={`/helpdesk/tickets?view=${v}${keep.toString() ? `&${keep}` : ""}`}
-              className={cn(
-                "rounded-full px-3 py-1 text-sm",
-                view === v
-                  ? "bg-fg text-surface"
-                  : "bg-slate-100 text-slate-700 hover:bg-slate-200",
-              )}
+              className={cn("pill", view === v && "pill-active")}
             >
               {TICKET_VIEW_LABELS[v]}
               {typeof viewCounts[v] === "number" && (
-                <span className="ml-1 text-xs opacity-70">{viewCounts[v]}</span>
+                <span className={cn("rounded-full px-1.5 text-[11px] tabular-nums", view === v ? "bg-white/20" : "bg-slate-100 text-slate-600")}>{viewCounts[v]}</span>
               )}
             </Link>
           ),

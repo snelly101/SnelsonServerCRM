@@ -36,7 +36,7 @@ export function RenewalTable({ rows, canWrite, currency, settings }: { rows: Ren
           return (
             <tr key={r.contractId} className="align-top">
               <td>
-                <Link href={`/companies/${r.companyId}`} className="font-medium text-brand-700 hover:underline">{r.companyName}</Link>
+                <Link href={`/companies/${r.companyId}`} className="font-medium link">{r.companyName}</Link>
                 <div className="text-xs text-slate-500">
                   <Link href={`/contracts/${r.contractId}`} className="hover:underline">{r.contractName}</Link>
                   {r.ownerName && <> · {r.ownerName}</>}
@@ -71,7 +71,7 @@ export function RenewalTable({ rows, canWrite, currency, settings }: { rows: Ren
                   </div>
                 )}
                 {(r.services.length > 0) && (
-                  <button type="button" className="mt-1 text-brand-700 hover:underline" onClick={() => toggle(r.contractId)}>
+                  <button type="button" className="mt-1 link" onClick={() => toggle(r.contractId)}>
                     {expanded ? "hide services" : `${r.services.length} service${r.services.length === 1 ? "" : "s"}`}
                   </button>
                 )}

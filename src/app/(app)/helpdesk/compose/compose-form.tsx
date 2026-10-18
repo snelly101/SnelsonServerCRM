@@ -160,7 +160,7 @@ export function ComposeForm({
         </Field>
       </div>
       {preview ? (
-        <div className="rounded-md border border-slate-200 bg-surface p-3 text-sm">
+        <div className="card p-3 text-sm">
           <MarkdownLite text={body} />
           {signature && (
             <div className="mt-3 border-t border-slate-100 pt-2 text-xs text-slate-500">

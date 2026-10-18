@@ -119,7 +119,7 @@ export default async function HelpdeskReportsPage({
         title="Helpdesk reports"
         description="Volumes, response and resolution times, SLA attainment, reopen rate, backlog age and time logged for the chosen period. Attainment counts tickets that had a target; response times are wall-clock from creation."
       />
-      <form className="mb-4 grid gap-2 rounded-lg border border-slate-200 bg-surface p-3 sm:grid-cols-3 lg:grid-cols-7" aria-label="Report filters">
+      <form className="mb-4 grid gap-2 card p-3 sm:grid-cols-3 lg:grid-cols-7" aria-label="Report filters">
         <Field label="From" htmlFor="rp-from">
           <Input id="rp-from" name="from" type="date" defaultValue={fromStr} />
         </Field>

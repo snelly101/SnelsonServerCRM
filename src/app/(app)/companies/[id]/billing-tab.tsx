@@ -72,7 +72,7 @@ export function CompanyBillingTab({ companyId, data, picture, finance, xero, sub
             <li key={i} className="flex items-start gap-3 px-4 py-3">
               <Badge tone={TONE[n.tone]} className="mt-0.5 shrink-0">{n.tone === "red" ? "now" : n.tone === "amber" ? "this run" : "info"}</Badge>
               <div className="min-w-0 flex-1">
-                <Link href={n.href} className="font-medium text-brand-700 hover:underline">{n.label}</Link>
+                <Link href={n.href} className="font-medium link">{n.label}</Link>
                 {n.detail && <div className="text-xs text-slate-600">{n.detail}</div>}
               </div>
             </li>
@@ -95,7 +95,7 @@ export function CompanyBillingTab({ companyId, data, picture, finance, xero, sub
               padded={false}
               title={
                 <span className="flex flex-wrap items-center gap-2">
-                  <Link href={`/contracts/${a.id}`} className="text-brand-700 hover:underline">{a.name}</Link>
+                  <Link href={`/contracts/${a.id}`} className="link">{a.name}</Link>
                   {a.status !== "active" && <Badge tone={a.status === "draft" ? "slate" : "amber"}>{a.status}</Badge>}
                   <span className="text-xs font-normal text-slate-500">
                     {FREQUENCY_LABELS[a.billingFrequency as keyof typeof FREQUENCY_LABELS]}
@@ -113,7 +113,7 @@ export function CompanyBillingTab({ companyId, data, picture, finance, xero, sub
                       <Badge tone={STATUS_TONE[r.status]}>next run: {STATUS_LABEL[r.status]} · {fmtMoney(r.net, c)}</Badge>
                     </span>
                   )}
-                  {canWrite && <Link href={`/contracts/${a.id}/edit`} className="text-brand-700 hover:underline">Edit</Link>}
+                  {canWrite && <Link href={`/contracts/${a.id}/edit`} className="link">Edit</Link>}
                 </span>
               }
             >
@@ -124,7 +124,7 @@ export function CompanyBillingTab({ companyId, data, picture, finance, xero, sub
                   <span className="text-slate-700">{r.reasons.slice(0, 3).join("; ")}</span>
                   {r.blockers.map((b) => <span key={b} className="ml-2 text-red-700">{b}</span>)}
                   {r.attention.map((x) => <span key={x} className="ml-2 text-amber-700">{x}</span>)}
-                  {r.previous && <Link href={`/billing/drafts/${r.previous.draftId}`} className="ml-2 text-brand-700 hover:underline">previous {fmtMoney(r.previous.net, c)}</Link>}
+                  {r.previous && <Link href={`/billing/drafts/${r.previous.draftId}`} className="ml-2 link">previous {fmtMoney(r.previous.net, c)}</Link>}
                 </div>
               )}
             </Card>
@@ -133,7 +133,7 @@ export function CompanyBillingTab({ companyId, data, picture, finance, xero, sub
       )}
 
       {picture.otherServices.length > 0 && (
-        <Card title={`Supplied but not on an active agreement (${picture.otherServices.length})`} padded={false} actions={<Link href={`/billing/services?companyId=${companyId}`} className="text-xs text-brand-700 hover:underline">Service register</Link>}>
+        <Card title={`Supplied but not on an active agreement (${picture.otherServices.length})`} padded={false} actions={<Link href={`/billing/services?companyId=${companyId}`} className="text-xs link">Service register</Link>}>
           {unmapped.length > 0 && <p className="border-b border-amber-100 bg-amber-50 px-4 py-2 text-xs text-amber-800"><strong>{unmapped.length} unmapped</strong>: the integrations supply these and nothing says how they are charged. Choose the line that bills each one, or record that it is bundled, covered by a commitment, intentionally free or internal.</p>}
           <table className="tbl">
             <thead>
@@ -187,7 +187,7 @@ export function CompanyBillingTab({ companyId, data, picture, finance, xero, sub
         </Card>
       )}
 
-      <details className="group rounded-lg border border-slate-200 bg-surface shadow-sm" open={Boolean(finance && (finance.drafts.length > 0 || Number(finance.xeroContact?.overdue ?? finance.overdue) > 0))}>
+      <details className="group card" open={Boolean(finance && (finance.drafts.length > 0 || Number(finance.xeroContact?.overdue ?? finance.overdue) > 0))}>
         <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold text-slate-800">
           Invoices
           {finance && <span className="ml-2 text-xs font-normal text-slate-500">{finance.count} in Xero · {fmtMoney(finance.invoiced12m, c)} invoiced in 12 months{t.billed.perYear > 0 && <InvoicedVersusExpected invoiced={finance.invoiced12m} expected={t.billed.perYear} currency={c} />}</span>}
@@ -199,8 +199,8 @@ export function CompanyBillingTab({ companyId, data, picture, finance, xero, sub
               <ul className="divide-y divide-slate-100 text-sm">
                 {data.issued.map((d) => (
                   <li key={d.id} className="flex items-center justify-between gap-2 px-4 py-2">
-                    <span><Link href={`/billing/drafts/${d.id}`} className="text-brand-700 hover:underline">{d.reference}</Link>{d.xeroInvoiceNumber && <span className="text-xs text-slate-500"> · {d.xeroInvoiceNumber}</span>}<div className="text-xs text-slate-500">{d.periodStart ? `${fmtDate(d.periodStart, settings)} – ${fmtDate(d.periodEnd, settings)}` : d.description}</div></span>
-                    <span className="whitespace-nowrap text-xs text-slate-600">{fmtMoney(d.subTotal, d.currencyCode)} · <Link href={`/billing/drafts/${d.id}/schedule`} className="text-brand-700 hover:underline">schedule</Link></span>
+                    <span><Link href={`/billing/drafts/${d.id}`} className="link">{d.reference}</Link>{d.xeroInvoiceNumber && <span className="text-xs text-slate-500"> · {d.xeroInvoiceNumber}</span>}<div className="text-xs text-slate-500">{d.periodStart ? `${fmtDate(d.periodStart, settings)} – ${fmtDate(d.periodEnd, settings)}` : d.description}</div></span>
+                    <span className="whitespace-nowrap text-xs text-slate-600">{fmtMoney(d.subTotal, d.currencyCode)} · <Link href={`/billing/drafts/${d.id}/schedule`} className="link">schedule</Link></span>
                   </li>
                 ))}
               </ul>
@@ -210,7 +210,7 @@ export function CompanyBillingTab({ companyId, data, picture, finance, xero, sub
       </details>
 
       {(data.open.length > 0 || data.accepted.length > 0 || data.renewals.length > 0) && (
-        <details className="rounded-lg border border-slate-200 bg-surface shadow-sm" open={data.open.length > 0 || data.renewals.some((r) => r.status === "overdue" || r.status === "due")}>
+        <details className="card" open={data.open.length > 0 || data.renewals.some((r) => r.status === "overdue" || r.status === "due")}>
           <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold text-slate-800">
             Count checks and renewals
             <span className="ml-2 text-xs font-normal text-slate-500">{data.open.length} open{data.accepted.length ? `, ${data.accepted.length} accepted` : ""} · {data.renewals.length} renewal{data.renewals.length === 1 ? "" : "s"}</span>
@@ -223,7 +223,7 @@ export function CompanyBillingTab({ companyId, data, picture, finance, xero, sub
               </Card>
             )}
             {data.renewals.length > 0 && (
-              <Card title="Renewals" padded={false} actions={<Link href="/billing/renewals" className="text-xs text-brand-700 hover:underline">All renewals</Link>}>
+              <Card title="Renewals" padded={false} actions={<Link href="/billing/renewals" className="text-xs link">All renewals</Link>}>
                 <table className="tbl">
                   <thead>
                     <tr>
@@ -238,7 +238,7 @@ export function CompanyBillingTab({ companyId, data, picture, finance, xero, sub
                   <tbody>
                     {data.renewals.map((r) => (
                       <tr key={r.contractId} className="align-top">
-                        <td><Link href={`/contracts/${r.contractId}`} className="font-medium text-brand-700 hover:underline">{r.contractName}</Link></td>
+                        <td><Link href={`/contracts/${r.contractId}`} className="font-medium link">{r.contractName}</Link></td>
                         <td className={`whitespace-nowrap ${r.status === "overdue" ? "text-red-700" : r.status === "due" ? "text-amber-700" : ""}`}>{fmtDate(r.decideBy, settings)}</td>
                         <td className="whitespace-nowrap">{fmtDate(r.renewalDate, settings)}</td>
                         <td className="max-w-md text-xs">{r.mismatches.length ? <ul className="list-disc pl-4 text-amber-800">{r.mismatches.map((m) => <li key={m}>{m}</li>)}</ul> : <span className="text-slate-500">{r.services.length ? "Supplier commitments end with or before the agreement" : "No supplier commitments on record"}</span>}{r.exposureTotal > 0 && <div className="text-amber-800">≈ {fmtMoney(r.exposureTotal, c)} exposure if not renewed</div>}</td>
@@ -254,7 +254,7 @@ export function CompanyBillingTab({ companyId, data, picture, finance, xero, sub
         </details>
       )}
 
-      <details className="rounded-lg border border-slate-200 bg-surface shadow-sm">
+      <details className="card">
         <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold text-slate-800">
           Supplier detail
           <span className="ml-2 text-xs font-normal text-slate-500">

@@ -83,7 +83,7 @@ export default async function TwentyIPage() {
               <li>A package or domain is linked automatically only when its registrable domain (e.g. <em>example.co.uk</em>) matches exactly one company&apos;s website or contact email domain. Anything else is a suggestion for a person to confirm.</li>
               <li>Mailboxes follow the company of their package. Unlinking is remembered, so a sync never re-links what you undid.</li>
               <li>On each company&apos;s <strong>Hosting</strong> tab you choose the contract line that bills every package and domain, and see the Xero invoices whose lines mention them.</li>
-              <li>Domains and certificates expiring inside the window become tasks, owned by the account owner. Renewals happen in <Link href="https://my.20i.com" className="text-brand-700 hover:underline" target="_blank" rel="noreferrer">My20i</Link>; the CRM never renews, suspends or provisions.</li>
+              <li>Domains and certificates expiring inside the window become tasks, owned by the account owner. Renewals happen in <Link href="https://my.20i.com" className="link" target="_blank" rel="noreferrer">My20i</Link>; the CRM never renews, suspends or provisions.</li>
             </ul>
           </div>
         </Card>

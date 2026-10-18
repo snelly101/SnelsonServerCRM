@@ -47,7 +47,7 @@ export default async function BillingCustomersPage({ searchParams }: { searchPar
             <option value="no_agreement">Supplied without an agreement</option>
           </Select>
           <Button type="submit" size="sm" variant="secondary">Filter</Button>
-          {(q || only !== "all") && <Link href="/billing/customers" className="text-xs text-brand-700 hover:underline">clear</Link>}
+          {(q || only !== "all") && <Link href="/billing/customers" className="text-xs link">clear</Link>}
         </form>
         {rows.length === 0 ? (
           <p className="p-4 text-sm text-slate-500">No customers match.</p>
@@ -69,7 +69,7 @@ export default async function BillingCustomersPage({ searchParams }: { searchPar
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.companyId}>
-                    <td><Link href={`/companies/${r.companyId}?tab=billing`} className="font-medium text-brand-700 hover:underline">{r.companyName}</Link></td>
+                    <td><Link href={`/companies/${r.companyId}?tab=billing`} className="font-medium link">{r.companyName}</Link></td>
                     <td className="text-xs text-slate-600">{r.agreements === 0 ? <span className="text-amber-700">none</span> : <>{r.agreements} · {r.frequencies.map((f) => FREQUENCY_LABELS[f as keyof typeof FREQUENCY_LABELS] ?? f).join(", ")}</>}</td>
                     <td className="whitespace-nowrap">{r.nextInvoiceOn ? fmtDate(r.nextInvoiceOn, settings) : <span className="text-slate-400">—</span>}</td>
                     <td className="text-right tabular-nums" title={Math.abs(r.chargeMonthly - r.billed.monthly) >= 0.005 ? `MRR ${fmtMoney(r.chargeMonthly, c)} normalised` : undefined}>

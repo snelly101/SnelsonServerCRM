@@ -93,7 +93,7 @@ export function InvoicesSection({ finance, xero, settings, id }: { finance: Awai
                   >
                     <Link
                       href={`/billing/drafts/${d.id}`}
-                      className="text-brand-700 hover:underline"
+                      className="link"
                     >
                       {d.reference} · {d.description ?? "draft"}
                     </Link>

@@ -63,7 +63,7 @@ export default async function OpportunityPage({ params }: { params: Promise<{ id
           </span>
         }
         description={
-          <Link href={`/companies/${opp.companyId}`} className="text-brand-700 hover:underline">
+          <Link href={`/companies/${opp.companyId}`} className="link">
             {opp.companyName}
           </Link>
         }
@@ -152,7 +152,7 @@ export default async function OpportunityPage({ params }: { params: Promise<{ id
             <DescriptionList
               items={[
                 { label: "Owner", value: opp.ownerName },
-                { label: "Primary contact", value: opp.contact ? <Link href={`/contacts/${opp.contact.id}`} className="text-brand-700 hover:underline">{opp.contact.firstName} {opp.contact.lastName}</Link> : null },
+                { label: "Primary contact", value: opp.contact ? <Link href={`/contacts/${opp.contact.id}`} className="link">{opp.contact.firstName} {opp.contact.lastName}</Link> : null },
                 { label: "Expected close", value: fmtDate(opp.expectedCloseDate) },
                 { label: "Probability", value: `${opp.probability}%` },
                 { label: "Lead source", value: opp.leadSource },

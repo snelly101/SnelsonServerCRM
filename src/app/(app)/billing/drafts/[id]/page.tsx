@@ -38,7 +38,7 @@ export default async function DraftPage({ params }: { params: Promise<{ id: stri
           </span>
         }
         description={
-          <Link href={`/companies/${draft.companyId}`} className="text-brand-700 hover:underline">
+          <Link href={`/companies/${draft.companyId}`} className="link">
             {draft.companyName}
           </Link>
         }
@@ -122,7 +122,7 @@ export default async function DraftPage({ params }: { params: Promise<{ id: stri
             )}
           </Card>
           {customer.summary && (
-            <Card title="What the customer sees" className="mt-4" actions={<Link href={`/billing/drafts/${draft.id}/schedule`} className="text-xs text-brand-700 hover:underline">Customer schedule (printable)</Link>}>
+            <Card title="What the customer sees" className="mt-4" actions={<Link href={`/billing/drafts/${draft.id}/schedule`} className="text-xs link">Customer schedule (printable)</Link>}>
               <p className="text-sm leading-6 text-slate-800">{customer.summary}</p>
               <p className="mt-2 text-xs text-slate-500">Plain-language wording derived from the calculated lines, for the invoice email or notes. The schedule page adds service dates and the licences, devices and domains behind each charge.</p>
             </Card>
@@ -148,13 +148,13 @@ export default async function DraftPage({ params }: { params: Promise<{ id: stri
               </ol>
               {draft.contractId && (
                 <p className="mt-3 text-xs text-slate-500">
-                  Quantities come from the <Link href={`/contracts/${draft.contractId}`} className="text-brand-700 hover:underline">contract</Link> and its dated change history as they stood when this draft was prepared.
+                  Quantities come from the <Link href={`/contracts/${draft.contractId}`} className="link">contract</Link> and its dated change history as they stood when this draft was prepared.
                 </p>
               )}
               {!draft.contractId && draft.contractIds?.length ? (
                 <p className="mt-3 text-xs text-slate-500">
                   Consolidated invoice: quantities come from {draft.contractIds.map((cid, i) => (
-                    <span key={cid}>{i > 0 ? ", " : ""}<Link href={`/contracts/${cid}`} className="text-brand-700 hover:underline">agreement {i + 1}</Link></span>
+                    <span key={cid}>{i > 0 ? ", " : ""}<Link href={`/contracts/${cid}`} className="link">agreement {i + 1}</Link></span>
                   ))} and their dated change history as they stood when this draft was prepared.
                 </p>
               ) : null}

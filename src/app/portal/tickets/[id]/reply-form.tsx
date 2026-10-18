@@ -37,7 +37,7 @@ export function ReplyForm({ ticketId, reopens }: { ticketId: string; reopens: bo
     }
   };
   return (
-    <form className="space-y-3 rounded-lg border border-slate-200 bg-surface p-4" onSubmit={submit}>
+    <form className="space-y-3 card p-4" onSubmit={submit}>
       <h2 className="text-sm font-semibold text-slate-800">{reopens ? "Reply to reopen this request" : "Reply"}</h2>
       {error && <Alert tone="error">{error}</Alert>}
       {notice && <Alert tone="success">{notice}</Alert>}

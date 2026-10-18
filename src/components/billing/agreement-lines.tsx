@@ -155,7 +155,7 @@ function LineRows({ line: l, isOpen, onToggle, months, recurring, c, settings, l
                 {l.sources.length === 0 ? (
                   <p className="text-slate-600">{recurring ? "No integration supplies this line; the quantity is what was agreed and entered by hand." : "One-off line; invoiced once."}</p>
                 ) : (
-                  <ul className="divide-y divide-slate-200 rounded-md border border-slate-200 bg-surface">
+                  <ul className="divide-y divide-slate-200 card">
                     {l.sources.map((s) => (
                       <li key={s.key} className="flex flex-wrap items-start justify-between gap-2 px-2 py-1.5">
                         <div className="min-w-0">
@@ -164,7 +164,7 @@ function LineRows({ line: l, isOpen, onToggle, months, recurring, c, settings, l
                             <span className="font-medium text-slate-800">{s.name}</span>
                             {s.state === "bundle" && <Badge tone="teal">bundled</Badge>}
                             {s.consoleUrl && (
-                              <a href={s.consoleUrl} target="_blank" rel="noreferrer" className="text-brand-700 hover:underline" title="Open at the supplier">
+                              <a href={s.consoleUrl} target="_blank" rel="noreferrer" className="link" title="Open at the supplier">
                                 <ExternalLink className="inline h-3 w-3" />
                               </a>
                             )}
@@ -187,7 +187,7 @@ function LineRows({ line: l, isOpen, onToggle, months, recurring, c, settings, l
                             <CoverageDialog row={s} lines={lines} trigger="Other" />
                           </div>
                         )}
-                        {s.pool && <Link href={s.href} className="text-brand-700 hover:underline">devices</Link>}
+                        {s.pool && <Link href={s.href} className="link">devices</Link>}
                       </li>
                     ))}
                   </ul>

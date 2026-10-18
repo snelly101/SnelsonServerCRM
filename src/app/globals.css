@@ -1,22 +1,90 @@
 @import "tailwindcss";
 
+/*
+ * Design tokens. Light values match the reference (warm, very light grey page,
+ * white surfaces, near-black type, muted secondary text, a single orange accent
+ * and a near-black "selection" colour for active pills). The dark theme below
+ * redefines the same variables, so every utility class flips with it.
+ */
 @theme {
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --color-brand-50: #eef4ff;
-  --color-brand-100: #dbe6fe;
-  --color-brand-200: #bfd3fe;
-  --color-brand-300: #93b4fd;
-  --color-brand-400: #608cfa;
-  --color-brand-500: #3b66f5;
-  --color-brand-600: #2547e9;
-  --color-brand-700: #1d36d6;
-  --color-brand-800: #1e2fad;
-  --color-brand-900: #1e2c89;
-  /* Semantic tokens: page background, raised surfaces, foreground text, the sidebar. */
-  --color-page: #f8fafc;
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+  --radius-3xl: 24px;
+
+  /* Neutral scale (the slate-* utilities). 50 is the muted surface, 200 the hairline border, 500 secondary text, 900 primary text. */
+  --color-slate-50: #f7f6f8;
+  --color-slate-100: #f0eff2;
+  --color-slate-200: #e7e5ea;
+  --color-slate-300: #d9d7dd;
+  --color-slate-400: #a8a6ae;
+  --color-slate-500: #85838b;
+  --color-slate-600: #6a6870;
+  --color-slate-700: #4e4c54;
+  --color-slate-800: #36353b;
+  --color-slate-900: #242329;
+  --color-slate-950: #17161a;
+
+  /* Accent (the brand-* utilities): orange. 500 is the primary, 600 the pressed shade, 700 the text shade. */
+  --color-brand-50: #fef2ee;
+  --color-brand-100: #fee3da;
+  --color-brand-200: #fdc5b5;
+  --color-brand-300: #fb9f85;
+  --color-brand-400: #f8775a;
+  --color-brand-500: #f4512c;
+  --color-brand-600: #de4322;
+  --color-brand-700: #bb371b;
+  --color-brand-800: #962d18;
+  --color-brand-900: #7a2816;
+
+  /* Semantic tokens. */
+  --color-page: #f3f2f5;
   --color-surface: #ffffff;
-  --color-fg: #0f172a;
-  --color-sidebar: #0f172a;
+  --color-fg: #242329;
+  --color-selection: #211f24;
+  --color-selection-fg: #ffffff;
+  --color-sidebar: #ffffff;
+
+  --shadow-pop: 0 12px 32px -12px rgb(36 35 41 / 0.22), 0 1px 2px rgb(36 35 41 / 0.06);
+  --shadow-lift: 0 1px 2px rgb(36 35 41 / 0.04);
+
+  --ease-out-soft: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --animate-rise: rise 0.32s var(--ease-out-soft) both;
+  --animate-fade: fade 0.2s ease-out both;
+  --animate-scale-in: scale-in 0.18s var(--ease-out-soft) both;
+
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes fade {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes scale-in {
+    from {
+      opacity: 0;
+      transform: translate(-50%, -50%) scale(0.97);
+    }
+    to {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+    }
+  }
 }
 
 /* Explicit dark-only utilities (rarely needed: the palette remap below covers most cases). */
@@ -27,46 +95,47 @@
 }
 
 /*
- * Dark theme. Set by an inline script before first paint from the theme
- * cookie (light / dark / system). Instead of touching every colour class,
- * the theme redefines the palette variables the utilities point at, so
- * bg-slate-50, text-slate-900, border-slate-200 and the status tints all
- * flip together. Elements that are dark by design (the sidebar) opt out
- * with data-theme="light" on their subtree.
+ * Dark theme: deep charcoal page, slightly lighter cards, soft neutral borders,
+ * the same orange. Set by an inline script before first paint from the theme
+ * cookie (light / dark / system). The neutral scale is re-mapped so 50 is the
+ * darkest tint and 900 the lightest text; the selection colour inverts so the
+ * active pill reads as a white pill with dark text.
  */
 [data-theme="dark"] {
   color-scheme: dark;
-  --color-page: #0b1220;
-  --color-surface: #111a2e;
-  --color-fg: #eef2f7;
-  --color-sidebar: #060b16;
-  /* Slate scale re-mapped for dark surfaces: 50 is now the darkest tint, 900 the lightest text. */
-  --color-slate-50: #0b1220;
-  --color-slate-100: #1a2540;
-  --color-slate-200: #243350;
-  --color-slate-300: #31425f;
-  --color-slate-400: #6b7a90;
-  --color-slate-500: #97a5b8;
-  --color-slate-600: #adb9c9;
-  --color-slate-700: #c5cfdb;
-  --color-slate-800: #dbe2ec;
-  --color-slate-900: #eef2f7;
-  --color-slate-950: #f8fafc;
-  /* Brand: tints darken, mid tones stay saturated for buttons, text shades lighten for links. */
-  --color-brand-50: #142040;
-  --color-brand-100: #1a2b58;
-  --color-brand-200: #233b7c;
-  --color-brand-300: #2f4fa8;
-  --color-brand-400: #4a6ee8;
-  --color-brand-500: #5b7cf2;
-  --color-brand-600: #3b66f5;
-  --color-brand-700: #7d97f7;
-  --color-brand-800: #a3b6fa;
-  --color-brand-900: #c7d3fc;
+  --color-page: #141316;
+  --color-surface: #1c1b20;
+  --color-fg: #f2f1f4;
+  --color-selection: #f2f1f4;
+  --color-selection-fg: #1a191d;
+  --color-sidebar: #1c1b20;
+  --color-slate-50: #222126;
+  --color-slate-100: #28272d;
+  --color-slate-200: #2f2e34;
+  --color-slate-300: #3b3a41;
+  --color-slate-400: #6d6b74;
+  --color-slate-500: #918f98;
+  --color-slate-600: #a8a6ae;
+  --color-slate-700: #c2c0c7;
+  --color-slate-800: #dcdae0;
+  --color-slate-900: #f2f1f4;
+  --color-slate-950: #ffffff;
+  --color-brand-50: color-mix(in srgb, #f4512c 14%, #1c1b20);
+  --color-brand-100: color-mix(in srgb, #f4512c 24%, #1c1b20);
+  --color-brand-200: color-mix(in srgb, #f4512c 40%, #1c1b20);
+  --color-brand-300: #f8775a;
+  --color-brand-400: #f8775a;
+  --color-brand-500: #f4512c;
+  --color-brand-600: #e5491f;
+  --color-brand-700: #fb9f85;
+  --color-brand-800: #fdc5b5;
+  --color-brand-900: #fee3da;
+  --shadow-pop: 0 16px 40px -12px rgb(0 0 0 / 0.6), 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-lift: 0 1px 2px rgb(0 0 0 / 0.3);
   /* Status hues: tints become translucent washes, text shades lighten. */
-  --color-green-50: color-mix(in srgb, #22c55e 16%, #111a2e);
-  --color-green-100: color-mix(in srgb, #22c55e 26%, #111a2e);
-  --color-green-200: color-mix(in srgb, #22c55e 42%, #111a2e);
+  --color-green-50: color-mix(in srgb, #22c55e 14%, #1c1b20);
+  --color-green-100: color-mix(in srgb, #22c55e 24%, #1c1b20);
+  --color-green-200: color-mix(in srgb, #22c55e 40%, #1c1b20);
   --color-green-300: #4ade80;
   --color-green-400: #4ade80;
   --color-green-500: #22c55e;
@@ -74,9 +143,9 @@
   --color-green-700: #86efac;
   --color-green-800: color-mix(in srgb, #86efac 80%, white);
   --color-green-900: color-mix(in srgb, #86efac 60%, white);
-  --color-emerald-50: color-mix(in srgb, #10b981 16%, #111a2e);
-  --color-emerald-100: color-mix(in srgb, #10b981 26%, #111a2e);
-  --color-emerald-200: color-mix(in srgb, #10b981 42%, #111a2e);
+  --color-emerald-50: color-mix(in srgb, #10b981 14%, #1c1b20);
+  --color-emerald-100: color-mix(in srgb, #10b981 24%, #1c1b20);
+  --color-emerald-200: color-mix(in srgb, #10b981 40%, #1c1b20);
   --color-emerald-300: #34d399;
   --color-emerald-400: #34d399;
   --color-emerald-500: #10b981;
@@ -84,9 +153,9 @@
   --color-emerald-700: #6ee7b7;
   --color-emerald-800: color-mix(in srgb, #6ee7b7 80%, white);
   --color-emerald-900: color-mix(in srgb, #6ee7b7 60%, white);
-  --color-amber-50: color-mix(in srgb, #f59e0b 16%, #111a2e);
-  --color-amber-100: color-mix(in srgb, #f59e0b 26%, #111a2e);
-  --color-amber-200: color-mix(in srgb, #f59e0b 42%, #111a2e);
+  --color-amber-50: color-mix(in srgb, #f59e0b 14%, #1c1b20);
+  --color-amber-100: color-mix(in srgb, #f59e0b 24%, #1c1b20);
+  --color-amber-200: color-mix(in srgb, #f59e0b 40%, #1c1b20);
   --color-amber-300: #fbbf24;
   --color-amber-400: #fbbf24;
   --color-amber-500: #f59e0b;
@@ -94,9 +163,9 @@
   --color-amber-700: #fcd34d;
   --color-amber-800: color-mix(in srgb, #fcd34d 80%, white);
   --color-amber-900: color-mix(in srgb, #fcd34d 60%, white);
-  --color-yellow-50: color-mix(in srgb, #eab308 16%, #111a2e);
-  --color-yellow-100: color-mix(in srgb, #eab308 26%, #111a2e);
-  --color-yellow-200: color-mix(in srgb, #eab308 42%, #111a2e);
+  --color-yellow-50: color-mix(in srgb, #eab308 14%, #1c1b20);
+  --color-yellow-100: color-mix(in srgb, #eab308 24%, #1c1b20);
+  --color-yellow-200: color-mix(in srgb, #eab308 40%, #1c1b20);
   --color-yellow-300: #facc15;
   --color-yellow-400: #facc15;
   --color-yellow-500: #eab308;
@@ -104,9 +173,9 @@
   --color-yellow-700: #fde047;
   --color-yellow-800: color-mix(in srgb, #fde047 80%, white);
   --color-yellow-900: color-mix(in srgb, #fde047 60%, white);
-  --color-red-50: color-mix(in srgb, #ef4444 16%, #111a2e);
-  --color-red-100: color-mix(in srgb, #ef4444 26%, #111a2e);
-  --color-red-200: color-mix(in srgb, #ef4444 42%, #111a2e);
+  --color-red-50: color-mix(in srgb, #ef4444 14%, #1c1b20);
+  --color-red-100: color-mix(in srgb, #ef4444 24%, #1c1b20);
+  --color-red-200: color-mix(in srgb, #ef4444 40%, #1c1b20);
   --color-red-300: #f87171;
   --color-red-400: #f87171;
   --color-red-500: #ef4444;
@@ -114,9 +183,9 @@
   --color-red-700: #fca5a5;
   --color-red-800: color-mix(in srgb, #fca5a5 80%, white);
   --color-red-900: color-mix(in srgb, #fca5a5 60%, white);
-  --color-blue-50: color-mix(in srgb, #3b82f6 16%, #111a2e);
-  --color-blue-100: color-mix(in srgb, #3b82f6 26%, #111a2e);
-  --color-blue-200: color-mix(in srgb, #3b82f6 42%, #111a2e);
+  --color-blue-50: color-mix(in srgb, #3b82f6 14%, #1c1b20);
+  --color-blue-100: color-mix(in srgb, #3b82f6 24%, #1c1b20);
+  --color-blue-200: color-mix(in srgb, #3b82f6 40%, #1c1b20);
   --color-blue-300: #60a5fa;
   --color-blue-400: #60a5fa;
   --color-blue-500: #3b82f6;
@@ -124,9 +193,9 @@
   --color-blue-700: #93c5fd;
   --color-blue-800: color-mix(in srgb, #93c5fd 80%, white);
   --color-blue-900: color-mix(in srgb, #93c5fd 60%, white);
-  --color-indigo-50: color-mix(in srgb, #6366f1 16%, #111a2e);
-  --color-indigo-100: color-mix(in srgb, #6366f1 26%, #111a2e);
-  --color-indigo-200: color-mix(in srgb, #6366f1 42%, #111a2e);
+  --color-indigo-50: color-mix(in srgb, #6366f1 14%, #1c1b20);
+  --color-indigo-100: color-mix(in srgb, #6366f1 24%, #1c1b20);
+  --color-indigo-200: color-mix(in srgb, #6366f1 40%, #1c1b20);
   --color-indigo-300: #818cf8;
   --color-indigo-400: #818cf8;
   --color-indigo-500: #6366f1;
@@ -134,9 +203,9 @@
   --color-indigo-700: #a5b4fc;
   --color-indigo-800: color-mix(in srgb, #a5b4fc 80%, white);
   --color-indigo-900: color-mix(in srgb, #a5b4fc 60%, white);
-  --color-purple-50: color-mix(in srgb, #a855f7 16%, #111a2e);
-  --color-purple-100: color-mix(in srgb, #a855f7 26%, #111a2e);
-  --color-purple-200: color-mix(in srgb, #a855f7 42%, #111a2e);
+  --color-purple-50: color-mix(in srgb, #a855f7 14%, #1c1b20);
+  --color-purple-100: color-mix(in srgb, #a855f7 24%, #1c1b20);
+  --color-purple-200: color-mix(in srgb, #a855f7 40%, #1c1b20);
   --color-purple-300: #c084fc;
   --color-purple-400: #c084fc;
   --color-purple-500: #a855f7;
@@ -144,9 +213,9 @@
   --color-purple-700: #d8b4fe;
   --color-purple-800: color-mix(in srgb, #d8b4fe 80%, white);
   --color-purple-900: color-mix(in srgb, #d8b4fe 60%, white);
-  --color-pink-50: color-mix(in srgb, #ec4899 16%, #111a2e);
-  --color-pink-100: color-mix(in srgb, #ec4899 26%, #111a2e);
-  --color-pink-200: color-mix(in srgb, #ec4899 42%, #111a2e);
+  --color-pink-50: color-mix(in srgb, #ec4899 14%, #1c1b20);
+  --color-pink-100: color-mix(in srgb, #ec4899 24%, #1c1b20);
+  --color-pink-200: color-mix(in srgb, #ec4899 40%, #1c1b20);
   --color-pink-300: #f472b6;
   --color-pink-400: #f472b6;
   --color-pink-500: #ec4899;
@@ -154,9 +223,9 @@
   --color-pink-700: #f9a8d4;
   --color-pink-800: color-mix(in srgb, #f9a8d4 80%, white);
   --color-pink-900: color-mix(in srgb, #f9a8d4 60%, white);
-  --color-teal-50: color-mix(in srgb, #14b8a6 16%, #111a2e);
-  --color-teal-100: color-mix(in srgb, #14b8a6 26%, #111a2e);
-  --color-teal-200: color-mix(in srgb, #14b8a6 42%, #111a2e);
+  --color-teal-50: color-mix(in srgb, #14b8a6 14%, #1c1b20);
+  --color-teal-100: color-mix(in srgb, #14b8a6 24%, #1c1b20);
+  --color-teal-200: color-mix(in srgb, #14b8a6 40%, #1c1b20);
   --color-teal-300: #2dd4bf;
   --color-teal-400: #2dd4bf;
   --color-teal-500: #14b8a6;
@@ -164,9 +233,9 @@
   --color-teal-700: #5eead4;
   --color-teal-800: color-mix(in srgb, #5eead4 80%, white);
   --color-teal-900: color-mix(in srgb, #5eead4 60%, white);
-  --color-orange-50: color-mix(in srgb, #f97316 16%, #111a2e);
-  --color-orange-100: color-mix(in srgb, #f97316 26%, #111a2e);
-  --color-orange-200: color-mix(in srgb, #f97316 42%, #111a2e);
+  --color-orange-50: color-mix(in srgb, #f97316 14%, #1c1b20);
+  --color-orange-100: color-mix(in srgb, #f97316 24%, #1c1b20);
+  --color-orange-200: color-mix(in srgb, #f97316 40%, #1c1b20);
   --color-orange-300: #fb923c;
   --color-orange-400: #fb923c;
   --color-orange-500: #f97316;
@@ -175,26 +244,29 @@
   --color-orange-800: color-mix(in srgb, #fdba74 80%, white);
   --color-orange-900: color-mix(in srgb, #fdba74 60%, white);
 }
+/* A light island inside the dark theme (used by content that must stay light, e.g. printable previews). */
 [data-theme="dark"] [data-theme="light"] {
   color-scheme: light;
-  --color-page: #f8fafc;
+  --color-page: #f3f2f5;
   --color-surface: #ffffff;
-  --color-fg: #0f172a;
-  --color-slate-50: #f8fafc;
-  --color-slate-100: #f1f5f9;
-  --color-slate-200: #e2e8f0;
-  --color-slate-300: #cbd5e1;
-  --color-slate-400: #94a3b8;
-  --color-slate-500: #64748b;
-  --color-slate-600: #475569;
-  --color-slate-700: #334155;
-  --color-slate-800: #1e293b;
-  --color-slate-900: #0f172a;
-  --color-slate-950: #020617;
-  --color-brand-50: #eef4ff;
-  --color-brand-100: #dbe6fe;
-  --color-brand-600: #2547e9;
-  --color-brand-700: #1d36d6;
+  --color-fg: #242329;
+  --color-selection: #211f24;
+  --color-selection-fg: #ffffff;
+  --color-slate-50: #f7f6f8;
+  --color-slate-100: #f0eff2;
+  --color-slate-200: #e7e5ea;
+  --color-slate-300: #d9d7dd;
+  --color-slate-400: #a8a6ae;
+  --color-slate-500: #85838b;
+  --color-slate-600: #6a6870;
+  --color-slate-700: #4e4c54;
+  --color-slate-800: #36353b;
+  --color-slate-900: #242329;
+  --color-slate-950: #17161a;
+  --color-brand-50: #fef2ee;
+  --color-brand-100: #fee3da;
+  --color-brand-600: #de4322;
+  --color-brand-700: #bb371b;
 }
 
 /* Paper is always light. */
@@ -203,17 +275,17 @@
     color-scheme: light;
     --color-page: #ffffff;
     --color-surface: #ffffff;
-    --color-fg: #0f172a;
-    --color-slate-50: #f8fafc;
-    --color-slate-100: #f1f5f9;
-    --color-slate-200: #e2e8f0;
-    --color-slate-300: #cbd5e1;
-    --color-slate-400: #94a3b8;
-    --color-slate-500: #64748b;
-    --color-slate-600: #475569;
-    --color-slate-700: #334155;
-    --color-slate-800: #1e293b;
-    --color-slate-900: #0f172a;
+    --color-fg: #242329;
+    --color-slate-50: #f7f6f8;
+    --color-slate-100: #f0eff2;
+    --color-slate-200: #e7e5ea;
+    --color-slate-300: #d9d7dd;
+    --color-slate-400: #a8a6ae;
+    --color-slate-500: #85838b;
+    --color-slate-600: #6a6870;
+    --color-slate-700: #4e4c54;
+    --color-slate-800: #36353b;
+    --color-slate-900: #242329;
   }
 }
 
@@ -224,37 +296,150 @@ body {
 
 body {
   @apply bg-page text-fg antialiased;
+  font-size: 14px;
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
 }
 
-*:focus-visible {
-  @apply outline-none ring-2 ring-brand-500 ring-offset-2 ring-offset-surface;
+@layer base {
+  /* Keyboard focus ring. Lives in the base layer so form controls (which draw their own ring) override it. */
+  *:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--color-brand-500) 55%, transparent);
+    outline-offset: 2px;
+  }
+}
+
+/* Thin, unobtrusive scrollbars that match the surfaces. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-slate-300) transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 @layer components {
-/* Tables */
-.tbl {
-  @apply w-full text-sm;
-}
-.tbl th {
-  @apply text-left text-xs font-semibold uppercase tracking-wide text-slate-500 px-3 py-2 border-b border-slate-200 bg-slate-50 whitespace-nowrap;
-}
-.tbl td {
-  @apply px-3 py-2 border-b border-slate-100 align-middle;
-}
-.tbl tbody tr:hover {
-  @apply bg-brand-50/40;
+  /* Surfaces */
+  .card {
+    @apply rounded-xl border border-slate-200 bg-surface;
+  }
+  .card-rise {
+    animation: var(--animate-rise);
+  }
+  :where(.grid, .flex, .space-y-4, .space-y-6) > .card-rise:nth-child(2) {
+    animation-delay: 40ms;
+  }
+  :where(.grid, .flex, .space-y-4, .space-y-6) > .card-rise:nth-child(3) {
+    animation-delay: 80ms;
+  }
+  :where(.grid, .flex, .space-y-4, .space-y-6) > .card-rise:nth-child(4) {
+    animation-delay: 120ms;
+  }
+  :where(.grid, .flex, .space-y-4, .space-y-6) > .card-rise:nth-child(5) {
+    animation-delay: 160ms;
+  }
+  :where(.grid, .flex, .space-y-4, .space-y-6) > .card-rise:nth-child(n + 6) {
+    animation-delay: 200ms;
+  }
+  .tile {
+    @apply rounded-lg bg-slate-50 p-4;
+  }
+  .menu {
+    @apply z-40 min-w-[160px] rounded-xl border border-slate-200 bg-surface p-1 shadow-pop;
+    animation: var(--animate-fade);
+  }
+  .menu-item {
+    @apply flex cursor-default select-none items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] text-slate-700 outline-none data-[highlighted]:bg-slate-100 data-[highlighted]:text-slate-900;
+  }
+
+  /* Pills: the top-bar / sidebar clusters and their items. */
+  .pill-group {
+    @apply inline-flex items-center gap-0.5 rounded-full border border-slate-200 bg-surface p-1;
+  }
+  .pill {
+    @apply inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 text-[13px] font-medium text-slate-600 transition-colors duration-150 hover:bg-slate-100 hover:text-slate-900;
+  }
+  .pill-active {
+    @apply bg-selection text-selection-fg hover:bg-selection hover:text-selection-fg;
+  }
+  .pill-icon {
+    @apply inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-600 transition-colors duration-150 hover:bg-slate-100 hover:text-slate-900;
+  }
+
+  /* Segmented control on a muted track (white active segment). */
+  .seg {
+    @apply inline-flex items-center gap-0.5 rounded-full bg-slate-100 p-0.5;
+  }
+  .seg-item {
+    @apply inline-flex h-7 items-center gap-1 whitespace-nowrap rounded-full px-3 text-xs font-medium text-slate-500 transition-colors duration-150 hover:text-slate-800;
+  }
+  .seg-active {
+    @apply bg-surface text-slate-900 shadow-lift;
+  }
+
+  /* Tables */
+  .tbl {
+    @apply w-full text-[13px];
+  }
+  .tbl th {
+    @apply whitespace-nowrap border-b border-slate-200 px-3 py-2 text-left text-[11px] font-medium uppercase tracking-[0.06em] text-slate-500;
+  }
+  .tbl td {
+    @apply border-b border-slate-100 px-3 py-2.5 align-middle;
+  }
+  .tbl tbody tr:last-child td {
+    @apply border-b-0;
+  }
+  .tbl tbody tr:hover {
+    @apply bg-slate-50;
+  }
+
+  /* Forms */
+  .field-label {
+    @apply mb-1 block text-[13px] font-medium text-slate-700;
+  }
+  .field-help {
+    @apply mt-1 text-xs text-slate-500;
+  }
+  .field-error {
+    @apply mt-1 text-xs text-red-600;
+  }
+  .input {
+    @apply block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-[7px] text-[13px] leading-5 text-slate-900 transition-colors duration-150 placeholder:text-slate-400 focus:border-slate-300 focus:bg-surface focus:outline-none focus:ring-2 focus:ring-brand-500/15 disabled:bg-slate-100 disabled:text-slate-500 aria-[invalid=true]:border-red-500;
+  }
+
+  /* Text links: dark by default, orange on hover, never underlined by default. */
+  .link {
+    @apply font-medium text-slate-900 transition-colors duration-150 hover:text-brand-600;
+  }
+
+  /* Loading placeholders */
+  .skeleton {
+    @apply animate-pulse rounded-lg bg-slate-100;
+  }
+
+  /* Diagonal hatching for the unfilled part of a progress bar on an orange card. */
+  .hatch {
+    background-image: repeating-linear-gradient(135deg, rgb(255 255 255 / 0.5) 0 1.5px, transparent 1.5px 5px);
+  }
+
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
 }
 
-.field-label {
-  @apply block text-sm font-medium text-slate-700 mb-1;
-}
-.field-help {
-  @apply mt-1 text-xs text-slate-500;
-}
-.field-error {
-  @apply mt-1 text-xs text-red-600;
-}
-.input {
-  @apply block w-full rounded-md border border-slate-300 bg-surface px-3 py-2 text-sm shadow-sm placeholder:text-slate-400 disabled:bg-slate-100 disabled:text-slate-500 aria-[invalid=true]:border-red-500;
-}
+/* The orange feature surface: a soft radial highlight top-right fading into the deeper accent. */
+.feature-gradient {
+  background: radial-gradient(120% 140% at 88% 8%, #ff8d60 0%, #f85f3a 38%, #f4512c 62%, #e4421f 100%);
 }

@@ -75,7 +75,7 @@ export function DiscrepancyTable({ rows, canReview, currency, compact = false, k
               <tr key={d.id} className="align-top">
                 {!compact && (
                   <td>
-                    <Link href={`/companies/${d.companyId}`} className="font-medium text-brand-700 hover:underline">
+                    <Link href={`/companies/${d.companyId}`} className="font-medium link">
                       {d.companyName}
                     </Link>
                   </td>

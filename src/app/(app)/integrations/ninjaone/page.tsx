@@ -84,7 +84,7 @@ export default async function NinjaOnePage() {
               <li>A device is <strong>active</strong> if NinjaOne saw it within the last {settings.deviceActiveDays} days (Settings → General → “Device active window”).</li>
               <li>Only active devices in a ticked class count towards a contract line marked “compare with NinjaOne”.</li>
               <li>Lines tied to a site only count devices at the linked NinjaOne location; unlinked sites are skipped, never guessed.</li>
-              <li>Discrepancies are review items on the <Link href="/devices" className="text-brand-700 hover:underline">Devices</Link> page. Billing is never changed automatically.</li>
+              <li>Discrepancies are review items on the <Link href="/devices" className="link">Devices</Link> page. Billing is never changed automatically.</li>
             </ul>
           </div>
         </Card>

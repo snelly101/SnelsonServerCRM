@@ -4,7 +4,10 @@ import { db } from "@/db";
 import { activities, companies, contacts, user } from "@/db/schema";
 import { requireUser } from "@/lib/session";
 import { getAppSettings } from "@/lib/settings";
-import { PageHeader, Stat, Card, EmptyState } from "@/components/ui/page";
+import { PageHeader, Card, EmptyState, FeatureCard, MiniStat } from "@/components/ui/page";
+import { AnimatedNumber } from "@/components/ui/animated-number";
+import { buttonClass } from "@/components/ui/button";
+import { ArrowRight, Building2, CalendarClock, KanbanSquare, Landmark, ListChecks, Plus, Sparkles, TrendingUp, Users } from "lucide-react";
 import { fmtDateTime } from "@/lib/format";
 import { Alert } from "@/components/ui/alert";
 import { pipelineTotals } from "@/services/opportunities";
@@ -70,23 +73,52 @@ export default async function DashboardPage() {
           Integrations without credentials are using synthetic data. Nothing shown from Better Proposals, Xero, NinjaOne or 20i is live until each is connected on the Integrations page.
         </Alert>
       )}
-      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Prospects" value={stats.prospects} />
-        <Stat label="Customers" value={stats.customers} />
-        <Stat label="New companies (30 days)" value={stats.newThisMonth} hint={`${mine} owned by you`} />
-        <Stat label="Contacts" value={stats.contacts} />
-      </div>
-      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Pipeline (first year)" value={fmtMoney(pipeline.total, settings.currency)} hint={`${pipeline.count} open · weighted ${fmtMoney(pipeline.weighted, settings.currency)}`} />
-        <Stat label="Billed monthly (active contracts)" value={fmtMoney(contractsTotals.monthlyBilled, settings.currency)} hint={`${contractsTotals.active} active · MRR normalised ${fmtMoney(contractsTotals.mrr, settings.currency)}`} tone="good" />
-        <Stat label="My open tasks" value={counts.mine} hint={counts.mineOverdue ? `${counts.mineOverdue} overdue` : "none overdue"} tone={counts.mineOverdue ? "danger" : "default"} />
-        <Stat label="Renewals in 90 days" value={renewals.total} tone={renewals.total ? "warn" : "default"} />
+      <div className="mb-4 grid gap-4 lg:grid-cols-3">
+        <FeatureCard
+          eyebrow={<><Landmark /> {contractsTotals.active} active contract{contractsTotals.active === 1 ? "" : "s"}</>}
+          meta={`MRR normalised ${fmtMoney(contractsTotals.mrr, settings.currency)}`}
+          value={<AnimatedNumber value={contractsTotals.monthlyBilled} format="money" currency={settings.currency} />}
+          unit="billed monthly"
+          progress={{
+            value: Math.max(0, contractsTotals.active - renewals.total),
+            max: Math.max(1, contractsTotals.active),
+            left: `${Math.max(0, contractsTotals.active - renewals.total)} secure beyond 90 days`,
+            right: `${renewals.total} renew${renewals.total === 1 ? "s" : ""} within 90 days`,
+          }}
+          facts={[
+            { label: "Billed quarterly", value: fmtMoney(contractsTotals.quarterlyBilled, settings.currency) },
+            { label: "Billed annually", value: fmtMoney(contractsTotals.annualBilled, settings.currency) },
+            { label: "Annual run rate", value: fmtMoney(contractsTotals.arr, settings.currency) },
+          ]}
+          action={
+            <Link href="/billing" className={buttonClass("secondary", "md", "border-transparent bg-white text-[#242329] hover:bg-white/90 hover:text-[#242329]")}>
+              <ArrowRight className="h-4 w-4" /> Open billing
+            </Link>
+          }
+          note={renewals.total ? `${renewals.total} renewal decision${renewals.total === 1 ? "" : "s"} coming up` : "No renewals due in the next 90 days"}
+        />
+        <Card title="Pipeline and work" description="Open opportunities and what is on your plate.">
+          <div className="grid grid-cols-2 gap-3">
+            <MiniStat label="Pipeline (first year)" value={fmtMoney(pipeline.total, settings.currency)} hint={`${pipeline.count} open`} icon={<KanbanSquare />} />
+            <MiniStat label="Weighted" value={fmtMoney(pipeline.weighted, settings.currency)} hint="by stage probability" icon={<TrendingUp />} />
+            <MiniStat label="My open tasks" value={counts.mine} hint={counts.mineOverdue ? `${counts.mineOverdue} overdue` : "none overdue"} tone={counts.mineOverdue ? "danger" : "default"} icon={<ListChecks />} />
+            <MiniStat label="Renewals in 90 days" value={renewals.total} hint="active contracts" tone={renewals.total ? "warn" : "default"} icon={<CalendarClock />} />
+          </div>
+        </Card>
+        <Card title="Customers" description="Companies and the people at them.">
+          <div className="grid grid-cols-2 gap-3">
+            <MiniStat label="Prospects" value={stats.prospects} icon={<Sparkles />} />
+            <MiniStat label="Customers" value={stats.customers} icon={<Building2 />} />
+            <MiniStat label="New (30 days)" value={stats.newThisMonth} hint={`${mine} owned by you`} icon={<Plus />} />
+            <MiniStat label="Contacts" value={stats.contacts} icon={<Users />} />
+          </div>
+        </Card>
       </div>
       <div className="mb-4 grid gap-4 lg:grid-cols-2">
-        <Card title="My tasks" padded={false} actions={<Link href="/tasks?owner=me" className="text-xs text-brand-700 hover:underline">View all</Link>}>
+        <Card title="My tasks" padded={false} actions={<Link href="/tasks?owner=me" className="text-xs link">View all</Link>}>
           <TaskList tasks={myTasks.rows} canWrite={can(me.role, "task.write")} settings={settings} compact />
         </Card>
-        <Card title="Upcoming renewals" padded={false} actions={<Link href="/contracts?renewing=90" className="text-xs text-brand-700 hover:underline">View all</Link>}>
+        <Card title="Upcoming renewals" padded={false} actions={<Link href="/contracts?renewing=90" className="text-xs link">View all</Link>}>
           {renewals.rows.length === 0 ? (
             <div className="p-4 text-sm text-slate-500">No active contracts renew in the next 90 days.</div>
           ) : (
@@ -94,7 +126,7 @@ export default async function DashboardPage() {
               {renewals.rows.map((c) => (
                 <li key={c.id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
                   <div className="min-w-0">
-                    <Link href={`/contracts/${c.id}`} className="font-medium text-brand-700 hover:underline">
+                    <Link href={`/contracts/${c.id}`} className="font-medium link">
                       {c.name}
                     </Link>
                     <div className="text-xs text-slate-500">{c.companyName} · MRR {fmtMoney(c.summary.mrr, settings.currency)}</div>
@@ -124,7 +156,7 @@ export default async function DashboardPage() {
                     <div className="text-slate-800">{a.title}</div>
                     <div className="text-xs text-slate-500">
                       {a.companyId && (
-                        <Link href={`/companies/${a.companyId}`} className="text-brand-700 hover:underline">
+                        <Link href={`/companies/${a.companyId}`} className="link">
                           {a.companyName}
                         </Link>
                       )}

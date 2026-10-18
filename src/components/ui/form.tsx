@@ -66,8 +66,8 @@ export const Select = React.forwardRef<HTMLSelectElement, React.SelectHTMLAttrib
 
 export function Checkbox({ label, className, ...props }: React.InputHTMLAttributes<HTMLInputElement> & { label: string }) {
   return (
-    <label className={cn("inline-flex items-center gap-2 text-sm text-slate-700", className)}>
-      <input type="checkbox" className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500" {...props} />
+    <label className={cn("inline-flex items-center gap-2 text-[13px] text-slate-700", className)}>
+      <input type="checkbox" className="h-4 w-4 rounded border-slate-300 accent-brand-500" {...props} />
       {label}
     </label>
   );
@@ -86,14 +86,14 @@ export function FormMessage({ result }: { result: ActionResult<unknown> | null }
   if (!result) return null;
   if (result.ok) {
     return (
-      <div className="flex items-start gap-2 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800" role="status">
+      <div className="flex items-start gap-2 rounded-xl bg-green-50 px-3.5 py-2.5 text-[13px] text-green-800" role="status">
         <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" aria-hidden />
         <span>Saved.</span>
       </div>
     );
   }
   return (
-    <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" role="alert">
+    <div className="flex items-start gap-2 rounded-xl bg-red-50 px-3.5 py-2.5 text-[13px] text-red-800" role="alert">
       <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" aria-hidden />
       <span>{result.error}</span>
     </div>

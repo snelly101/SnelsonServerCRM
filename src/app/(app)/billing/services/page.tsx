@@ -62,7 +62,7 @@ export default async function ServiceCoveragePage({ searchParams }: { searchPara
             Filter
           </Button>
           {(state !== "all" || provider !== "all" || companyId || q) && (
-            <Link href="/billing/services" className="text-xs text-brand-700 hover:underline">
+            <Link href="/billing/services" className="text-xs link">
               clear
             </Link>
           )}

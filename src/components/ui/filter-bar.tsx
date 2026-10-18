@@ -48,12 +48,12 @@ export function FilterBar({ page, filters, savedViews, currentUserId, placeholde
           update({ q });
         }}
       >
-        <div className="relative min-w-[220px] flex-1 max-w-sm">
-          <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" aria-hidden />
-          <Input aria-label="Search" placeholder={placeholder} value={q} onChange={(e) => setQ(e.target.value)} className="pl-8" />
+        <div className="relative min-w-[220px] max-w-sm flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden />
+          <Input aria-label="Search" placeholder={placeholder} value={q} onChange={(e) => setQ(e.target.value)} className="rounded-full pl-9" />
         </div>
         {filters.map((f) => (
-          <Select key={f.key} aria-label={f.label} value={sp.get(f.key) ?? ""} onChange={(e) => update({ [f.key]: e.target.value })} className="w-auto">
+          <Select key={f.key} aria-label={f.label} value={sp.get(f.key) ?? ""} onChange={(e) => update({ [f.key]: e.target.value })} className="w-auto rounded-full">
             <option value="">{f.label}: all</option>
             {f.options.map((o) => (
               <option key={o.value} value={o.value}>
@@ -110,7 +110,7 @@ export function FilterBar({ page, filters, savedViews, currentUserId, placeholde
           <span className="text-slate-500">Saved views:</span>
           {savedViews.map((v) => (
             <span key={v.id} className="inline-flex items-center rounded-full border border-slate-200 bg-surface">
-              <button type="button" className="px-2 py-0.5 hover:text-brand-700" onClick={() => start(() => router.push(`${pathname}?${new URLSearchParams(v.params).toString()}`))}>
+              <button type="button" className="px-2.5 py-0.5 font-medium text-slate-700 hover:text-brand-600" onClick={() => start(() => router.push(`${pathname}?${new URLSearchParams(v.params).toString()}`))}>
                 {v.name}
               </button>
               {v.userId === currentUserId && (

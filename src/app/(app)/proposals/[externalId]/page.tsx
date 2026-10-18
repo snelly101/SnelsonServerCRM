@@ -39,9 +39,9 @@ export default async function ProposalPage({ params }: { params: Promise<{ exter
         description={
           <>
             #{externalId}
-            {p.companyId ? <> · <Link href={`/companies/${p.companyId}`} className="text-brand-700 hover:underline">{p.companyName}</Link></> : null}
+            {p.companyId ? <> · <Link href={`/companies/${p.companyId}`} className="link">{p.companyName}</Link></> : null}
             {p.viewUrl && (
-              <a href={p.viewUrl} target="_blank" rel="noreferrer" className="ml-2 inline-flex items-center gap-1 text-brand-700 hover:underline">
+              <a href={p.viewUrl} target="_blank" rel="noreferrer" className="ml-2 inline-flex items-center gap-1 link">
                 Open in Better Proposals <ExternalLink className="h-3.5 w-3.5" />
               </a>
             )}
@@ -99,7 +99,7 @@ export default async function ProposalPage({ params }: { params: Promise<{ exter
             />
           </Card>
           {can(me.role, "integration.manage") && (
-            <details className="rounded-lg border border-slate-200 bg-surface shadow-sm">
+            <details className="card">
               <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold text-slate-800">Raw API responses</summary>
               <div className="space-y-3 border-t border-slate-200 p-4 text-xs">
                 <div>

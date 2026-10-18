@@ -130,7 +130,7 @@ export function PriceReviewForm({ products, currency, settings, canApply }: { pr
                   <tr key={l.lineId} className={!l.applicable ? "opacity-60" : ""}>
                     {canApply && <td><input type="checkbox" aria-label={`Select ${l.description}`} disabled={!l.applicable} checked={l.applicable && ticked.has(l.lineId)} onChange={(e) => setTicked((s) => { const n = new Set(s); if (e.target.checked) n.add(l.lineId); else n.delete(l.lineId); return n; })} /></td>}
                     <td>
-                      <Link href={`/companies/${l.companyId}`} className="font-medium text-brand-700 hover:underline">{l.companyName}</Link>
+                      <Link href={`/companies/${l.companyId}`} className="font-medium link">{l.companyName}</Link>
                       <div className="text-xs text-slate-500"><Link href={`/contracts/${l.contractId}`} className="hover:underline">{l.contractName}</Link> · {l.description}</div>
                     </td>
                     <td className="text-right tabular-nums">{l.quantity}</td>

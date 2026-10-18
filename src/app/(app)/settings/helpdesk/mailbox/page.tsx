@@ -293,7 +293,7 @@ export default async function MailboxAdminPage({
               <Link
                 key={s}
                 href={`/settings/helpdesk/mailbox?inbound=${s}`}
-                className={`rounded px-2 py-0.5 ${(param(sp, "inbound") ?? "all") === s ? "bg-fg text-surface" : "text-slate-600 hover:bg-slate-100"}`}
+                className={`rounded-full px-2.5 py-0.5 ${(param(sp, "inbound") ?? "all") === s ? "bg-selection text-selection-fg" : "text-slate-600 hover:bg-slate-100"}`}
               >
                 {s}
               </Link>
@@ -328,7 +328,7 @@ export default async function MailboxAdminPage({
               <Link
                 key={s}
                 href={`/settings/helpdesk/mailbox?outbox=${s}`}
-                className={`rounded px-2 py-0.5 ${(param(sp, "outbox") ?? "all") === s ? "bg-fg text-surface" : "text-slate-600 hover:bg-slate-100"}`}
+                className={`rounded-full px-2.5 py-0.5 ${(param(sp, "outbox") ?? "all") === s ? "bg-selection text-selection-fg" : "text-slate-600 hover:bg-slate-100"}`}
               >
                 {s}
               </Link>

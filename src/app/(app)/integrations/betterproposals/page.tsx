@@ -179,7 +179,7 @@ export default async function BetterProposalsPage() {
                 {links.map((l) => (
                   <tr key={l.id}>
                     <td>
-                      <Link href={l.entityType === "company" ? `/companies/${l.localId}` : `/pipeline/${l.localId}`} className="text-brand-700 hover:underline">
+                      <Link href={l.entityType === "company" ? `/companies/${l.localId}` : `/pipeline/${l.localId}`} className="link">
                         {l.entityType} {l.localId.slice(0, 8)}
                       </Link>
                     </td>

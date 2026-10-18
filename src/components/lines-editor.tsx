@@ -158,7 +158,7 @@ export function LinesEditor({
               <div className="grid grid-cols-2 items-start gap-3 sm:grid-cols-12">
                 <div className="col-span-2 sm:col-span-5">
                   <ProductPicker products={products} value={l.productId} currency={currency} fallbackLabel={l.description} onSelect={(id) => applyProduct(l.key, id)} />
-                  <button type="button" className="mt-1 max-w-full truncate text-left text-xs text-slate-500 hover:text-brand-700 hover:underline" onClick={() => toggle(l.key)} title="Show or hide the details">
+                  <button type="button" className="mt-1 max-w-full truncate text-left text-xs text-slate-500 hover:link" onClick={() => toggle(l.key)} title="Show or hide the details">
                     {summary} · {open ? "hide details" : "details"}
                   </button>
                 </div>
@@ -363,7 +363,7 @@ export function ProductPicker({ products, value, currency, fallbackLabel, onSele
         }}
       />
       {open && (
-        <ul id={listId} role="listbox" className="absolute z-20 mt-1 max-h-72 w-full min-w-[20rem] overflow-auto rounded-md border border-slate-200 bg-surface py-1 text-sm shadow-lg" onMouseDown={(e) => e.preventDefault()}>
+        <ul id={listId} role="listbox" className="absolute z-20 mt-1 max-h-72 w-full min-w-[20rem] overflow-auto card py-1 text-sm shadow-pop" onMouseDown={(e) => e.preventDefault()}>
           <li role="option" aria-selected={cursor === 0} className={`cursor-pointer px-3 py-1.5 text-slate-600 ${cursor === 0 ? "bg-brand-50" : "hover:bg-slate-50"}`} onMouseEnter={() => setCursor(0)} onClick={() => choose("")}>
             Custom line (no catalogue product)
           </li>

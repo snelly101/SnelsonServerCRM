@@ -118,7 +118,7 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
                 {data.rows.map((c) => (
                   <tr key={c.id} className={c.archivedAt ? "opacity-60" : ""}>
                     <td>
-                      <Link href={`/companies/${c.id}`} className="font-medium text-brand-700 hover:underline">
+                      <Link href={`/companies/${c.id}`} className="font-medium link">
                         {c.name}
                       </Link>
                       {c.domain && <div className="text-xs text-slate-500">{c.domain}</div>}

@@ -60,7 +60,7 @@ export function Checklist({
   const done = items.filter(isDone).length;
   const today = new Date().toISOString().slice(0, 10);
   return (
-    <section className="rounded-lg border border-slate-200 bg-surface p-3 text-sm" aria-label="Checklist">
+    <section className="card p-3 text-sm" aria-label="Checklist">
       <div className="mb-2 flex items-center justify-between">
         <h3 className="text-xs font-medium uppercase tracking-wide text-slate-500">
           Checklist{items.length ? ` ${done}/${items.length}` : ""}

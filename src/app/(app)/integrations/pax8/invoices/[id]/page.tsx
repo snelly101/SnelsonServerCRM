@@ -125,7 +125,7 @@ export default async function Pax8InvoicePage({ params }: { params: Promise<{ id
           </table>
           {c.companyId && (
             <p className="px-4 py-2 text-[11px] text-slate-500">
-              <Link href={`/companies/${c.companyId}?tab=subscriptions`} className="text-brand-700 hover:underline">
+              <Link href={`/companies/${c.companyId}?tab=subscriptions`} className="link">
                 Open the customer&apos;s Subscriptions tab
               </Link>{" "}
               to see which contract line bills each subscription.

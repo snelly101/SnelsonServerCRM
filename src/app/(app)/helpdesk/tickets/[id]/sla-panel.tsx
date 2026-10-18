@@ -68,7 +68,7 @@ export function SlaPanel({
     (a, b) => a.at.getTime() - b.at.getTime(),
   );
   return (
-    <section className="rounded-lg border border-slate-200 bg-surface p-3 text-sm" aria-label="SLA">
+    <section className="card p-3 text-sm" aria-label="SLA">
       <div className="mb-2 flex items-center justify-between">
         <h3 className="text-xs font-medium uppercase tracking-wide text-slate-500">SLA</h3>
         <span className="text-xs text-slate-500">
@@ -122,7 +122,7 @@ export function SlaPanel({
           {canAdmin && (
             <>
               {" "}
-              <Link href="/settings/helpdesk/sla" className="text-brand-700 hover:underline">
+              <Link href="/settings/helpdesk/sla" className="link">
                 Create one
               </Link>
               .

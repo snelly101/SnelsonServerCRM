@@ -48,11 +48,11 @@ export function KnowledgePanel({
       router.refresh();
     });
   return (
-    <section className="rounded-lg border border-slate-200 bg-surface p-3 text-sm" aria-label="Knowledge">
+    <section className="card p-3 text-sm" aria-label="Knowledge">
       <div className="mb-2 flex items-center justify-between">
         <h3 className="text-xs font-medium uppercase tracking-wide text-slate-500">Knowledge</h3>
         {editable && (
-          <Link href={`/helpdesk/kb/new?ticket=${ticketId}`} className="text-xs text-brand-700 hover:underline">
+          <Link href={`/helpdesk/kb/new?ticket=${ticketId}`} className="text-xs link">
             Write article
           </Link>
         )}
@@ -62,7 +62,7 @@ export function KnowledgePanel({
         {linked.map((a) => (
           <li key={a.id} className="flex items-center gap-1">
             <BookOpen className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden />
-            <Link href={`/helpdesk/kb/${a.slug}`} className="min-w-0 flex-1 truncate text-brand-700 hover:underline">
+            <Link href={`/helpdesk/kb/${a.slug}`} className="min-w-0 flex-1 truncate link">
               {a.title}
             </Link>
             {a.kind === "sent" && <Badge tone="green">sent</Badge>}

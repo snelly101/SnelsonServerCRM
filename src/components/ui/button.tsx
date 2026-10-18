@@ -3,19 +3,26 @@ import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+/**
+ * Pill buttons. `primary` is the orange accent and is reserved for the main
+ * action on a view; `dark` is the near-black selection colour used for
+ * secondary-but-prominent actions (the reference's "Transfer"); `secondary`
+ * is the quiet white pill; `ghost` sits on a surface with no outline.
+ */
 const variants = {
-  primary: "bg-brand-600 text-white hover:bg-brand-700 border-transparent",
-  secondary: "bg-surface text-slate-800 hover:bg-slate-50 border-slate-300",
-  ghost: "bg-transparent text-slate-700 hover:bg-slate-100 border-transparent",
+  primary: "bg-brand-500 text-white hover:bg-brand-600 border-transparent",
+  dark: "bg-selection text-selection-fg hover:opacity-90 border-transparent",
+  secondary: "bg-surface text-slate-800 hover:bg-slate-50 border-slate-200",
+  ghost: "bg-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900 border-transparent",
   danger: "bg-red-600 text-white hover:bg-red-700 border-transparent",
-  "danger-outline": "bg-surface text-red-700 hover:bg-red-50 border-red-300",
+  "danger-outline": "bg-surface text-red-700 hover:bg-red-50 border-red-200",
 } as const;
 
 const sizes = {
-  sm: "h-8 px-2.5 text-xs gap-1.5",
-  md: "h-9 px-3.5 text-sm gap-2",
-  lg: "h-10 px-4 text-sm gap-2",
-  icon: "h-9 w-9 p-0",
+  sm: "h-7 px-3 text-xs gap-1.5 [&>svg]:h-3.5 [&>svg]:w-3.5",
+  md: "h-8 px-3.5 text-[13px] gap-1.5 [&>svg]:h-4 [&>svg]:w-4",
+  lg: "h-9 px-4 text-[13px] gap-2 [&>svg]:h-4 [&>svg]:w-4",
+  icon: "h-8 w-8 p-0 [&>svg]:h-4 [&>svg]:w-4",
 } as const;
 
 export type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -26,7 +33,7 @@ export type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
 
 export function buttonClass(variant: keyof typeof variants = "primary", size: keyof typeof sizes = "md", extra?: string) {
   return cn(
-    "inline-flex items-center justify-center rounded-md border font-medium shadow-sm transition-colors disabled:opacity-50 disabled:pointer-events-none whitespace-nowrap",
+    "inline-flex items-center justify-center whitespace-nowrap rounded-full border font-medium transition-[background-color,color,transform,opacity] duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50",
     variants[variant],
     sizes[size],
     extra,
@@ -39,7 +46,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function 
 ) {
   return (
     <button ref={ref} type={type} className={buttonClass(variant, size, className)} disabled={disabled || loading} {...props}>
-      {loading && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
+      {loading && <Loader2 className="animate-spin" aria-hidden />}
       {children}
     </button>
   );

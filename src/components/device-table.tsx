@@ -59,7 +59,7 @@ export function DeviceTable({ rows, consoleUrl, showCompany = true, renderAction
             <td>
               <div className="font-medium">
                 {consoleUrl ? (
-                  <a href={consoleUrl(d.deviceId)} target="_blank" rel="noreferrer" className="text-brand-700 hover:underline">
+                  <a href={consoleUrl(d.deviceId)} target="_blank" rel="noreferrer" className="link">
                     {d.displayName ?? d.systemName ?? d.deviceId}
                   </a>
                 ) : (

@@ -139,7 +139,7 @@ export function SubscriptionsPanel({
                 href={pax8Company.consoleUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1 text-brand-700 hover:underline"
+                className="inline-flex items-center gap-1 link"
               >
                 <ExternalLink className="h-3 w-3" /> Open in Pax8
               </a>
@@ -147,7 +147,7 @@ export function SubscriptionsPanel({
             {canManageIntegrations && (
               <Link
                 href="/integrations/pax8"
-                className="text-brand-700 hover:underline"
+                className="link"
               >
                 mapping
               </Link>

@@ -58,24 +58,26 @@ export default async function BillingAttentionPage({ searchParams }: { searchPar
       </div>
 
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        <Link href={link({ group: undefined, kind: undefined })} className={`rounded-md border px-3 py-1 ${!group && !kind && view !== "accepted" ? "border-brand-500 bg-brand-50 text-brand-800" : "border-slate-200 bg-surface hover:bg-slate-50"}`}>Everything ({q.actionable})</Link>
-        {ATTENTION_GROUPS.map((g) => (
-          <Link key={g.key} href={link({ group: g.key, kind: undefined })} className={`rounded-md border px-3 py-1 ${group === g.key && !kind ? "border-brand-500 bg-brand-50 text-brand-800" : "border-slate-200 bg-surface hover:bg-slate-50"} ${q.groups[g.key] === 0 ? "text-slate-400" : ""}`}>
-            {g.label} ({q.groups[g.key]})
-          </Link>
-        ))}
-        <Link href="/billing?view=accepted" className={`rounded-md border px-3 py-1 ${view === "accepted" ? "border-brand-500 bg-brand-50 text-brand-800" : "border-slate-200 bg-surface hover:bg-slate-50"}`}>Accepted exceptions</Link>
+        <div className="pill-group max-w-full overflow-x-auto no-scrollbar">
+          <Link href={link({ group: undefined, kind: undefined })} className={`pill ${!group && !kind && view !== "accepted" ? "pill-active" : ""}`}>Everything <span className="text-[11px] opacity-70">{q.actionable}</span></Link>
+          {ATTENTION_GROUPS.map((g) => (
+            <Link key={g.key} href={link({ group: g.key, kind: undefined })} className={`pill ${group === g.key && !kind ? "pill-active" : ""} ${q.groups[g.key] === 0 && !(group === g.key && !kind) ? "text-slate-400" : ""}`}>
+              {g.label} <span className="text-[11px] opacity-70">{q.groups[g.key]}</span>
+            </Link>
+          ))}
+          <Link href="/billing?view=accepted" className={`pill ${view === "accepted" ? "pill-active" : ""}`}>Accepted exceptions</Link>
+        </div>
         {customers.length > 1 && (
-          <form method="get" className="ml-auto">
+          <form method="get" className="ml-auto flex items-center gap-1">
             {group && <input type="hidden" name="group" value={group} />}
             {kind && <input type="hidden" name="kind" value={kind} />}
-            <select name="company" defaultValue={companyId ?? ""} aria-label="Customer" className="h-8 rounded-md border border-slate-200 bg-surface px-2 text-sm" onChange={undefined}>
+            <select name="company" defaultValue={companyId ?? ""} aria-label="Customer" className="input h-9 w-auto rounded-full" onChange={undefined}>
               <option value="">All customers</option>
               {customers.map(([id, name]) => (
                 <option key={id} value={id}>{name}</option>
               ))}
             </select>
-            <button type="submit" className="ml-1 h-8 rounded-md border border-slate-200 bg-surface px-2 text-xs">Go</button>
+            <button type="submit" className="ml-1 inline-flex h-9 items-center rounded-full border border-slate-200 bg-surface px-3 text-xs font-medium hover:bg-slate-50">Go</button>
           </form>
         )}
       </div>
@@ -86,7 +88,7 @@ export default async function BillingAttentionPage({ searchParams }: { searchPar
           <p className="border-t border-slate-100 px-4 py-2 text-[11px] text-slate-500">Accepted for now with an owner and a review date; each re-opens by itself when the date passes or the gap grows.</p>
         </Card>
       ) : (
-        <Card title={kind ? ATTENTION_KINDS[kind].label : group ? ATTENTION_GROUPS.find((g) => g.key === group)!.label : "Needs attention"} padded={false} actions={kind || group || companyId ? <Link href="/billing" className="text-xs text-brand-700 hover:underline">clear filters</Link> : undefined}>
+        <Card title={kind ? ATTENTION_KINDS[kind].label : group ? ATTENTION_GROUPS.find((g) => g.key === group)!.label : "Needs attention"} padded={false} actions={kind || group || companyId ? <Link href="/billing" className="text-xs link">clear filters</Link> : undefined}>
           {kind && <p className="border-b border-slate-100 px-4 py-2 text-xs text-slate-600">{ATTENTION_KINDS[kind].what}</p>}
           {items.length === 0 ? (
             <div className="p-6 text-center text-sm text-slate-500">
@@ -117,7 +119,7 @@ export default async function BillingAttentionPage({ searchParams }: { searchPar
                       {i.detail && <div className="text-xs text-slate-500">{i.detail}</div>}
                     </td>
                     <td className="whitespace-nowrap text-right tabular-nums">{i.amount === null ? "—" : fmtMoney(i.amount, i.currency ?? c)}</td>
-                    <td className="text-right"><Link href={i.href} className="text-xs text-brand-700 hover:underline">Open</Link></td>
+                    <td className="text-right"><Link href={i.href} className="text-xs link">Open</Link></td>
                   </tr>
                 ))}
               </tbody>

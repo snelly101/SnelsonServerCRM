@@ -1,30 +1,13 @@
-import Link from "next/link";
 import { requirePermission } from "@/lib/session";
-import { can } from "@/lib/permissions";
 import { PageHeader } from "@/components/ui/page";
-import { SettingsNav } from "./nav";
 
+/** The settings section pills are rendered by the app shell (see components/nav-config.ts). */
 export default async function SettingsLayout({ children }: { children: React.ReactNode }) {
-  const me = await requirePermission("settings.read");
-  const items = [
-    { href: "/settings", label: "General" },
-    { href: "/settings/fields", label: "Tags & custom fields" },
-    ...(can(me.role, "settings.write") ? [{ href: "/settings/pipeline", label: "Pipeline stages" }] : []),
-    ...(can(me.role, "user.manage") ? [{ href: "/settings/users", label: "Users & roles" }] : []),
-    { href: "/settings/security", label: "Security" },
-    { href: "/settings/billing", label: "Billing automation" },
-    ...(can(me.role, "audit.read") ? [{ href: "/settings/audit", label: "Audit log" }] : []),
-    ...(can(me.role, "vault.admin") ? [{ href: "/settings/vault", label: "Secure Vault" }] : []),
-    ...(can(me.role, "helpdesk.manage") ? [{ href: "/settings/helpdesk", label: "Helpdesk" }] : []),
-  ];
-  void Link;
+  await requirePermission("settings.read");
   return (
     <>
       <PageHeader title="Settings" />
-      <div className="grid gap-6 lg:grid-cols-[200px_1fr]">
-        <SettingsNav items={items} />
-        <div className="min-w-0">{children}</div>
-      </div>
+      <div className="min-w-0">{children}</div>
     </>
   );
 }

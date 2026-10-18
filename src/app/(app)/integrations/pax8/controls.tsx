@@ -322,7 +322,7 @@ export function Pax8MappingTable({
             key={f}
             type="button"
             onClick={() => setFilter(f)}
-            className={`rounded px-2 py-0.5 ${filter === f ? "bg-fg text-surface" : "text-slate-600 hover:bg-slate-100"}`}
+            className={`rounded-full px-2.5 py-0.5 ${filter === f ? "bg-selection text-selection-fg" : "text-slate-600 hover:bg-slate-100"}`}
           >
             {f}
           </button>
@@ -379,7 +379,7 @@ export function Pax8MappingTable({
                         href={r.consoleUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center gap-0.5 text-brand-700 hover:underline"
+                        className="inline-flex items-center gap-0.5 link"
                       >
                         <ExternalLink className="h-3 w-3" /> Open in Pax8
                       </a>
@@ -394,7 +394,7 @@ export function Pax8MappingTable({
                   <span className="flex items-center gap-1">
                     <Link
                       href={`/companies/${r.companyId}?tab=subscriptions`}
-                      className="text-brand-700 hover:underline"
+                      className="link"
                     >
                       {r.companyName}
                     </Link>
@@ -417,7 +417,7 @@ export function Pax8MappingTable({
                             <span>{s.name}</span>
                             <button
                               type="button"
-                              className="inline-flex items-center gap-0.5 text-brand-700 hover:underline"
+                              className="inline-flex items-center gap-0.5 link"
                               onClick={() =>
                                 run(() => linkPax8CompanyAction(r.id, s.id))
                               }
@@ -929,7 +929,7 @@ export function Pax8ReconciliationTable({
                       <Badge tone={r.matchSource === "amount" ? "amber" : "slate"} title={r.matchSource === "amount" ? "Same total near the same date: weaker evidence than a reference" : undefined}>
                         {MATCH_BASIS_LABELS[r.matchSource ?? "auto"] ?? r.matchSource}
                       </Badge>
-                      <a href={billUrl(r.bill.invoiceId)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-brand-700 hover:underline">
+                      <a href={billUrl(r.bill.invoiceId)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 link">
                         <ExternalLink className="h-3 w-3" /> Xero
                       </a>
                     </div>
@@ -947,7 +947,7 @@ export function Pax8ReconciliationTable({
                 </td>
                 <td className="text-xs">
                   {r.allocation ? (
-                    <Link href={`/integrations/pax8/invoices/${encodeURIComponent(r.pax8InvoiceId)}`} className="text-brand-700 hover:underline">
+                    <Link href={`/integrations/pax8/invoices/${encodeURIComponent(r.pax8InvoiceId)}`} className="link">
                       {r.allocation.items} line{r.allocation.items === 1 ? "" : "s"}
                     </Link>
                   ) : (
@@ -967,7 +967,7 @@ export function Pax8ReconciliationTable({
                 <div className="text-xs">{b.invoiceNumber ?? b.invoiceId}{b.reference ? ` · ${b.reference}` : ""}</div>
                 <div className="flex flex-wrap items-center gap-1 text-[11px] text-slate-500">
                   {b.date ? fmtDate(b.date, settings) : "no date"} · {b.status.toLowerCase()}
-                  <a href={billUrl(b.invoiceId)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-brand-700 hover:underline">
+                  <a href={billUrl(b.invoiceId)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 link">
                     <ExternalLink className="h-3 w-3" /> Xero
                   </a>
                 </div>

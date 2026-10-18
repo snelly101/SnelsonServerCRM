@@ -110,13 +110,13 @@ export function HostingMappingTable({ rows, companies, canManage }: { rows: Item
     <div>
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-4 py-2 text-sm">
         {(["all", "unlinked", "linked", "expiring"] as const).map((f) => (
-          <button key={f} type="button" onClick={() => setFilter(f)} className={`rounded px-2 py-0.5 ${filter === f ? "bg-fg text-surface" : "text-slate-600 hover:bg-slate-100"}`}>
+          <button key={f} type="button" onClick={() => setFilter(f)} className={`rounded-full px-2.5 py-0.5 ${filter === f ? "bg-selection text-selection-fg" : "text-slate-600 hover:bg-slate-100"}`}>
             {f}
           </button>
         ))}
         <span className="mx-1 text-slate-300">|</span>
         {(["all", "package", "domain"] as const).map((k) => (
-          <button key={k} type="button" onClick={() => setKind(k)} className={`rounded px-2 py-0.5 ${kind === k ? "bg-fg text-surface" : "text-slate-600 hover:bg-slate-100"}`}>
+          <button key={k} type="button" onClick={() => setKind(k)} className={`rounded-full px-2.5 py-0.5 ${kind === k ? "bg-selection text-selection-fg" : "text-slate-600 hover:bg-slate-100"}`}>
             {k === "all" ? "packages + domains" : `${k}s`}
           </button>
         ))}
@@ -176,7 +176,7 @@ export function HostingMappingTable({ rows, companies, canManage }: { rows: Item
                 <td>
                   {r.companyId ? (
                     <span className="flex items-center gap-1">
-                      <Link href={`/companies/${r.companyId}?tab=hosting`} className="text-brand-700 hover:underline">
+                      <Link href={`/companies/${r.companyId}?tab=hosting`} className="link">
                         {r.companyName}
                       </Link>
                       {r.matchSource === "auto" && <Badge tone="green">auto</Badge>}
@@ -190,7 +190,7 @@ export function HostingMappingTable({ rows, companies, canManage }: { rows: Item
                             <li key={s.id} className="flex items-center gap-2 text-xs">
                               <Badge tone={s.reason === "domain" ? "green" : "amber"}>{s.reason === "domain" ? "domain match" : "similar name"}</Badge>
                               <span>{s.name}</span>
-                              <button type="button" className="inline-flex items-center gap-0.5 text-brand-700 hover:underline" onClick={() => run(() => linkHostingItemAction(r.id, s.id))}>
+                              <button type="button" className="inline-flex items-center gap-0.5 link" onClick={() => run(() => linkHostingItemAction(r.id, s.id))}>
                                 <Link2 className="h-3 w-3" /> Link
                               </button>
                             </li>
@@ -267,7 +267,7 @@ export function BillingLineSelect({ itemId, value, lines, canEdit }: { itemId: s
 export function ConsoleLink({ href, label = "Open in My20i" }: { href: string | null; label?: string }) {
   if (!href) return null;
   return (
-    <a href={href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-brand-700 hover:underline">
+    <a href={href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs link">
       <ExternalLink className="h-3 w-3" /> {label}
     </a>
   );

@@ -40,7 +40,7 @@ export function DraftReviewTable({ rows, canApprove }: { rows: DraftReviewRow[];
           <ul className="space-y-0.5 text-sm">
             {approved.map((a) => (
               <li key={a.id}>
-                <Link href={`/billing/drafts/${a.id}`} className="text-brand-700 hover:underline">{a.reference}</Link> <span className="text-slate-500">{a.companyName}</span>
+                <Link href={`/billing/drafts/${a.id}`} className="link">{a.reference}</Link> <span className="text-slate-500">{a.companyName}</span>
               </li>
             ))}
           </ul>
@@ -51,7 +51,7 @@ export function DraftReviewTable({ rows, canApprove }: { rows: DraftReviewRow[];
             <ul className="list-disc space-y-0.5 pl-5 text-xs text-slate-600">
               {skipped.map((s) => (
                 <li key={s.id}>
-                  <Link href={`/billing/drafts/${s.id}`} className="text-brand-700 hover:underline">{s.reference}</Link> {s.companyName && <span>({s.companyName})</span>}: {s.reason}
+                  <Link href={`/billing/drafts/${s.id}`} className="link">{s.reference}</Link> {s.companyName && <span>({s.companyName})</span>}: {s.reason}
                 </li>
               ))}
             </ul>
@@ -93,7 +93,7 @@ export function DraftReviewTable({ rows, canApprove }: { rows: DraftReviewRow[];
                   </td>
                 )}
                 <td>
-                  <Link href={`/billing/drafts/${d.id}`} className="font-medium text-brand-700 hover:underline">
+                  <Link href={`/billing/drafts/${d.id}`} className="font-medium link">
                     {d.reference}
                   </Link>
                   {d.description && <div className="max-w-xs truncate text-xs text-slate-500">{d.description}</div>}
@@ -119,7 +119,7 @@ export function DraftReviewTable({ rows, canApprove }: { rows: DraftReviewRow[];
                     <Badge tone={isUnchanged ? "green" : d.status === "failed" ? "red" : "amber"}>{isUnchanged ? "unchanged" : d.status === "failed" ? "failed" : d.status === "approved" ? "approving" : "needs review"}</Badge>
                     {d.stale && <Badge tone="amber" title="The contract changed after this draft was prepared">stale</Badge>}
                     {changeLabel && d.reasons.length > 0 && (
-                      <button type="button" className="text-brand-700 hover:underline" onClick={() => toggleOpen(d.id)}>
+                      <button type="button" className="link" onClick={() => toggleOpen(d.id)}>
                         {changeLabel} · {open.has(d.id) ? "hide" : "why"}
                       </button>
                     )}
@@ -137,7 +137,7 @@ export function DraftReviewTable({ rows, canApprove }: { rows: DraftReviewRow[];
                 </td>
                 <td className="text-xs text-slate-500">{fmtRelative(d.createdAt)}</td>
                 <td className="text-right">
-                  <Link href={`/billing/drafts/${d.id}`} className="text-xs text-brand-700 hover:underline">
+                  <Link href={`/billing/drafts/${d.id}`} className="text-xs link">
                     {canApprove ? "Review & approve" : "View"}
                   </Link>
                 </td>

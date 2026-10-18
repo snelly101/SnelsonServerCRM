@@ -157,7 +157,7 @@ export default async function AutomationAdminPage() {
                   <td>
                     <Link
                       href={`/helpdesk/tickets/${r.ticketId}`}
-                      className="text-brand-700 hover:underline"
+                      className="link"
                     >
                       {ticketReference(r.ticketNumber)}
                     </Link>{" "}
