@@ -9,6 +9,8 @@ import { checkDuplicatesAction } from "@/actions/companies";
 import type { ActionResult } from "@/lib/action-result";
 import type { DuplicateCandidate } from "@/services/companies";
 import Link from "next/link";
+import { ROLE_LABELS_CONTACT } from "@/components/ui/badge";
+import { contactRoleValues } from "@/lib/validation";
 
 export type CompanyFormValues = {
   id?: string;
@@ -162,6 +164,42 @@ export function CompanyForm({
           </Field>
         </div>
       </section>
+
+      {!initial.id && (
+        <section>
+          <h2 className="mb-1 text-sm font-semibold text-slate-800">First contact</h2>
+          <p className="mb-3 text-xs text-slate-500">Optional. They become the company&apos;s primary contact; leave it blank to add people later.</p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="First name" htmlFor="contactFirstName" error={e("contactFirstName")}>
+              <Input id="contactFirstName" name="contactFirstName" autoComplete="off" />
+            </Field>
+            <Field label="Last name" htmlFor="contactLastName" error={e("contactLastName")}>
+              <Input id="contactLastName" name="contactLastName" autoComplete="off" />
+            </Field>
+            <Field label="Email" htmlFor="contactEmail" error={e("contactEmail")}>
+              <Input id="contactEmail" name="contactEmail" type="email" autoComplete="off" />
+            </Field>
+            <Field label="Phone" htmlFor="contactPhone" error={e("contactPhone")}>
+              <Input id="contactPhone" name="contactPhone" type="tel" autoComplete="off" />
+            </Field>
+            <Field label="Job title" htmlFor="contactJobTitle" error={e("contactJobTitle")}>
+              <Input id="contactJobTitle" name="contactJobTitle" autoComplete="off" />
+            </Field>
+            <Field label="Role" htmlFor="contactRole" error={e("contactRole")}>
+              <Select id="contactRole" name="contactRole" defaultValue="">
+                <option value="">—</option>
+                {contactRoleValues
+                  .filter((r) => r !== "primary")
+                  .map((r) => (
+                    <option key={r} value={r}>
+                      {ROLE_LABELS_CONTACT[r]}
+                    </option>
+                  ))}
+              </Select>
+            </Field>
+          </div>
+        </section>
+      )}
 
       {tags.length > 0 && (
         <section>

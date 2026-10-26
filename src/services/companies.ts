@@ -4,7 +4,7 @@ import { activities, companies, companyTags, contacts, sites, tags, user } from 
 import { audit, diffFields, logActivity } from "@/lib/audit";
 import { ActionError } from "@/lib/action-result";
 import { extractDomain, normalizeCompanyName } from "@/lib/utils";
-import type { CompanyInput } from "@/lib/validation";
+import { contactSchema, type CompanyInput, type FirstContactInput } from "@/lib/validation";
 
 export type CompanyListParams = {
   q?: string;
@@ -235,6 +235,46 @@ function toRow(input: CompanyInput, actorUserId: string | null) {
 async function syncTags(tx: Tx, companyId: string, tagIds: string[]) {
   await tx.delete(companyTags).where(eq(companyTags.companyId, companyId));
   if (tagIds.length) await tx.insert(companyTags).values(tagIds.map((tagId) => ({ companyId, tagId })));
+}
+
+/**
+ * Creates a company and, when the form carried one, its first contact (marked
+ * primary). The contact's e-mail is checked for duplicates before the company
+ * is written, so a clash leaves nothing behind.
+ */
+export async function createCompanyWithContact(
+  input: CompanyInput,
+  contact: FirstContactInput | null,
+  actorUserId: string | null,
+  opts?: { skipDuplicateCheck?: boolean },
+) {
+  const { createContact, findDuplicateContacts } = await import("./contacts");
+  if (contact?.contactEmail) {
+    const dupes = await findDuplicateContacts(contact.contactEmail);
+    if (dupes.length)
+      throw new ActionError(`A contact with that email already exists: ${dupes[0].firstName} ${dupes[0].lastName} at ${dupes[0].companyName}.`, {
+        contactEmail: ["Already in use by another contact"],
+      });
+  }
+  const companyId = await createCompany(input, actorUserId, opts);
+  let contactId: string | null = null;
+  if (contact) {
+    contactId = await createContact(
+      contactSchema.parse({
+        companyId,
+        firstName: contact.contactFirstName,
+        lastName: contact.contactLastName,
+        email: contact.contactEmail ?? "",
+        phone: contact.contactPhone ?? "",
+        jobTitle: contact.contactJobTitle ?? "",
+        roles: contact.contactRole ? [contact.contactRole] : [],
+        isPrimary: true,
+      }),
+      actorUserId,
+      { skipDuplicateCheck: true },
+    );
+  }
+  return { companyId, contactId };
 }
 
 export async function createCompany(input: CompanyInput, actorUserId: string | null, opts?: { skipDuplicateCheck?: boolean }) {

@@ -2,9 +2,9 @@ import { describe, expect, it, beforeAll } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { activities, auditLog, companies } from "@/db/schema";
-import { archiveCompany, createCompany, findDuplicateCompanies, getCompany, listCompanies, updateCompany } from "@/services/companies";
+import { archiveCompany, createCompany, createCompanyWithContact, findDuplicateCompanies, getCompany, listCompanies, updateCompany } from "@/services/companies";
 import { createContact, findDuplicateContacts } from "@/services/contacts";
-import { companySchema, contactSchema } from "@/lib/validation";
+import { companySchema, contactSchema, firstContactSchema } from "@/lib/validation";
 import { ActionError } from "@/lib/action-result";
 import { extractDomain, normalizeCompanyName } from "@/lib/utils";
 import { makeUser } from "./helpers";
@@ -112,5 +112,23 @@ describe("contacts", () => {
     const c = await getCompany(companyId);
     expect(c?.contacts.filter((x) => x.isPrimary)).toHaveLength(1);
     expect(c?.contacts.find((x) => x.isPrimary)?.firstName).toBe("B");
+  });
+  it("creates the first contact with the company, marked primary, and refuses a clashing e-mail before writing anything", async () => {
+    const stamp = Date.now();
+    const contact = firstContactSchema.parse({ contactFirstName: "Dana", contactLastName: "First", contactEmail: `dana-${stamp}@firstco.example`, contactPhone: "0113 000 0000", contactJobTitle: "Owner", contactRole: "decision_maker" });
+    const { companyId, contactId } = await createCompanyWithContact(companySchema.parse({ name: `First Co ${stamp}`, status: "prospect", website: `firstco-${stamp}.example` }), contact, actor.id);
+    expect(contactId).toBeTruthy();
+    const company = (await getCompany(companyId))!;
+    const c = company.contacts.find((x) => x.id === contactId)!;
+    expect(c.isPrimary).toBe(true);
+    expect(c.roles).toContain("decision_maker");
+    expect(c.jobTitle).toBe("Owner");
+    // Same e-mail again: nothing is created, and the error points at the contact field.
+    await expect(createCompanyWithContact(companySchema.parse({ name: `Second Co ${stamp}`, status: "prospect" }), contact, actor.id)).rejects.toMatchObject({ fieldErrors: { contactEmail: expect.any(Array) } });
+    const after = await db.select({ id: companies.id }).from(companies).where(eq(companies.name, `Second Co ${stamp}`));
+    expect(after.length).toBe(0);
+    // Without a contact it behaves exactly like createCompany.
+    const plain = await createCompanyWithContact(companySchema.parse({ name: `Third Co ${stamp}`, status: "prospect" }), null, actor.id);
+    expect(plain.contactId).toBeNull();
   });
 });
