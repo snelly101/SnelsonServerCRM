@@ -73,7 +73,7 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
                     <Pencil className="h-4 w-4" /> Edit
                   </ButtonLink>
                   {contract.archivedAt ? (
-                    <ConfirmButton variant="secondary" action={archiveContractAction.bind(null, id, true)} title="Restore this contract?" description="It returns to the contracts list, MRR and billing." confirmLabel="Restore" successMessage={`${contract.name} restored`}>
+                    <ConfirmButton variant="secondary" action={archiveContractAction.bind(null, id, true)} title="Restore this contract?" description="It returns to the contracts list, the billing totals and the billing run." confirmLabel="Restore" successMessage={`${contract.name} restored`}>
                       <ArchiveRestore className="h-4 w-4" /> Restore
                     </ConfirmButton>
                   ) : (
@@ -81,7 +81,7 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
                       variant="danger-outline"
                       action={archiveContractAction.bind(null, id)}
                       title="Archive this contract?"
-                      description="It is hidden from the contracts list, excluded from MRR and skipped by billing. Nothing is deleted and you can restore it later."
+                      description="It is hidden from the contracts list, left out of the billing totals and skipped by the billing run. Nothing is deleted and you can restore it later."
                       confirmLabel="Archive"
                       successMessage={`${contract.name} archived. Find it under "Show archived" on the contracts list.`}
                       successHref="/contracts"
@@ -97,7 +97,7 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
       />
       {contract.archivedAt && (
         <Alert tone="warn" title="Archived" className="mb-4">
-          This contract was archived on {fmtDate(contract.archivedAt, settings)}. It is hidden from the contracts list, excluded from MRR and skipped by billing.{canWrite && " Use Restore to bring it back."}
+          This contract was archived on {fmtDate(contract.archivedAt, settings)}. It is hidden from the contracts list, left out of the billing totals and skipped by the billing run.{canWrite && " Use Restore to bring it back."}
         </Alert>
       )}
       {contract.status === "active" && contract.noticeDeadline && contract.noticeDeadline <= today && (
@@ -113,7 +113,7 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
           <AgreementLines agreement={picture} settings={settings} lines={lineOptions} canEdit={canWrite} canReview={can(me.role, "discrepancy.review")} />
         )}
         <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500">
-          <strong>Quantity</strong> is what is billed (fixed: as agreed; synced: the integrations&apos; count once a change is approved). <strong>Supplied by</strong> shows which integration supplies each line and how many; open a line for the source records, the rule and any count check. <strong>Cost / unit</strong> comes from the supplier where it reports pricing (Pax8), otherwise from the cost recorded on the line; <strong>unknown</strong> means neither. <strong>Monthly</strong> is what the monthly invoice carries; <strong>MRR normalised</strong> (annual ÷ 12, quarterly ÷ 3) is the forecasting figure.
+          <strong>Quantity</strong> is what is billed (fixed: as agreed; synced: the integrations&apos; count once a change is approved). <strong>Supplied by</strong> shows which integration supplies each line and how many; open a line for the source records, the rule and any count check. <strong>Cost / unit</strong> comes from the supplier where it reports pricing (Pax8), otherwise from the cost recorded on the line; <strong>unknown</strong> means neither. <strong>Invoiced</strong> is what the invoices carry at each frequency: quarterly and annual lines are shown at their own amounts, not divided down to a month.
         </p>
       </Card>
       </div>

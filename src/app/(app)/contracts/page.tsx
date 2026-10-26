@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus, Package, BellRing, CalendarClock } from "lucide-react";
+import { Plus, Package, BellRing, CalendarClock, Link2 } from "lucide-react";
 import { requirePermission } from "@/lib/session";
 import { can } from "@/lib/permissions";
 import { contractTotals, listContracts } from "@/services/contracts";
@@ -12,7 +12,7 @@ import { Pagination } from "@/components/ui/pagination";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { RunRemindersButton } from "./run-reminders";
 import { ContractTable } from "./table";
-import { fmtMoney } from "@/lib/format";
+import { billedPerYear, fmtMoney } from "@/lib/format";
 import { param, toInt } from "@/lib/utils";
 
 export const metadata = { title: "Contracts & Services" };
@@ -43,6 +43,9 @@ export default async function ContractsPage({ searchParams }: { searchParams: Pr
             <ButtonLink href="/contracts/catalogue" variant="secondary">
               <Package className="h-4 w-4" /> Service catalogue
             </ButtonLink>
+            <ButtonLink href="/billing/services" variant="secondary" title="Services the integrations supply that are not yet charged on a contract line">
+              <Link2 className="h-4 w-4" /> Match services
+            </ButtonLink>
             {can(me.role, "contract.write") && <RunRemindersButton />}
             {can(me.role, "contract.write") && (
               <ButtonLink href="/contracts/new">
@@ -54,8 +57,8 @@ export default async function ContractsPage({ searchParams }: { searchParams: Pr
       />
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Active contracts" value={totals.active} />
-        <Stat label="Billed monthly" value={fmtMoney(totals.monthlyBilled, c)} hint={[totals.quarterlyBilled > 0 ? `+ ${fmtMoney(totals.quarterlyBilled, c)}/qtr` : null, totals.annualBilled > 0 ? `+ ${fmtMoney(totals.annualBilled, c)}/yr` : null].filter(Boolean).join(" ") || "no quarterly or annual lines"} tone="good" />
-        <Stat label="MRR (normalised)" value={fmtMoney(totals.mrr, c)} hint={`annual ÷ 12, quarterly ÷ 3 · ARR ${fmtMoney(totals.arr, c)}`} />
+        <Stat label="Billed monthly" value={fmtMoney(totals.monthlyBilled, c)} hint={totals.quarterlyBilled > 0 ? `+ ${fmtMoney(totals.quarterlyBilled, c)} quarterly` : "monthly lines on active contracts"} tone="good" />
+        <Stat label="Billed annually" value={fmtMoney(totals.annualBilled, c)} hint={`annual lines at their yearly price · ${fmtMoney(billedPerYear(totals), c)} over a year of invoices`} />
         <Stat label="One-off in active contracts" value={fmtMoney(totals.oneOff + totals.hardware, c)} hint="project + hardware, reported separately" />
       </div>
       <FilterBar
@@ -84,7 +87,7 @@ export default async function ContractsPage({ searchParams }: { searchParams: Pr
       ) : (
         <Card padded={false}>
           <ContractTable
-            rows={data.rows.map((r) => ({ id: r.id, name: r.name, reference: r.reference, status: r.status, companyId: r.companyId, companyName: r.companyName, mrr: r.summary.mrr, billingFrequency: r.billingFrequency, startDate: r.startDate, renewalDate: r.renewalDate, noticeDeadline: r.noticeDeadline, nextReviewDate: r.nextReviewDate }))}
+            rows={data.rows.map((r) => ({ id: r.id, name: r.name, reference: r.reference, status: r.status, companyId: r.companyId, companyName: r.companyName, billed: { monthlyBilled: r.summary.monthlyBilled, quarterlyBilled: r.summary.quarterlyBilled, annualBilled: r.summary.annualBilled }, billingFrequency: r.billingFrequency, startDate: r.startDate, renewalDate: r.renewalDate, noticeDeadline: r.noticeDeadline, nextReviewDate: r.nextReviewDate }))}
             canWrite={can(me.role, "contract.write")}
             settings={{ currency: settings.currency, dateFormat: settings.dateFormat, timezone: settings.timezone }}
             owners={owners}

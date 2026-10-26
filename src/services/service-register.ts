@@ -131,7 +131,7 @@ export async function serviceRegister(p: { state?: string; companyId?: string; p
   let rows = await serviceRegisterRows(p.companyId ? [p.companyId] : null);
   const summary = summariseRegister(rows);
   if (p.provider && p.provider !== "all") rows = rows.filter((r) => r.provider === p.provider);
-  if (p.state && p.state !== "all") rows = p.state === "review" ? rows.filter((r) => r.reviewOverdue) : rows.filter((r) => r.state === p.state);
+  if (p.state && p.state !== "all") rows = p.state === "review" ? rows.filter((r) => r.reviewOverdue) : p.state === "decide" ? rows.filter((r) => r.state === "unmapped" || r.state === "investigate" || r.reviewOverdue) : rows.filter((r) => r.state === p.state);
   if (p.q) {
     const q = p.q.toLowerCase();
     rows = rows.filter((r) => r.name.toLowerCase().includes(q) || (r.companyName ?? "").toLowerCase().includes(q) || (r.detail ?? "").toLowerCase().includes(q) || (r.supplierProduct ?? "").toLowerCase().includes(q));

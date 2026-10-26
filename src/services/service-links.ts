@@ -102,7 +102,7 @@ export type SetLinkInput = { source: ServiceSource; sourceRowId: string; role: L
 export async function setServiceLink(input: SetLinkInput, actorUserId: string | null) {
   if (!serviceSourceValues.includes(input.source)) throw new ActionError("Unknown service source.");
   if (!linkRoleValues.includes(input.role)) throw new ActionError("Unknown link role.");
-  const row = await sourceRow(input.source, input.sourceRowId);
+  const row = await serviceSourceRow(input.source, input.sourceRowId);
   if (!row?.companyId) throw new ActionError("That service is not linked to a company; link it first.");
   const companyId = row.companyId;
   const reason = input.reason?.trim() || null;
@@ -160,7 +160,8 @@ export async function confirmLinksFromSync(services: SuppliedService[], lines: M
   return { confirmed, added };
 }
 
-async function sourceRow(source: ServiceSource, rowId: string): Promise<{ companyId: string | null; name: string; quantity: number } | null> {
+/** The mirror row behind a supplied service: its company, a display name and its quantity. */
+export async function serviceSourceRow(source: ServiceSource, rowId: string): Promise<{ companyId: string | null; name: string; quantity: number } | null> {
   if (source === "pax8_subscription") {
     const [r] = await db.select({ companyId: pax8Subscriptions.companyId, name: pax8Subscriptions.productName, quantity: pax8Subscriptions.quantity }).from(pax8Subscriptions).where(eq(pax8Subscriptions.id, rowId)).limit(1);
     return r ?? null;

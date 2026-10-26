@@ -34,6 +34,28 @@ export function fmtDateTime(d: Date | string | null | undefined, s: DisplaySetti
   return formatDate(toZonedTime(date, s.timezone), `${s.dateFormat} HH:mm`);
 }
 
+export type BilledParts = { monthlyBilled: number; quarterlyBilled: number; annualBilled: number };
+
+/** The recurring value as the invoices carry it: each billing frequency at its own amount, nothing divided down to a month. */
+export function billedParts(s: BilledParts, currency = "GBP") {
+  const out: { key: "monthly" | "quarterly" | "annual"; amount: number; label: string; text: string }[] = [];
+  if (s.monthlyBilled > 0) out.push({ key: "monthly", amount: s.monthlyBilled, label: "monthly", text: `${fmtMoney(s.monthlyBilled, currency)} monthly` });
+  if (s.quarterlyBilled > 0) out.push({ key: "quarterly", amount: s.quarterlyBilled, label: "quarterly", text: `${fmtMoney(s.quarterlyBilled, currency)} quarterly` });
+  if (s.annualBilled > 0) out.push({ key: "annual", amount: s.annualBilled, label: "annual", text: `${fmtMoney(s.annualBilled, currency)} annual` });
+  return out;
+}
+
+/** "£566.75 monthly · £1,200.00 annual", or the fallback when nothing recurs. */
+export function fmtBilled(s: BilledParts, currency = "GBP", empty = "—") {
+  const parts = billedParts(s, currency);
+  return parts.length ? parts.map((p) => p.text).join(" · ") : empty;
+}
+
+/** What a year of invoices adds up to: monthly × 12 + quarterly × 4 + annual. */
+export function billedPerYear(s: BilledParts) {
+  return Math.round((s.monthlyBilled * 12 + s.quarterlyBilled * 4 + s.annualBilled) * 100) / 100;
+}
+
 export function fmtRelative(d: Date | string | null | undefined) {
   if (!d) return "never";
   const date = typeof d === "string" ? new Date(d) : d;

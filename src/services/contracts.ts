@@ -239,6 +239,43 @@ async function syncLines(tx: Tx, contractId: string, lines: ContractLineInput[],
   if (changes.length) await tx.insert(contractLineChanges).values(changes);
 }
 
+/**
+ * Appends one line to an agreement without touching the others (the
+ * matching screens use this to create the line an integration service
+ * should be charged on). On an active agreement the new quantity is dated
+ * history from today, as a full edit would record it, so the next invoice
+ * pro-rates it; on a draft it is simply the agreed quantity.
+ */
+export async function addContractLine(contractId: string, line: ContractLineInput, actorUserId: string, reason: string | null = null) {
+  const [c] = await db.select({ id: contracts.id, companyId: contracts.companyId, name: contracts.name, status: contracts.status, archivedAt: contracts.archivedAt }).from(contracts).where(eq(contracts.id, contractId)).limit(1);
+  if (!c) throw new ActionError("Contract not found.");
+  if (c.archivedAt) throw new ActionError("That contract is archived; restore it first.");
+  if (c.status !== "draft" && c.status !== "active") throw new ActionError(`That contract is ${c.status}; lines can only be added to a draft or active one.`);
+  return db.transaction(async (tx) => {
+    const [{ next }] = await tx.select({ next: sql<number>`coalesce(max(${contractLines.sortOrder}), -1) + 1` }).from(contractLines).where(eq(contractLines.contractId, contractId));
+    const values = lineValues(contractId, line, Number(next));
+    const [row] = await tx.insert(contractLines).values(values).returning({ id: contractLines.id });
+    if (c.status === "active" && values.revenueType === "recurring") {
+      await tx.insert(contractLineChanges).values({ contractId, contractLineId: row.id, lineDescription: values.description, field: "quantity", previousValue: "0", newValue: String(Number(line.quantity)), effectiveFrom: new Date().toISOString().slice(0, 10), reason, actorUserId });
+    }
+    await audit({ actorUserId, action: "contract.update", entityType: "contract", entityId: contractId, details: { lineAdded: { id: row.id, description: values.description, quantity: Number(line.quantity), unitPrice: Number(line.unitPrice) }, reason } }, tx);
+    await logActivity({ type: "contract", companyId: c.companyId, entityType: "contract", entityId: contractId, title: `${c.name}: line added, ${values.description}${reason ? ` (${reason})` : ""}`, actorUserId }, tx);
+    return { lineId: row.id, companyId: c.companyId, contractName: c.name };
+  });
+}
+
+/** Draft and active agreements of these companies, for choosing where a new line goes. */
+export async function contractOptionsFor(companyIds: string[]) {
+  const out = new Map<string, { id: string; name: string; status: string; billingFrequency: string }[]>();
+  if (!companyIds.length) return out;
+  const rows = await db.select({ id: contracts.id, companyId: contracts.companyId, name: contracts.name, status: contracts.status, billingFrequency: contracts.billingFrequency }).from(contracts).where(and(inArray(contracts.companyId, companyIds), isNull(contracts.archivedAt), inArray(contracts.status, ["draft", "active"]))).orderBy(asc(contracts.status), asc(contracts.name));
+  for (const r of rows) {
+    const { companyId, ...rest } = r;
+    out.set(companyId, [...(out.get(companyId) ?? []), rest]);
+  }
+  return out;
+}
+
 export async function createContract(input: ContractInput, lines: ContractLineInput[], actorUserId: string) {
   return db.transaction(async (tx) => {
     const [row] = await tx.insert(contracts).values({ ...toValues(input), ownerUserId: input.ownerUserId ?? actorUserId }).returning({ id: contracts.id });
