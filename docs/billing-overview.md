@@ -48,7 +48,7 @@ Two different numbers are shown and they are deliberately not the same:
 
 ### 3.5 Draft invoices (`invoice_drafts`)
 
-A CRM-side invoice draft: company, contract or opportunity, status (`draft`, `approved`, `created`, `failed`, `cancelled`), a unique reference `CRM-XXXXXXXX`, description, currency, invoice date, due date, **period start and end**, the lines as JSON (description, quantity, unit amount, account code, tax type, the contract line id it came from), net subtotal, notes, who prepared and approved it, and the Xero invoice id and number once created.
+A CRM-side invoice draft: company, contract or opportunity, status (`draft`, `approved`, `created`, `failed`, `cancelled`), a unique reference built from the agreement's CRM reference (its name when it has none) and the month invoiced, e.g. `MSA-9125 2026-11` (agreements on one consolidated invoice joined with " + ", a one-off from an opportunity carrying its title, and " (2)" appended when the same agreement and month is drafted again; drafts from before this convention keep their `CRM-XXXXXXXX`), description, currency, invoice date, due date, **period start and end**, the lines as JSON (description, quantity, unit amount, account code, tax type, the contract line id it came from), net subtotal, notes, who prepared and approved it, and the Xero invoice id and number once created.
 
 ### 3.6 Mirrors of external data
 
@@ -162,7 +162,7 @@ The intended monthly routine:
 2. **Coverage is per line and period**: a period of a line counts as invoiced when any non-cancelled draft carries it. A line period that is already drafted is never proposed again, so re-running the page is safe. Without a *Bill from* date nothing earlier than the current period is ever proposed, so a contract imported mid-life is never back-billed by accident.
 3. Tick the rows wanted and click **Prepare drafts**. Each becomes an ordinary CRM draft carrying all of its items (its description says when missed periods are included). The run is audited as `billing.run`.
 4. Review each draft (step 2 **Approve**, then the draft page): lines table (description, qty, unit, account, tax, line total), the **How these amounts were calculated** panel, details (dates, description, notes), and an **Approve and create in Xero** button for finance/admin. Lines can be edited before approval.
-5. Approval creates the invoice in Xero as **DRAFT** (never authorised), with `Reference = CRM-XXXXXXXX`, an `Idempotency-Key` header, the configured account codes, tax type, due date from payment terms and branding theme. The Xero invoice's URL field links back to the CRM draft. A failed attempt is retried by looking the invoice up by reference first, so a retry can never create two invoices.
+5. Approval creates the invoice in Xero as **DRAFT** (never authorised), with the draft's reference as `Reference` (the agreement's CRM reference and the month), an `Idempotency-Key` header, the configured account codes, tax type, due date from payment terms and branding theme. The Xero invoice's URL field links back to the CRM draft. A failed attempt is retried by looking the invoice up by reference first, so a retry can never create two invoices.
 6. Finance then approve and send from Xero as usual. Payments and status changes flow back through Xero webhooks and the hourly sync, and appear on the Finance page and the company's Invoices tab.
 
 ### 5.2 Manual preparation

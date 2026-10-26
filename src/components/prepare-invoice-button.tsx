@@ -31,6 +31,7 @@ export function PrepareInvoiceButton({ companyId, contractId, opportunityId, bil
   const end0 = new Date(start0.getFullYear(), start0.getMonth() + months, 0);
   const [periodStart, setPeriodStart] = useState(start0.toISOString().slice(0, 10));
   const [periodEnd, setPeriodEnd] = useState(end0.toISOString().slice(0, 10));
+  const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10));
 
   useEffect(() => {
     if (!open || !contractId || !/^\d{4}-\d{2}-\d{2}$/.test(periodStart) || !/^\d{4}-\d{2}-\d{2}$/.test(periodEnd)) return;
@@ -61,6 +62,9 @@ export function PrepareInvoiceButton({ companyId, contractId, opportunityId, bil
       </Button>
       <DialogContent title="Prepare a draft invoice" description={contractId ? "Builds lines from the contract's recurring services for the period below. A finance user then reviews and approves it before it is created in Xero as a draft." : "Builds lines from the opportunity's one-off and hardware items. A finance user then reviews and approves it."}>
         {error && <p className="mb-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+        <Field label="Invoice date" htmlFor="pi-date" help="The date on the draft; the due date counts from it." className="mb-3">
+          <Input id="pi-date" type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} className="w-44" />
+        </Field>
         {contractId && (
           <>
             <div className="grid grid-cols-2 gap-3">
@@ -114,7 +118,7 @@ export function PrepareInvoiceButton({ companyId, contractId, opportunityId, bil
             disabled={Boolean(contractId) && (!preview || preview.lines.length === 0)}
             onClick={() =>
               start(async () => {
-                const r = await prepareInvoiceAction({ companyId, contractId, opportunityId, periodStart: contractId ? periodStart : undefined, periodEnd: contractId ? periodEnd : undefined });
+                const r = await prepareInvoiceAction({ companyId, contractId, opportunityId, periodStart: contractId ? periodStart : undefined, periodEnd: contractId ? periodEnd : undefined, invoiceDate });
                 if (!r.ok) return setError(r.error);
                 setOpen(false);
                 router.push(`/billing/drafts/${r.data.draftId}`);

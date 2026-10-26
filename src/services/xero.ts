@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
-import { db } from "@/db";
+import { db, type Tx } from "@/db";
 import { companies, contractLineChanges, contractLines, contracts, invoiceDrafts, opportunityLines, opportunities, user, xeroContacts, xeroInvoices, xeroPayments, type InvoiceDraftLine } from "@/db/schema";
 import { audit, logActivity } from "@/lib/audit";
 import { logger } from "@/lib/logger";
@@ -510,8 +510,21 @@ export async function pushContactDetailsToXero(companyId: string, actorUserId: s
 // ---------------------------------------------------------------------------
 // Invoice drafts: prepare → approve → create in Xero (DRAFT) exactly once
 // ---------------------------------------------------------------------------
-function draftReference(id: string) {
-  return `CRM-${id.slice(0, 8).toUpperCase()}`;
+/**
+ * The invoice reference is the agreement's CRM reference (its name when it
+ * has none) followed by the month the invoice is for, so the Xero reference
+ * reads "MSA-9125 2026-11" rather than an opaque code. Several agreements on
+ * one invoice are joined with " + "; a one-off from an opportunity carries its
+ * title. References must stay unique (the retry after a failed approval looks
+ * the Xero draft up by reference), so a second draft for the same agreement
+ * and month gets " (2)", " (3)" and so on.
+ */
+async function uniqueReference(tx: Tx, base: string, fallbackId: string) {
+  const root = (base.trim() || `CRM-${fallbackId.slice(0, 8).toUpperCase()}`).replace(/\s+/g, " ").slice(0, 200);
+  const taken = new Set((await tx.select({ reference: invoiceDrafts.reference }).from(invoiceDrafts).where(or(eq(invoiceDrafts.reference, root), sql`${invoiceDrafts.reference} like ${root + " (%"}`))).map((r) => r.reference));
+  if (!taken.has(root)) return root;
+  for (let n = 2; n < 1000; n++) if (!taken.has(`${root} (${n})`)) return `${root} (${n})`;
+  return `${root} ${fallbackId.slice(0, 8).toUpperCase()}`;
 }
 
 export type PrepareInvoiceInput = {
@@ -525,6 +538,8 @@ export type PrepareInvoiceInput = {
   items?: PlannedItem[] | null;
   /** A consolidated customer draft: these agreements and their line periods, one invoice for the customer. */
   contracts?: { contractId: string; items: PlannedItem[] }[] | null;
+  /** The invoice date to put on the draft (and the date the due date counts from). Today when not given. */
+  invoiceDate?: string | null;
 };
 
 export async function prepareInvoiceDraft(input: PrepareInvoiceInput, actorUserId: string | null) {
@@ -539,6 +554,8 @@ export async function prepareInvoiceDraft(input: PrepareInvoiceInput, actorUserI
   let purchaseOrderRef: string | null = null;
   const settle: { contractId: string; periodEnd: string }[] = [];
   let contractIds: string[] | null = null;
+  /** What the reference is built from: the agreements' CRM references (or names), or the opportunity's title. */
+  const refParts: string[] = [];
   if (input.contracts?.length) {
     // Consolidated: every agreement's lines, grouped by agreement, in one draft for the customer.
     const names: string[] = [];
@@ -560,6 +577,7 @@ export async function prepareInvoiceDraft(input: PrepareInvoiceInput, actorUserI
       spanEnd = spanEnd === null || span.periodEnd > spanEnd ? span.periodEnd : spanEnd;
       missed += part.items.filter((i) => i.missed).length;
       names.push(c.name);
+      refParts.push(c.reference?.trim() || c.name);
       settle.push({ contractId: c.id, periodEnd: span.periodEnd });
       contractIds.push(c.id);
       purchaseOrderRef ??= c.purchaseOrderRef;
@@ -589,6 +607,7 @@ export async function prepareInvoiceDraft(input: PrepareInvoiceInput, actorUserI
     description ??= `${c.name} — ${c.billingFrequency} billing${missed ? ` (includes ${missed} missed period${missed === 1 ? "" : "s"})` : ""}`;
     settledPeriodEnd = span.periodEnd;
     settle.push({ contractId: c.id, periodEnd: span.periodEnd });
+    refParts.push(c.reference?.trim() || c.name);
     purchaseOrderRef = c.purchaseOrderRef;
     input = { ...input, periodStart: span.periodStart, periodEnd: span.periodEnd };
   } else if (input.opportunityId) {
@@ -600,14 +619,18 @@ export async function prepareInvoiceDraft(input: PrepareInvoiceInput, actorUserI
       lines.push({ description: l.description, quantity: Number(l.quantity), unitAmount: round(Number(l.unitPrice)), accountCode: l.revenueType === "hardware" ? (cfg.hardwareAccountCode ?? accountCode) : accountCode, taxType });
     }
     description ??= `${o.title} — one-off`;
+    refParts.push(o.title);
   }
   if (!lines.length) throw new ActionError("Nothing to invoice: no recurring lines on the contract or no one-off lines on the opportunity.");
   const today = new Date().toISOString().slice(0, 10);
-  const due = new Date(Date.now() + (cfg.dueDays ?? 30) * 86400000).toISOString().slice(0, 10);
+  if (input.invoiceDate && !/^\d{4}-\d{2}-\d{2}$/.test(input.invoiceDate)) throw new ActionError("Invoice date must be YYYY-MM-DD.");
+  const invoiceDate = input.invoiceDate || today;
+  const due = new Date(new Date(invoiceDate + "T00:00:00Z").getTime() + (cfg.dueDays ?? 30) * 86400000).toISOString().slice(0, 10);
   const subTotal = lines.reduce((a, l) => a + l.quantity * l.unitAmount, 0);
+  const refBase = refParts.length ? `${[...new Set(refParts)].join(" + ")} ${(input.periodStart ?? invoiceDate).slice(0, 7)}` : "";
   const id = await db.transaction(async (tx) => {
-    const [row] = await tx.insert(invoiceDrafts).values({ companyId: input.companyId, contractId: input.contractId ?? null, contractIds, purchaseOrderRef, opportunityId: input.opportunityId ?? null, reference: "pending", description, currencyCode: settings.currency, invoiceDate: today, dueDate: due, periodStart: input.periodStart ?? null, periodEnd: input.periodEnd ?? null, lines, subTotal: String(round(subTotal)), preparedByUserId: actorUserId }).returning({ id: invoiceDrafts.id });
-    await tx.update(invoiceDrafts).set({ reference: draftReference(row.id) }).where(eq(invoiceDrafts.id, row.id));
+    const [row] = await tx.insert(invoiceDrafts).values({ companyId: input.companyId, contractId: input.contractId ?? null, contractIds, purchaseOrderRef, opportunityId: input.opportunityId ?? null, reference: `pending-${crypto.randomUUID()}`, description, currencyCode: settings.currency, invoiceDate, dueDate: due, periodStart: input.periodStart ?? null, periodEnd: input.periodEnd ?? null, lines, subTotal: String(round(subTotal)), preparedByUserId: actorUserId }).returning({ id: invoiceDrafts.id });
+    await tx.update(invoiceDrafts).set({ reference: await uniqueReference(tx, refBase, row.id) }).where(eq(invoiceDrafts.id, row.id));
     // Changes dated on or before the end of this period are now accounted for by this draft (traceability only; the history itself is never cleared).
     void settledPeriodEnd;
     for (const s of settle) {
@@ -676,7 +699,7 @@ export async function reprepareInvoiceDraft(id: string, actorUserId: string) {
       if (items.length) parts.push({ contractId: cid, items });
     }
     if (!parts.length) throw new ActionError("Nothing is due for that stretch any more. The old draft has been cancelled.");
-    const newId = await prepareInvoiceDraft({ companyId: d.companyId, contracts: parts, description: baseDescription ? `${baseDescription} (re-prepared from ${d.reference})` : null }, actorUserId);
+    const newId = await prepareInvoiceDraft({ companyId: d.companyId, contracts: parts, invoiceDate: d.invoiceDate, description: baseDescription ? `${baseDescription} (re-prepared from ${d.reference})` : null }, actorUserId);
     await audit({ actorUserId, action: "invoice.draft.reprepare", entityType: "invoice_draft", entityId: newId, details: { from: id, reference: d.reference } });
     return newId;
   }
@@ -685,7 +708,7 @@ export async function reprepareInvoiceDraft(id: string, actorUserId: string) {
   const entries = (await draftLineEntries([d.contractId])).get(d.contractId) ?? [];
   const items = planSpanItems(found.contract, found.lines, entries, d.periodStart, d.periodEnd);
   if (!items.length) throw new ActionError("Nothing is due for that stretch any more (the contract no longer has recurring lines in it). The old draft has been cancelled.");
-  const newId = await prepareInvoiceDraft({ companyId: d.companyId, contractId: d.contractId, items, description: d.description?.replace(/ \(re-prepared.*\)$/, "") ? `${d.description.replace(/ \(re-prepared.*\)$/, "")} (re-prepared from ${d.reference})` : null }, actorUserId);
+  const newId = await prepareInvoiceDraft({ companyId: d.companyId, contractId: d.contractId, items, invoiceDate: d.invoiceDate, description: d.description?.replace(/ \(re-prepared.*\)$/, "") ? `${d.description.replace(/ \(re-prepared.*\)$/, "")} (re-prepared from ${d.reference})` : null }, actorUserId);
   await audit({ actorUserId, action: "invoice.draft.reprepare", entityType: "invoice_draft", entityId: newId, details: { from: id, reference: d.reference } });
   return newId;
 }

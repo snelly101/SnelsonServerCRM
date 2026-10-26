@@ -169,7 +169,7 @@ describe("Xero workflow (demo adapter)", () => {
     );
     const draftId = await prepareInvoiceDraft({ companyId, contractId, periodStart: "2026-09-01", periodEnd: "2026-09-30" }, finance.id);
     const [draft] = await db.select().from(invoiceDrafts).where(eq(invoiceDrafts.id, draftId));
-    expect(draft.reference).toMatch(/^CRM-[0-9A-F]{8}$/);
+    expect(draft.reference).toBe("MSA 2026-09"); // the agreement has no CRM reference, so its name and the month
     expect(draft.lines).toHaveLength(2); // one-off excluded from a recurring period invoice
     expect(draft.lines[0]).toMatchObject({ quantity: 32, unitAmount: 45, accountCode: "201", taxType: "OUTPUT2" });
     expect(draft.lines[1].unitAmount).toBe(100); // annual 1200 normalised to the monthly period
@@ -337,7 +337,7 @@ describe("Xero workflow (demo adapter)", () => {
     expect((await db.select().from(invoiceDrafts).where(eq(invoiceDrafts.id, d)))[0].status).toBe("cancelled");
     const nd = (await db.select().from(invoiceDrafts).where(eq(invoiceDrafts.id, fresh)))[0];
     expect(nd).toMatchObject({ status: "draft", periodStart: "2026-10-01", periodEnd: "2026-10-31" });
-    expect(nd.description).toMatch(/re-prepared from CRM-/);
+    expect(nd.description).toMatch(/re-prepared from .+ 20\d\d-\d\d\)$/);
     expect(nd.lines.map((l) => [l.description, l.unitAmount])).toEqual([
       ["Seats (2026-10-01 to 2026-10-31)", 20],
       ["Seats: 2 added from 2026-10-10, 22 of 31 days (pro rata)", 28.39],

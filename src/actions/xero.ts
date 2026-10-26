@@ -81,10 +81,10 @@ export async function pushContactToXeroAction(companyId: string): Promise<Action
   });
 }
 
-export async function prepareInvoiceAction(input: { companyId: string; contractId?: string; opportunityId?: string; periodStart?: string; periodEnd?: string }): Promise<ActionResult<{ draftId: string }>> {
+export async function prepareInvoiceAction(input: { companyId: string; contractId?: string; opportunityId?: string; periodStart?: string; periodEnd?: string; invoiceDate?: string }): Promise<ActionResult<{ draftId: string }>> {
   return runAction(async () => {
     const u = await requireActionPermission("invoice.prepare");
-    const parsed = z.object({ companyId: z.uuid(), contractId: z.uuid().optional(), opportunityId: z.uuid().optional(), periodStart: z.string().optional(), periodEnd: z.string().optional() }).parse(input);
+    const parsed = z.object({ companyId: z.uuid(), contractId: z.uuid().optional(), opportunityId: z.uuid().optional(), periodStart: z.string().optional(), periodEnd: z.string().optional(), invoiceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }).parse({ ...input, invoiceDate: input.invoiceDate || undefined });
     const draftId = await prepareInvoiceDraft(parsed, u.id);
     revalidateXero();
     return { draftId };
