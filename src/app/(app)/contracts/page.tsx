@@ -8,17 +8,14 @@ import { listSavedViews } from "@/services/settings";
 import { getAppSettings } from "@/lib/settings";
 import { PageHeader, Card, EmptyState, Stat } from "@/components/ui/page";
 import { ButtonLink } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Pagination } from "@/components/ui/pagination";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { RunRemindersButton } from "./run-reminders";
-import { fmtDate, fmtMoney } from "@/lib/format";
+import { ContractTable } from "./table";
+import { fmtMoney } from "@/lib/format";
 import { param, toInt } from "@/lib/utils";
-import { FREQUENCY_LABELS } from "@/lib/validation-sales";
 
 export const metadata = { title: "Contracts & Services" };
-
-const STATUS_TONE: Record<string, string> = { draft: "slate", active: "green", expired: "amber", cancelled: "red" };
 
 export default async function ContractsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const me = await requirePermission("contract.read");
@@ -33,7 +30,6 @@ export default async function ContractsPage({ searchParams }: { searchParams: Pr
     contractTotals(),
   ]);
   const c = settings.currency;
-  const today = new Date().toISOString().slice(0, 10);
   return (
     <>
       <PageHeader
@@ -87,49 +83,13 @@ export default async function ContractsPage({ searchParams }: { searchParams: Pr
         <EmptyState icon={<BellRing className="h-6 w-6" />} title={archived ? "No archived contracts" : "No contracts match"} description={archived ? "Archived contracts appear here and can be restored from their page." : "Contracts are created from won opportunities or manually."} />
       ) : (
         <Card padded={false}>
-          <div className="overflow-x-auto">
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th>Contract</th>
-                  <th>Company</th>
-                  <th>Status</th>
-                  <th className="text-right" title="Normalised: annual ÷ 12, quarterly ÷ 3">MRR</th>
-                  <th>Billing</th>
-                  <th>Start</th>
-                  <th>Renewal</th>
-                  <th>Notice by</th>
-                  <th>Next review</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.rows.map((r) => (
-                  <tr key={r.id}>
-                    <td>
-                      <Link href={`/contracts/${r.id}`} className="font-medium link">
-                        {r.name}
-                      </Link>
-                      {r.reference && <div className="text-xs text-slate-500">{r.reference}</div>}
-                    </td>
-                    <td>
-                      <Link href={`/companies/${r.companyId}`} className="hover:underline">
-                        {r.companyName}
-                      </Link>
-                    </td>
-                    <td>
-                      <Badge tone={STATUS_TONE[r.status]}>{r.status}</Badge>
-                    </td>
-                    <td className="text-right tabular-nums">{fmtMoney(r.summary.mrr, c)}</td>
-                    <td>{FREQUENCY_LABELS[r.billingFrequency]}</td>
-                    <td>{fmtDate(r.startDate, settings)}</td>
-                    <td>{fmtDate(r.renewalDate, settings)}</td>
-                    <td className={r.noticeDeadline && r.noticeDeadline <= today && r.status === "active" ? "font-medium text-red-600" : ""}>{fmtDate(r.noticeDeadline, settings)}</td>
-                    <td className={r.nextReviewDate && r.nextReviewDate < today ? "text-amber-700" : ""}>{fmtDate(r.nextReviewDate, settings)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ContractTable
+            rows={data.rows.map((r) => ({ id: r.id, name: r.name, reference: r.reference, status: r.status, companyId: r.companyId, companyName: r.companyName, mrr: r.summary.mrr, billingFrequency: r.billingFrequency, startDate: r.startDate, renewalDate: r.renewalDate, noticeDeadline: r.noticeDeadline, nextReviewDate: r.nextReviewDate }))}
+            canWrite={can(me.role, "contract.write")}
+            settings={{ currency: settings.currency, dateFormat: settings.dateFormat, timezone: settings.timezone }}
+            owners={owners}
+            archived={archived}
+          />
           <Pagination page={data.page} pageCount={data.pageCount} total={data.total} pageSize={data.pageSize} />
         </Card>
       )}
