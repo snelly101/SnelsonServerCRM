@@ -128,6 +128,29 @@ export const contractSchema = z.object({
 });
 export type ContractInput = z.infer<typeof contractSchema>;
 
+export const contractStatusValues = ["draft", "active", "expired", "cancelled"] as const;
+export const CONTRACT_STATUS_LABELS: Record<(typeof contractStatusValues)[number], string> = { draft: "Draft", active: "Active", expired: "Expired", cancelled: "Cancelled" };
+
+/** A date in a quick patch: a string sets it, null clears it, undefined leaves it alone. */
+const patchDate = z.union([z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD"), z.null()]).optional();
+/**
+ * The handful of fields the contracts list edits in place, one row at a time
+ * or for a whole selection. Only the keys that are sent change; lines, billing
+ * settings and notes stay as they are (the full form handles those).
+ */
+export const contractQuickPatchSchema = z
+  .object({
+    status: z.enum(contractStatusValues).optional(),
+    startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD").optional(),
+    endDate: patchDate,
+    renewalDate: patchDate,
+    nextReviewDate: patchDate,
+    noticePeriodDays: z.coerce.number().int().min(0).max(730).optional(),
+    ownerUserId: z.union([z.string().trim().min(1), z.null()]).optional(),
+  })
+  .refine((p) => Object.values(p).some((v) => v !== undefined), { message: "Nothing to change." });
+export type ContractQuickPatch = z.infer<typeof contractQuickPatchSchema>;
+
 export const invoiceScheduleValues = ["contract", "own"] as const;
 export const reductionPolicyValues = ["next_period", "immediate", "at_renewal"] as const;
 export const INVOICE_SCHEDULE_LABELS: Record<(typeof invoiceScheduleValues)[number], string> = { contract: "With the contract's invoices", own: "On its own cycle" };

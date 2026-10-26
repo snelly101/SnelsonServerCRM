@@ -4,7 +4,7 @@ import { companies, contractLineChanges, contractLines, contracts, invoiceDrafts
 import { audit, diffFields, logActivity } from "@/lib/audit";
 import { ActionError } from "@/lib/action-result";
 import { summariseLines, type RevenueSummary } from "@/lib/money";
-import { contractSchema, type ContractInput, type ContractLineInput } from "@/lib/validation-sales";
+import { contractSchema, type ContractInput, type ContractLineInput, type ContractQuickPatch } from "@/lib/validation-sales";
 import { createTask } from "./tasks";
 
 export type ContractListParams = {
@@ -261,6 +261,52 @@ export async function updateContract(id: string, input: ContractInput, lines: Co
     await audit({ actorUserId, action: "contract.update", entityType: "contract", entityId: id, details: { changes, linesReplaced: Boolean(lines) } }, tx);
     if (changes.status) await logActivity({ type: "contract", companyId: before.companyId, entityType: "contract", entityId: id, title: `${before.name}: ${changes.status.from} → ${changes.status.to}`, actorUserId }, tx);
   });
+}
+
+/**
+ * Applies one small change to one or more contracts without touching their
+ * lines: the status, a date, the notice period or the owner. This is what the
+ * contracts list uses for its in-place edits and its bulk bar. Each contract
+ * is audited on its own and a status change lands on the company timeline,
+ * exactly as the full form would do it. Contracts that no longer exist are
+ * reported back rather than failing the whole batch.
+ */
+export async function quickUpdateContracts(ids: string[], patch: ContractQuickPatch, actorUserId: string) {
+  const set: Partial<typeof contracts.$inferInsert> = {};
+  if (patch.status !== undefined) set.status = patch.status;
+  if (patch.startDate !== undefined) set.startDate = patch.startDate;
+  if (patch.endDate !== undefined) set.endDate = patch.endDate;
+  if (patch.renewalDate !== undefined) set.renewalDate = patch.renewalDate;
+  if (patch.nextReviewDate !== undefined) set.nextReviewDate = patch.nextReviewDate;
+  if (patch.noticePeriodDays !== undefined) set.noticePeriodDays = patch.noticePeriodDays;
+  if (patch.ownerUserId !== undefined) set.ownerUserId = patch.ownerUserId;
+  if (!Object.keys(set).length) throw new ActionError("Nothing to change.");
+  const unique = [...new Set(ids)];
+  if (!unique.length) throw new ActionError("Select at least one contract.");
+  const rows = await db.select().from(contracts).where(inArray(contracts.id, unique));
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  let done = 0;
+  let unchanged = 0;
+  const errors: string[] = [];
+  for (const id of unique) {
+    const before = byId.get(id);
+    if (!before) {
+      errors.push("One of the contracts no longer exists.");
+      continue;
+    }
+    const changes = diffFields(before as unknown as Record<string, unknown>, set as Record<string, unknown>);
+    if (!Object.keys(changes).length) {
+      unchanged++;
+      continue;
+    }
+    await db.transaction(async (tx) => {
+      await tx.update(contracts).set({ ...set, updatedAt: new Date() }).where(eq(contracts.id, id));
+      await audit({ actorUserId, action: "contract.update", entityType: "contract", entityId: id, details: { changes, linesReplaced: false, quick: true } }, tx);
+      if (changes.status) await logActivity({ type: "contract", companyId: before.companyId, entityType: "contract", entityId: id, title: `${before.name}: ${changes.status.from} → ${changes.status.to}`, actorUserId }, tx);
+    });
+    done++;
+  }
+  return { done, unchanged, errors };
 }
 
 export async function archiveContract(id: string, actorUserId: string, restore = false) {

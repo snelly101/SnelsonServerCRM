@@ -6,8 +6,8 @@ import { z } from "zod";
 import { requireActionPermission } from "@/lib/session";
 import { runAction, type ActionResult } from "@/lib/action-result";
 import { formToObject } from "@/lib/validation";
-import { contractLineSchema, contractSchema, linesFromForm } from "@/lib/validation-sales";
-import { archiveContract, createContract, generateReminders, updateContract } from "@/services/contracts";
+import { contractLineSchema, contractQuickPatchSchema, contractSchema, linesFromForm, type ContractQuickPatch } from "@/lib/validation-sales";
+import { archiveContract, createContract, generateReminders, quickUpdateContracts, updateContract } from "@/services/contracts";
 import { clearRenewalDecision, recordRenewalDecision } from "@/services/renewals";
 import { applyPriceReview, previewPriceReview, type PriceReviewInput, type PriceReviewPreview } from "@/services/price-reviews";
 
@@ -53,6 +53,39 @@ export async function archiveContractAction(id: string, restore = false): Promis
     revalidatePath("/contracts");
     revalidatePath(`/contracts/${id}`);
     return undefined;
+  });
+}
+
+const contractIdsSchema = z.array(z.uuid()).min(1, "Select at least one contract.").max(500);
+
+/** In-place edits from the contracts list: one row's status or date, or the same change for a whole selection. */
+export async function quickUpdateContractsAction(input: { ids: string[]; patch: ContractQuickPatch }): Promise<ActionResult<{ done: number; unchanged: number; errors: string[] }>> {
+  return runAction(async () => {
+    const u = await requireActionPermission("contract.write");
+    const r = await quickUpdateContracts(contractIdsSchema.parse(input.ids), contractQuickPatchSchema.parse(input.patch), u.id);
+    revalidatePath("/contracts", "layout");
+    revalidatePath("/billing", "layout");
+    return r;
+  });
+}
+
+/** Archives (or restores) every selected contract; a contract that no longer exists is reported, not fatal. */
+export async function bulkArchiveContractsAction(ids: string[], restore = false): Promise<ActionResult<{ done: number; errors: string[] }>> {
+  return runAction(async () => {
+    const u = await requireActionPermission("contract.write");
+    let done = 0;
+    const errors: string[] = [];
+    for (const id of new Set(contractIdsSchema.parse(ids))) {
+      try {
+        await archiveContract(id, u.id, restore);
+        done++;
+      } catch (e) {
+        errors.push(e instanceof Error ? e.message : "Failed.");
+      }
+    }
+    revalidatePath("/contracts", "layout");
+    revalidatePath("/billing", "layout");
+    return { done, errors };
   });
 }
 
