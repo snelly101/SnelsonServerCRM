@@ -34,7 +34,7 @@ function defaults(row: RegisterRow, products: CatalogueOption[]) {
     productId: product?.id ?? "",
     description: product?.name ?? row.name,
     quantity: String(row.quantity || 1),
-    unitPrice: product ? String(Number(product.unitPrice)) : "",
+    unitPrice: product ? String(Number(product.unitPrice)) : row.customerMonthlyPrice !== null && row.customerMonthlyPrice !== undefined ? String(Math.round(row.customerMonthlyPrice * MONTHS[frequency] * 100) / 100) : "",
     unitCost: product?.unitCost !== null && product?.unitCost !== undefined ? String(Number(product.unitCost)) : monthlyUnitCost !== null ? String(Math.round(monthlyUnitCost * MONTHS[frequency] * 100) / 100) : "",
     frequency,
     pricingModel,
@@ -255,7 +255,7 @@ function NewLine({ row, contracts, products, currency, onDone }: { row: Register
             ))}
           </Select>
         </Field>
-        <Field label={`Unit price (${currency}, per ${months === 12 ? "year" : months === 3 ? "quarter" : "month"})`} htmlFor={id("price")} help={perPeriod ? `${fmtMoney(perPeriod, currency)} per ${months === 12 ? "year" : months === 3 ? "quarter" : "month"} for ${quantity || 0}` : undefined}>
+        <Field label={`Unit price (${currency}, per ${months === 12 ? "year" : months === 3 ? "quarter" : "month"})`} htmlFor={id("price")} help={[perPeriod ? `${fmtMoney(perPeriod, currency)} per ${months === 12 ? "year" : months === 3 ? "quarter" : "month"} for ${quantity || 0}` : null, !productId && row.customerMonthlyPrice ? `Pax8's customer price; change it to yours.` : null].filter(Boolean).join(" · ") || undefined}>
           <Input id={id("price")} type="number" min={0} step="0.01" value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)} required />
         </Field>
         <Field label={`Unit cost (${currency}, per ${months === 12 ? "year" : months === 3 ? "quarter" : "month"})`} htmlFor={id("cost")} help={row.monthlyCost !== null ? "From the supplier's price; leave empty if unknown." : "Leave empty if unknown; margin is then an estimate."}>

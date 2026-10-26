@@ -106,8 +106,10 @@ export const pax8Subscriptions = pgTable(
     quantity: integer("quantity").notNull().default(0),
     /** Active, Cancelled, PendingManual, PendingAutomated, PendingCancel, WaitingForDetails, Trial, Converted, PendingActivation, Activated */
     status: text("status").notNull(),
-    /** Partner (buy) price per unit per billing term, as Pax8 reports it. */
+    /** The price to the customer per unit per billing term, as Pax8 reports it (`price` in the Pax8 API: "the price for the customer"). Never our cost. */
     price: numeric("price", { precision: 12, scale: 4 }),
+    /** Our buy price per unit per billing term (`partnerCost` in the Pax8 API). Null until the next sync after this column was added, or when Pax8 reports none. */
+    partnerCost: numeric("partner_cost", { precision: 12, scale: 4 }),
     currency: text("currency"),
     /** Monthly, Annual, 2-Year, 3-Year, One-Time, Trial, Activation */
     billingTerm: text("billing_term"),
@@ -194,8 +196,13 @@ export const pax8InvoiceItems = pgTable(
     sku: text("sku"),
     description: text("description"),
     quantity: numeric("quantity", { precision: 12, scale: 2 }),
+    /** The customer unit price on the charge (`price` in the Pax8 API). */
     unitPrice: numeric("unit_price", { precision: 12, scale: 4 }),
+    /** The customer total for the charge (`total`). */
     total: numeric("total", { precision: 12, scale: 2 }),
+    /** Our unit cost (`cost`) and total cost (`costTotal`) for the charge: what the partner invoice actually bills us. */
+    cost: numeric("cost", { precision: 12, scale: 4 }),
+    costTotal: numeric("cost_total", { precision: 12, scale: 2 }),
     currency: text("currency"),
     startPeriod: date("start_period"),
     endPeriod: date("end_period"),

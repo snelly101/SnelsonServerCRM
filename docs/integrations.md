@@ -179,7 +179,7 @@ Verified against the public Pax8 Partner API reference (devx.pax8.com). Shapes n
 
 ### What is mirrored
 
-`pax8_companies` (name, website and its registrable domain, phone, city, status, `company_id`, `manual` / `auto` match source, `external_status`), `pax8_products` (name, vendor, SKU, vendor SKU), `pax8_subscriptions` (product, quantity, status, partner price per term, billing term, commitment term and end, dates, the contract line a person chose, `company_id` derived from the company link), `pax8_invoices` (the last N partner invoices with status, dates, total, balance, the sum of their mirrored lines and the matched Xero bill) and `pax8_invoice_items` (their charge lines, per customer). Rows disappearing from Pax8 are marked `deleted`, never removed.
+`pax8_companies` (name, website and its registrable domain, phone, city, status, `company_id`, `manual` / `auto` match source, `external_status`), `pax8_products` (name, vendor, SKU, vendor SKU), `pax8_subscriptions` (product, quantity, status, partner cost and customer price per term, billing term, commitment term and end, dates, the contract line a person chose, `company_id` derived from the company link), `pax8_invoices` (the last N partner invoices with status, dates, total, balance, the sum of their mirrored lines and the matched Xero bill) and `pax8_invoice_items` (their charge lines, per customer). Rows disappearing from Pax8 are marked `deleted`, never removed.
 
 ### Matching, licence check and costs
 

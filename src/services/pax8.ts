@@ -350,6 +350,10 @@ export async function syncPax8(
                   pax8Number(s.price) === null
                     ? null
                     : String(pax8Number(s.price)),
+                partnerCost:
+                  pax8Number(s.partnerCost) === null
+                    ? null
+                    : String(pax8Number(s.partnerCost)),
                 currency: s.currency ?? null,
                 billingTerm: s.billingTerm ?? null,
                 commitmentTerm: commitment.term,
@@ -498,6 +502,7 @@ async function upsertSubscription(
     existing.quantity !== v.quantity ||
     existing.status !== v.status ||
     existing.price !== (v.price ?? null) ||
+    existing.partnerCost !== (v.partnerCost ?? null) ||
     existing.billingTerm !== (v.billingTerm ?? null) ||
     existing.commitmentEndsOn !== (v.commitmentEndsOn ?? null) ||
     existing.endDate !== (v.endDate ?? null) ||
@@ -1240,7 +1245,7 @@ export async function changePax8SubscriptionQuantity(
       reason: note,
     },
   });
-  const unitMonthly = monthlyUnitCost(s.price, s.billingTerm);
+  const unitMonthly = monthlyUnitCost(s.partnerCost, s.billingTerm);
   const costDelta = unitMonthly === null ? null : (to - from) * unitMonthly;
   await logActivity({
     type: "contract",
@@ -1269,7 +1274,7 @@ export async function applyPax8Cost(
     throw new ActionError("Subscription not found or not linked to a company.");
   const match = matchLine(s, await matchableLines(s.companyId), (await linksByRow("pax8_subscription", { rowIds: [s.id] })).get(s.id));
   if (!match) throw new ActionError("No contract line bills this subscription yet. Choose one first.");
-  const monthly = monthlyUnitCost(s.price, s.billingTerm);
+  const monthly = monthlyUnitCost(s.partnerCost, s.billingTerm);
   const months = LINE_MONTHS[match.line.billingFrequency] ?? null;
   if (monthly === null || !months)
     throw new ActionError(
@@ -1344,7 +1349,8 @@ export async function mirrorPax8Invoice(
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
   const money = (v: unknown) => (pax8Number(v) === null ? null : String(Math.round(pax8Number(v)! * 100) / 100));
-  const itemsTotal = items.reduce((a, it) => a + (pax8Number(it.total) ?? 0), 0);
+  // What the partner invoice bills us is the cost total of its lines; the customer total is what Pax8 would bill on our behalf.
+  const itemsTotal = items.reduce((a, it) => a + (pax8Number(it.costTotal) ?? pax8Number(it.total) ?? 0), 0);
   const invValues = {
     pax8InvoiceId: inv.id,
     status: inv.status ?? null,
@@ -1374,9 +1380,11 @@ export async function mirrorPax8Invoice(
       sku: it.sku ?? null,
       description: it.description ?? null,
       quantity: pax8Number(it.quantity) === null ? null : String(pax8Number(it.quantity)),
-      unitPrice: pax8Number(it.unitPrice) === null ? null : String(pax8Number(it.unitPrice)),
+      unitPrice: pax8Number(it.price ?? it.unitPrice) === null ? null : String(pax8Number(it.price ?? it.unitPrice)),
       total: pax8Number(it.total) === null ? null : String(pax8Number(it.total)),
-      currency: it.currency ?? inv.currency ?? null,
+      cost: pax8Number(it.cost) === null ? null : String(pax8Number(it.cost)),
+      costTotal: pax8Number(it.costTotal) === null ? null : String(pax8Number(it.costTotal)),
+      currency: it.currencyCode ?? it.currency ?? inv.currency ?? null,
       startPeriod: pax8Date(it.startPeriod),
       endPeriod: pax8Date(it.endPeriod),
       chargeType: it.chargeType ?? it.type ?? null,
@@ -1697,7 +1705,7 @@ export async function pax8InvoiceReconciliation() {
 // Charge-level allocation: each Pax8 invoice line → CRM customer → mirrored
 // subscription, with the findings the brief asks for (supplier charge
 // without a customer, charge for no known subscription, price or quantity
-// differing from the subscription). Compared with the matched Xero bill's
+// differing from the subscription's partner cost). Compared with the matched Xero bill's
 // lines only when that bill has line detail; a one-line bill is reported as
 // total-matched, never as reconciled line by line.
 // ---------------------------------------------------------------------------
@@ -1706,7 +1714,7 @@ export const ALLOCATION_FINDING_LABELS: Record<AllocationFinding, string> = {
   ok: "allocated",
   no_customer: "no customer",
   no_subscription: "no matching subscription",
-  price_differs: "price differs from subscription",
+  price_differs: "cost differs from subscription",
   quantity_differs: "quantity differs from subscription",
 };
 
@@ -1716,7 +1724,12 @@ export type AllocatedItem = {
   sku: string | null;
   chargeType: string | null;
   quantity: number | null;
+  /** The customer unit price and total on the charge (what Pax8 bills the customer on our behalf, or suggests). */
   unitPrice: number | null;
+  customerTotal: number | null;
+  /** Our unit cost on the charge. */
+  unitCost: number | null;
+  /** What this charge costs us: the cost total, falling back to the customer total for charges Pax8 reports without one. This is what is reconciled against the Xero bill. */
   total: number | null;
   currency: string | null;
   startPeriod: string | null;
@@ -1725,7 +1738,7 @@ export type AllocatedItem = {
   pax8CompanyName: string | null;
   companyId: string | null;
   companyName: string | null;
-  subscription: { id: string; subscriptionId: string; productName: string; quantity: number; price: number | null; billingTerm: string | null; status: string } | null;
+  subscription: { id: string; subscriptionId: string; productName: string; quantity: number; price: number | null; partnerCost: number | null; billingTerm: string | null; status: string } | null;
   finding: AllocationFinding;
 };
 
@@ -1747,11 +1760,15 @@ function allocateItems(items: (typeof pax8InvoiceItems.$inferSelect)[], subs: (t
     // Prefer an active subscription; otherwise any (a cancelled one still explains a final charge).
     const sub = candidates.find((c) => c.externalStatus === "active" && BILLED_STATUSES.includes(c.status)) ?? candidates[0] ?? null;
     const qty = pax8Number(it.quantity);
-    const unit = pax8Number(it.unitPrice);
+    const unitPrice = pax8Number(it.unitPrice);
+    const unitCost = pax8Number(it.cost);
+    // The charge's cost is checked against the subscription's partner cost; a charge without a cost falls back to customer price against customer price.
+    const charged = unitCost ?? unitPrice;
+    const expected = sub ? (unitCost !== null ? pax8Number(sub.partnerCost) : pax8Number(sub.price)) : null;
     let finding: AllocationFinding = "ok";
     if (!it.companyId) finding = "no_customer";
     else if (!sub) finding = "no_subscription";
-    else if (unit !== null && pax8Number(sub.price) !== null && Math.abs(unit - pax8Number(sub.price)!) > 0.005) finding = "price_differs";
+    else if (charged !== null && expected !== null && Math.abs(charged - expected) > 0.005) finding = "price_differs";
     else if (qty !== null && qty !== sub.quantity) finding = "quantity_differs";
     return {
       itemId: it.itemId,
@@ -1759,8 +1776,10 @@ function allocateItems(items: (typeof pax8InvoiceItems.$inferSelect)[], subs: (t
       sku: it.sku,
       chargeType: it.chargeType,
       quantity: qty,
-      unitPrice: unit,
-      total: pax8Number(it.total),
+      unitPrice,
+      customerTotal: pax8Number(it.total),
+      unitCost,
+      total: pax8Number(it.costTotal) ?? pax8Number(it.total),
       currency: it.currency,
       startPeriod: it.startPeriod,
       endPeriod: it.endPeriod,
@@ -1768,7 +1787,7 @@ function allocateItems(items: (typeof pax8InvoiceItems.$inferSelect)[], subs: (t
       pax8CompanyName: it.pax8CompanyId ? (pax8Names.get(it.pax8CompanyId) ?? null) : null,
       companyId: it.companyId,
       companyName: it.companyId ? (companyNames.get(it.companyId) ?? null) : null,
-      subscription: sub ? { id: sub.id, subscriptionId: sub.subscriptionId, productName: sub.productName, quantity: sub.quantity, price: pax8Number(sub.price), billingTerm: sub.billingTerm, status: sub.status } : null,
+      subscription: sub ? { id: sub.id, subscriptionId: sub.subscriptionId, productName: sub.productName, quantity: sub.quantity, price: pax8Number(sub.price), partnerCost: pax8Number(sub.partnerCost), billingTerm: sub.billingTerm, status: sub.status } : null,
       finding,
     };
   });
@@ -1874,7 +1893,7 @@ export async function pax8Totals(companyId?: string) {
           Number,
         ),
       monthlyCost:
-        sql<number>`coalesce(sum(case when external_status = 'active' and ${billed} and price is not null then quantity * price / case lower(coalesce(billing_term, '')) when 'monthly' then 1 when 'annual' then 12 when '2-year' then 24 when '3-year' then 36 else null end else 0 end), 0)`.mapWith(
+        sql<number>`coalesce(sum(case when external_status = 'active' and ${billed} and partner_cost is not null then quantity * partner_cost / case lower(coalesce(billing_term, '')) when 'monthly' then 1 when 'annual' then 12 when '2-year' then 24 when '3-year' then 36 else null end else 0 end), 0)`.mapWith(
           Number,
         ),
       unlinkedSubscriptions:
@@ -1992,7 +2011,7 @@ export async function companySubscriptionOverview(companyId: string) {
         invoiceDate: pax8InvoiceItems.invoiceDate,
         invoiceStatus: pax8InvoiceItems.invoiceStatus,
         currency: pax8InvoiceItems.currency,
-        total: sql<number>`coalesce(sum(total), 0)`.mapWith(Number),
+        total: sql<number>`coalesce(sum(coalesce(cost_total, total)), 0)`.mapWith(Number),
         items: sql<number>`count(*)`.mapWith(Number),
       })
       .from(pax8InvoiceItems)
@@ -2010,7 +2029,7 @@ export async function companySubscriptionOverview(companyId: string) {
   const subscriptions = subs.map((s) => {
     const cov = coverage.get(s.id) ?? null;
     const match = matchLine(s, lines, cov);
-    const monthly = monthlyUnitCost(s.price, s.billingTerm);
+    const monthly = monthlyUnitCost(s.partnerCost, s.billingTerm);
     const lineMonths = match ? LINE_MONTHS[match.line.billingFrequency] : null;
     const lineMonthlyCost =
       match && match.line.unitCost !== null && lineMonths

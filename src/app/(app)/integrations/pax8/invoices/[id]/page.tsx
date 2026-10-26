@@ -90,8 +90,8 @@ export default async function Pax8InvoicePage({ params }: { params: Promise<{ id
                 <th>Charge</th>
                 <th>Period</th>
                 <th className="text-right">Qty</th>
-                <th className="text-right">Unit</th>
-                <th className="text-right">Total</th>
+                <th className="text-right" title="Our unit cost; the customer unit price beneath">Unit cost</th>
+                <th className="text-right" title="What this charge costs us; the customer total beneath">Cost</th>
                 <th>Subscription</th>
                 <th>Finding</th>
               </tr>
@@ -105,12 +105,18 @@ export default async function Pax8InvoicePage({ params }: { params: Promise<{ id
                   </td>
                   <td className="whitespace-nowrap text-xs">{it.startPeriod ? `${fmtDate(it.startPeriod, settings)} – ${it.endPeriod ? fmtDate(it.endPeriod, settings) : "?"}` : "—"}</td>
                   <td className="text-right tabular-nums">{it.quantity ?? "—"}</td>
-                  <td className="text-right tabular-nums">{money(it.unitPrice)}</td>
-                  <td className="text-right tabular-nums">{money(it.total)}</td>
+                  <td className="text-right tabular-nums">
+                    {money(it.unitCost ?? it.unitPrice)}
+                    {it.unitCost !== null && it.unitPrice !== null && <div className="text-[11px] text-slate-400">customer {money(it.unitPrice)}</div>}
+                  </td>
+                  <td className="text-right tabular-nums">
+                    {money(it.total)}
+                    {it.customerTotal !== null && it.total !== it.customerTotal && <div className="text-[11px] text-slate-400">customer {money(it.customerTotal)}</div>}
+                  </td>
                   <td className="text-xs">
                     {it.subscription ? (
                       <>
-                        {it.subscription.productName} <span className="text-slate-500">· now {it.subscription.quantity} × {money(it.subscription.price)} {it.subscription.billingTerm ?? ""} · {it.subscription.status}</span>
+                        {it.subscription.productName} <span className="text-slate-500">· now {it.subscription.quantity} × {money(it.subscription.partnerCost ?? it.subscription.price)} {it.subscription.billingTerm ?? ""} · {it.subscription.status}</span>
                       </>
                     ) : (
                       <span className="text-slate-400">—</span>

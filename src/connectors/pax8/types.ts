@@ -65,8 +65,10 @@ export type Pax8SubscriptionRaw = {
   billingStart?: string | null;
   endDate?: string | null;
   status?: string | null;
-  /** Partner buy price per unit per billing term. */
+  /** "The price for the customer": the customer's price per unit per billing term. Not our cost. */
   price?: number | string | null;
+  /** "The price for the Partner": our buy price per unit per billing term. */
+  partnerCost?: number | string | null;
   currency?: string | null;
   /** Monthly | Annual | 2-Year | 3-Year | One-Time | Trial | Activation */
   billingTerm?: string | null;
@@ -100,9 +102,18 @@ export type Pax8InvoiceItemRaw = {
   sku?: string | null;
   description?: string | null;
   quantity?: number | string | null;
+  /** "The customer unit price". */
+  price?: number | string | null;
+  /** Only on usage lines; kept as a fallback for `price`. */
   unitPrice?: number | string | null;
+  /** "The customer total including all services and fees". */
   total?: number | string | null;
+  subTotal?: number | string | null;
+  /** "The partner unit cost" and "the partner total cost of the services": what we pay. */
+  cost?: number | string | null;
+  costTotal?: number | string | null;
   currency?: string | null;
+  currencyCode?: string | null;
   term?: string | null;
   startPeriod?: string | null;
   endPeriod?: string | null;

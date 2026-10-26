@@ -428,7 +428,8 @@ describe("Pax8 sync, matching, licence check and costs (demo adapter)", () => {
       quantity: 34,
       status: "Active",
       billingTerm: "Monthly",
-      price: "16.6000",
+      partnerCost: "16.6000",
+      price: "19.9200",
     });
     expect(
       (
