@@ -5,7 +5,7 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
 import { RenewalDecisionButton, ClearRenewalDecisionButton } from "@/components/renewal-decision";
-import { fmtDate, fmtMoney, type DisplaySettings } from "@/lib/format";
+import { billedParts, fmtDate, fmtMoney, type DisplaySettings } from "@/lib/format";
 import { DECISION_LABELS } from "@/lib/renewals";
 import type { RenewalRow } from "@/services/renewals";
 
@@ -23,7 +23,7 @@ export function RenewalTable({ rows, canWrite, currency, settings }: { rows: Ren
           <th>Customer / contract</th>
           <th>Decide by</th>
           <th>Renewal</th>
-          <th className="text-right">MRR</th>
+          <th className="text-right" title="Recurring lines at their own billing frequency">Recurring</th>
           <th className="text-right">Supplier exposure</th>
           <th>Position</th>
           <th>Status</th>
@@ -50,7 +50,7 @@ export function RenewalTable({ rows, canWrite, currency, settings }: { rows: Ren
                 {fmtDate(r.renewalDate, settings)}
                 <div className="text-[11px] text-slate-500">{r.autoRenew ? "auto-renews" : "expires unless renewed"}</div>
               </td>
-              <td className="text-right tabular-nums">{fmtMoney(r.mrr, currency)}</td>
+              <td className="text-right tabular-nums">{billedParts(r.billed, currency).map((p) => <div key={p.key} className="whitespace-nowrap">{p.text}</div>)}{billedParts(r.billed, currency).length === 0 && <span className="text-slate-400">—</span>}</td>
               <td className="text-right tabular-nums">
                 {r.exposureTotal > 0 ? <span className="font-medium text-amber-700">{fmtMoney(r.exposureTotal, currency)}</span> : r.services.some((s) => s.mismatch === "supplier_outlasts") ? <span className="text-amber-700" title="A supplier commitment outlasts the agreement but its cost is not known">unknown</span> : <span className="text-slate-400">—</span>}
                 {r.monthlyCost > 0 && <div className="text-[11px] text-slate-500">{fmtMoney(r.monthlyCost, currency)}/month supplier cost</div>}

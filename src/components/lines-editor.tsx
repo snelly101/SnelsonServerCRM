@@ -409,11 +409,6 @@ export function RevenueSummaryBadges({ summary, currency, compact }: { summary: 
           Annually {fmtMoney(summary.annualBilled, currency)}/yr
         </Badge>
       )}
-      {Math.abs(summary.mrr - summary.monthlyBilled) >= 0.005 && (
-        <Badge tone="slate" title="Normalised MRR: annual ÷ 12 and quarterly ÷ 3 added to the monthly lines. Used for forecasting, not what is invoiced in a month.">
-          MRR {fmtMoney(summary.mrr, currency)} normalised
-        </Badge>
-      )}
       {summary.oneOff > 0 && <Badge tone="blue">Project {fmtMoney(summary.oneOff, currency)}</Badge>}
       {summary.hardware > 0 && <Badge tone="indigo">Hardware {fmtMoney(summary.hardware, currency)}</Badge>}
       <Badge>First year {fmtMoney(summary.firstYearValue, currency)}</Badge>

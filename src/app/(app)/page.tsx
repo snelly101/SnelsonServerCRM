@@ -8,7 +8,7 @@ import { PageHeader, Card, EmptyState, FeatureCard, MiniStat } from "@/component
 import { AnimatedNumber } from "@/components/ui/animated-number";
 import { buttonClass } from "@/components/ui/button";
 import { ArrowRight, Building2, CalendarClock, KanbanSquare, Landmark, ListChecks, Plus, Sparkles, TrendingUp, Users } from "lucide-react";
-import { fmtDateTime } from "@/lib/format";
+import { billedPerYear, fmtBilled, fmtDateTime } from "@/lib/format";
 import { Alert } from "@/components/ui/alert";
 import { pipelineTotals } from "@/services/opportunities";
 import { contractTotals, listContracts } from "@/services/contracts";
@@ -76,7 +76,7 @@ export default async function DashboardPage() {
       <div className="mb-4 grid gap-4 lg:grid-cols-3">
         <FeatureCard
           eyebrow={<><Landmark /> {contractsTotals.active} active contract{contractsTotals.active === 1 ? "" : "s"}</>}
-          meta={`MRR normalised ${fmtMoney(contractsTotals.mrr, settings.currency)}`}
+          meta={`${fmtMoney(billedPerYear(contractsTotals), settings.currency)} over a year of invoices`}
           value={<AnimatedNumber value={contractsTotals.monthlyBilled} format="money" currency={settings.currency} />}
           unit="billed monthly"
           progress={{
@@ -88,7 +88,7 @@ export default async function DashboardPage() {
           facts={[
             { label: "Billed quarterly", value: fmtMoney(contractsTotals.quarterlyBilled, settings.currency) },
             { label: "Billed annually", value: fmtMoney(contractsTotals.annualBilled, settings.currency) },
-            { label: "Annual run rate", value: fmtMoney(contractsTotals.arr, settings.currency) },
+            { label: "One-off in contracts", value: fmtMoney(contractsTotals.oneOff + contractsTotals.hardware, settings.currency) },
           ]}
           action={
             <Link href="/billing" className={buttonClass("secondary", "md", "border-transparent bg-white text-[#242329] hover:bg-white/90 hover:text-[#242329]")}>
@@ -129,7 +129,7 @@ export default async function DashboardPage() {
                     <Link href={`/contracts/${c.id}`} className="font-medium link">
                       {c.name}
                     </Link>
-                    <div className="text-xs text-slate-500">{c.companyName} · MRR {fmtMoney(c.summary.mrr, settings.currency)}</div>
+                    <div className="text-xs text-slate-500">{c.companyName} · {fmtBilled(c.summary, settings.currency)}</div>
                   </div>
                   <div className="text-right text-xs">
                     <div>Renews {fmtDate(c.renewalDate, settings)}</div>

@@ -11,7 +11,7 @@ import { Input, Select } from "@/components/ui/form";
 import { useToast } from "@/components/ui/toast";
 import { bulkArchiveContractsAction, quickUpdateContractsAction } from "@/actions/contracts";
 import { CONTRACT_STATUS_LABELS, contractStatusValues, FREQUENCY_LABELS, type ContractQuickPatch } from "@/lib/validation-sales";
-import { fmtDate, fmtMoney, type DisplaySettings } from "@/lib/format";
+import { billedParts, fmtDate, type DisplaySettings } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export type ContractTableRow = {
@@ -21,7 +21,7 @@ export type ContractTableRow = {
   status: string;
   companyId: string;
   companyName: string;
-  mrr: number;
+  billed: { monthlyBilled: number; quarterlyBilled: number; annualBilled: number };
   billingFrequency: string;
   startDate: string;
   renewalDate: string | null;
@@ -60,7 +60,6 @@ export function ContractTable({ rows, canWrite, settings, owners, archived }: { 
   const router = useRouter();
   const toast = useToast();
   const today = new Date().toISOString().slice(0, 10);
-  const c = settings.currency;
   const allSelected = rows.length > 0 && rows.every((r) => selected.has(r.id));
   const toggleAll = () => setSelected(allSelected ? new Set() : new Set(rows.map((r) => r.id)));
   const toggle = (id: string) =>
@@ -163,8 +162,8 @@ export function ContractTable({ rows, canWrite, settings, owners, archived }: { 
               <th>Contract</th>
               <th>Company</th>
               <th>Status</th>
-              <th className="text-right" title="Normalised: annual ÷ 12, quarterly ÷ 3">
-                MRR
+              <th className="text-right" title="What the invoices carry: monthly lines per month, quarterly per quarter, annual per year. Nothing is divided down.">
+                Billed
               </th>
               <th>Billing</th>
               <th>Start</th>
@@ -203,7 +202,17 @@ export function ContractTable({ rows, canWrite, settings, owners, archived }: { 
                   </Link>
                 </td>
                 <td>{canWrite ? <StatusMenu row={r} disabled={pending} onPick={(s) => patchOne(r, { status: s }, `${CONTRACT_STATUS_LABELS[r.status as keyof typeof CONTRACT_STATUS_LABELS] ?? r.status} → ${CONTRACT_STATUS_LABELS[s]}`)} /> : <Badge tone={STATUS_TONE[r.status]}>{r.status}</Badge>}</td>
-                <td className="text-right tabular-nums">{fmtMoney(r.mrr, c)}</td>
+                <td className="text-right tabular-nums">
+                  {billedParts(r.billed, settings.currency).length === 0 ? (
+                    <span className="text-slate-400">—</span>
+                  ) : (
+                    billedParts(r.billed, settings.currency).map((p) => (
+                      <div key={p.key} className="whitespace-nowrap">
+                        {p.text}
+                      </div>
+                    ))
+                  )}
+                </td>
                 <td>{FREQUENCY_LABELS[r.billingFrequency as keyof typeof FREQUENCY_LABELS] ?? r.billingFrequency}</td>
                 <td>{dateCell(r, "startDate")}</td>
                 <td>{dateCell(r, "renewalDate")}</td>

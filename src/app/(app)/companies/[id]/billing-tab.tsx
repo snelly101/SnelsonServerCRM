@@ -7,7 +7,8 @@ import { DiscrepancyTable } from "@/app/(app)/devices/discrepancies";
 import { RenewalDecisionButton, ClearRenewalDecisionButton } from "@/components/renewal-decision";
 import { AgreementLines } from "@/components/billing/agreement-lines";
 import { ServiceLineSelect } from "@/components/billing/service-line-select";
-import { CoverageDialog, STATE_TONE } from "@/components/service-register";
+import { STATE_TONE } from "@/components/service-register";
+import { MatchServiceDialog, type CatalogueOption, type ContractOption } from "@/components/billing/match-service";
 import { SubscriptionsPanel } from "@/components/subscriptions-panel";
 import { HostingPanel } from "@/components/hosting-panel";
 import { InvoicesSection } from "./invoices-section";
@@ -38,6 +39,8 @@ type Props = {
   canReview: boolean;
   canWrite: boolean;
   canManageIntegrations: boolean;
+  /** Agreements and catalogue products for the matching dialog (write permission only). */
+  matching: { contracts: ContractOption[]; products: CatalogueOption[] };
 };
 
 /**
@@ -46,7 +49,7 @@ type Props = {
  * and what the next invoice will be. Essentials first; supplier detail,
  * invoice history and renewals behind expandable sections.
  */
-export function CompanyBillingTab({ companyId, data, picture, finance, xero, subscriptions, hosting, settings, canApprove, canReview, canWrite, canManageIntegrations }: Props) {
+export function CompanyBillingTab({ companyId, data, picture, finance, xero, subscriptions, hosting, settings, canApprove, canReview, canWrite, canManageIntegrations, matching }: Props) {
   const c = data.currency;
   const t = picture.totals;
   const active = picture.agreements.filter((a) => a.status === "active");
@@ -58,7 +61,7 @@ export function CompanyBillingTab({ companyId, data, picture, finance, xero, sub
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
-        <Stat label="Billed monthly" value={fmtMoney(t.billed.monthly, c)} hint={[t.billed.quarterly > 0 ? `+ ${fmtMoney(t.billed.quarterly, c)}/qtr` : null, t.billed.annual > 0 ? `+ ${fmtMoney(t.billed.annual, c)}/yr` : null, Math.abs(t.chargeMonthly - t.billed.monthly) >= 0.005 ? `MRR ${fmtMoney(t.chargeMonthly, c)} normalised` : `${active.length} active agreement${active.length === 1 ? "" : "s"}`].filter(Boolean).join(" · ")} />
+        <Stat label="Billed monthly" value={fmtMoney(t.billed.monthly, c)} hint={[t.billed.quarterly > 0 ? `+ ${fmtMoney(t.billed.quarterly, c)}/qtr` : null, t.billed.annual > 0 ? `+ ${fmtMoney(t.billed.annual, c)}/yr` : null, `${active.length} active agreement${active.length === 1 ? "" : "s"}`].filter(Boolean).join(" · ")} />
         <Stat label="Supplier cost / month" value={t.costMonthly === null ? "unknown" : fmtMoney(t.costMonthly, c)} hint={t.unknownCostLines ? `${t.unknownCostLines} line${t.unknownCostLines === 1 ? "" : "s"} with cost unknown` : "from Pax8 where linked, else recorded"} />
         <Stat label="Margin / month" value={t.marginMonthly === null ? "—" : fmtMoney(t.marginMonthly, c)} tone={t.marginMonthly !== null && t.marginMonthly < 0 ? "danger" : t.marginMonthly !== null ? "good" : "default"} hint={t.chargeMonthly && t.marginMonthly !== null ? `${Math.round((t.marginMonthly / t.chargeMonthly) * 100)}% of charge` : undefined} />
         <Stat label="Next invoice" value={t.nextInvoiceOn ? fmtDate(t.nextInvoiceOn, settings) : "—"} hint={active[0] ? `${FREQUENCY_LABELS[active[0].billingFrequency as keyof typeof FREQUENCY_LABELS]}${active.length > 1 ? " and others" : ""}` : "no active agreement"} />
@@ -134,7 +137,7 @@ export function CompanyBillingTab({ companyId, data, picture, finance, xero, sub
 
       {picture.otherServices.length > 0 && (
         <Card title={`Supplied but not on an active agreement (${picture.otherServices.length})`} padded={false} actions={<Link href={`/billing/services?companyId=${companyId}`} className="text-xs link">Service register</Link>}>
-          {unmapped.length > 0 && <p className="border-b border-amber-100 bg-amber-50 px-4 py-2 text-xs text-amber-800"><strong>{unmapped.length} unmapped</strong>: the integrations supply these and nothing says how they are charged. Choose the line that bills each one, or record that it is bundled, covered by a commitment, intentionally free or internal.</p>}
+          {unmapped.length > 0 && <p className="border-b border-amber-100 bg-amber-50 px-4 py-2 text-xs text-amber-800"><strong>{unmapped.length} unmapped</strong>: the integrations supply these and nothing says how they are charged. Pick the line that bills each one, or use <strong>Create line / other</strong> to add the line to an agreement or record that it is bundled, covered by a commitment, intentionally free or internal.</p>}
           <table className="tbl">
             <thead>
               <tr>
@@ -169,7 +172,7 @@ export function CompanyBillingTab({ companyId, data, picture, finance, xero, sub
                     <td className="min-w-[18rem]">
                       <div className="flex flex-wrap items-center gap-1">
                         {!r.pool && <ServiceLineSelect source={r.source} rowId={r.rowId} value={r.state === "charged" ? (r.line?.id ?? null) : null} lines={lineOptions} canEdit compact />}
-                        {!r.pool && <CoverageDialog row={r} lines={lineOptions} trigger={r.state === "unmapped" ? "Not charged?" : "Change"} />}
+                        {!r.pool && <MatchServiceDialog row={r} lines={lineOptions} contracts={matching.contracts} products={matching.products} currency={c} trigger={r.state === "unmapped" ? "Create line / other" : "Change"} variant="ghost" />}
                         {r.pool && <span className="text-xs text-slate-500">tick “Compare with NinjaOne” on a per-device line</span>}
                       </div>
                     </td>

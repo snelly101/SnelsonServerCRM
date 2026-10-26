@@ -60,18 +60,16 @@ export function AgreementLines({ agreement, settings, lines, canEdit, canReview,
           <tfoot>
             <tr className="bg-slate-50 text-sm font-medium">
               <td colSpan={4} className="px-3 py-2">
-                Per month, normalised{agreement.unknownCostLines ? <span className="ml-1 font-normal text-slate-500">({agreement.unknownCostLines} line{agreement.unknownCostLines === 1 ? "" : "s"} with cost unknown)</span> : null}
+                Invoiced <span className="font-normal text-slate-500">(each frequency at its own amount; cost and margin per month)</span>{agreement.unknownCostLines ? <span className="ml-1 font-normal text-slate-500">· {agreement.unknownCostLines} line{agreement.unknownCostLines === 1 ? "" : "s"} with cost unknown</span> : null}
               </td>
-              <td className="px-3 py-2 text-right tabular-nums">
-                {fmtMoney(agreement.chargeMonthly, c)}
-                {Math.abs(agreement.chargeMonthly - agreement.billed.monthly) >= 0.005 && (
-                  <div className="text-xs font-normal text-slate-500" title="What actually goes on the invoices">
-                    invoiced {[agreement.billed.monthly > 0 ? `${fmtMoney(agreement.billed.monthly, c)}/mo` : null, agreement.billed.quarterly > 0 ? `${fmtMoney(agreement.billed.quarterly, c)}/qtr` : null, agreement.billed.annual > 0 ? `${fmtMoney(agreement.billed.annual, c)}/yr` : null].filter(Boolean).join(" + ")}
-                  </div>
-                )}
+              <td className="px-3 py-2 text-right tabular-nums" title="What actually goes on the invoices">
+                {agreement.billed.monthly > 0 && <div>{fmtMoney(agreement.billed.monthly, c)} monthly</div>}
+                {agreement.billed.quarterly > 0 && <div>{fmtMoney(agreement.billed.quarterly, c)} quarterly</div>}
+                {agreement.billed.annual > 0 && <div>{fmtMoney(agreement.billed.annual, c)} annual</div>}
+                {agreement.billed.monthly === 0 && agreement.billed.quarterly === 0 && agreement.billed.annual === 0 && <span className="text-slate-400">—</span>}
               </td>
-              <td className="px-3 py-2 text-right tabular-nums">{agreement.costMonthly === null ? <span className="text-slate-400">unknown</span> : fmtMoney(agreement.costMonthly, c)}</td>
-              <td className="px-3 py-2 text-right tabular-nums">{agreement.marginMonthly === null ? <span className="text-slate-400">—</span> : <span className={agreement.marginMonthly < 0 ? "text-red-700" : ""}>{fmtMoney(agreement.marginMonthly, c)}</span>}</td>
+              <td className="px-3 py-2 text-right tabular-nums">{agreement.costMonthly === null ? <span className="text-slate-400">unknown</span> : <>{fmtMoney(agreement.costMonthly, c)}<span className="text-xs font-normal text-slate-500">/mo</span></>}</td>
+              <td className="px-3 py-2 text-right tabular-nums">{agreement.marginMonthly === null ? <span className="text-slate-400">—</span> : <span className={agreement.marginMonthly < 0 ? "text-red-700" : ""}>{fmtMoney(agreement.marginMonthly, c)}<span className="text-xs font-normal text-slate-500">/mo</span></span>}</td>
               <td />
             </tr>
           </tfoot>

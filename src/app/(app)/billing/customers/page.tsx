@@ -33,7 +33,7 @@ export default async function BillingCustomersPage({ searchParams }: { searchPar
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Customers billed" value={all.filter((r) => r.agreements > 0).length} hint={`${all.filter((r) => r.agreements === 0).length} supplied without an agreement`} />
-        <Stat label="Billed monthly" value={fmtMoney(billed.monthly, c)} hint={[billed.quarterly > 0 ? `+ ${fmtMoney(billed.quarterly, c)}/qtr` : null, billed.annual > 0 ? `+ ${fmtMoney(billed.annual, c)}/yr` : null, Math.abs(charge - billed.monthly) >= 0.005 ? `MRR ${fmtMoney(charge, c)} normalised` : "across active agreements"].filter(Boolean).join(" · ")} />
+        <Stat label="Billed monthly" value={fmtMoney(billed.monthly, c)} hint={[billed.quarterly > 0 ? `+ ${fmtMoney(billed.quarterly, c)}/qtr` : null, billed.annual > 0 ? `+ ${fmtMoney(billed.annual, c)}/yr` : null, "across active agreements"].filter(Boolean).join(" · ")} />
         <Stat label="Supplier cost / month" value={fmtMoney(cost, c)} hint={`known for ${known} of ${all.length} customers`} />
         <Stat label="Margin / month" value={fmtMoney(charge - cost, c)} hint={charge ? `${Math.round(((charge - cost) / charge) * 100)}% where cost is known` : undefined} tone="good" />
       </div>
@@ -72,7 +72,7 @@ export default async function BillingCustomersPage({ searchParams }: { searchPar
                     <td><Link href={`/companies/${r.companyId}?tab=billing`} className="font-medium link">{r.companyName}</Link></td>
                     <td className="text-xs text-slate-600">{r.agreements === 0 ? <span className="text-amber-700">none</span> : <>{r.agreements} · {r.frequencies.map((f) => FREQUENCY_LABELS[f as keyof typeof FREQUENCY_LABELS] ?? f).join(", ")}</>}</td>
                     <td className="whitespace-nowrap">{r.nextInvoiceOn ? fmtDate(r.nextInvoiceOn, settings) : <span className="text-slate-400">—</span>}</td>
-                    <td className="text-right tabular-nums" title={Math.abs(r.chargeMonthly - r.billed.monthly) >= 0.005 ? `MRR ${fmtMoney(r.chargeMonthly, c)} normalised` : undefined}>
+                    <td className="text-right tabular-nums">
                       {fmtMoney(r.billed.monthly, c)}
                       {(r.billed.quarterly > 0 || r.billed.annual > 0) && <div className="text-xs text-slate-500">{[r.billed.quarterly > 0 ? `+ ${fmtMoney(r.billed.quarterly, c)}/qtr` : null, r.billed.annual > 0 ? `+ ${fmtMoney(r.billed.annual, c)}/yr` : null].filter(Boolean).join(" ")}</div>}
                     </td>
@@ -86,7 +86,7 @@ export default async function BillingCustomersPage({ searchParams }: { searchPar
             </table>
           </div>
         )}
-        <p className="border-t border-slate-100 px-4 py-2 text-[11px] text-slate-500">Charge is the normalised monthly value of every active agreement (annual ÷ 12, quarterly ÷ 3). Cost comes from the supplier where it prices the service (Pax8) and otherwise from the cost recorded on the line; <strong>unknown</strong> means neither. Open a customer for the line-by-line picture.</p>
+        <p className="border-t border-slate-100 px-4 py-2 text-[11px] text-slate-500">Billed is what the invoices carry at each frequency: monthly lines per month, quarterly and annual lines at their own amounts, nothing divided down. Cost and margin are per month. Cost comes from the supplier where it prices the service (Pax8) and otherwise from the cost recorded on the line; <strong>unknown</strong> means neither. Open a customer for the line-by-line picture.</p>
       </Card>
     </div>
   );

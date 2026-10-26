@@ -23,7 +23,7 @@ import { SiteDialog } from "@/components/site-dialog";
 import { SectionNav, type SectionItem } from "@/components/company/section-nav";
 import { CompanyHeaderMenu } from "@/components/company/header-menu";
 import { ActivityPanel } from "@/components/company/activity-panel";
-import { fmtDate, fmtDateTime } from "@/lib/format";
+import { fmtBilled, fmtDate, fmtDateTime } from "@/lib/format";
 import { fullName, initials } from "@/lib/utils";
 import { listCompanyOpportunities } from "@/services/opportunities";
 import { listCompanyContracts } from "@/services/contracts";
@@ -46,6 +46,8 @@ import { companyHostingOverview } from "@/services/twentyi";
 import { companySubscriptionOverview } from "@/services/pax8";
 import { companyBilling } from "@/services/company-billing";
 import { companyBillingPicture } from "@/services/billing-picture";
+import { contractOptionsFor } from "@/services/contracts";
+import { productOptions } from "@/services/lookups";
 import { CompanyBillingTab } from "./billing-tab";
 import { DeviceCoverageControl } from "@/components/service-register";
 import { companyTicketSummary, listTickets } from "@/services/helpdesk";
@@ -136,6 +138,7 @@ export default async function CompanyPage({
   // The Billing tab joins this customer's slice of the Billing area; computed only when it is shown or its count is wanted.
   const billing = can(me.role, "contract.read") ? await companyBilling(id) : null;
   const picture = await companyBillingPicture(id);
+  const matching = can(me.role, "contract.write") ? { contracts: (await contractOptionsFor([id])).get(id) ?? [], products: await productOptions() } : { contracts: [], products: [] };
   const vaultCaps = await resolveCapabilities(me.id, me.role, id);
   const vault = vaultCaps.list
     ? await listVaultItems({ id: me.id, name: me.name, role: me.role }, id, {
@@ -144,7 +147,6 @@ export default async function CompanyPage({
     : null;
   const vaultCategories = vaultCaps.list ? await listCategories() : [];
   const activeContracts = companyContracts.filter((c) => c.status === "active");
-  const mrr = activeContracts.reduce((a, c) => a + c.summary.mrr, 0);
   const monthlyBilled = activeContracts.reduce((a, c) => a + c.summary.monthlyBilled, 0);
   const quarterlyBilled = activeContracts.reduce((a, c) => a + c.summary.quarterlyBilled, 0);
   const annualBilled = activeContracts.reduce((a, c) => a + c.summary.annualBilled, 0);
@@ -824,7 +826,7 @@ export default async function CompanyPage({
                       <th>Opportunity</th>
                       <th>Stage</th>
                       <th className="text-right">First-year value</th>
-                      <th className="text-right" title="Normalised: annual ÷ 12, quarterly ÷ 3">MRR</th>
+                      <th className="text-right" title="Recurring lines at their own billing frequency; nothing is divided down">Recurring</th>
                       <th>Expected close</th>
                       <th>Owner</th>
                     </tr>
@@ -860,7 +862,7 @@ export default async function CompanyPage({
                           )}
                         </td>
                         <td className="text-right tabular-nums">
-                          {fmtMoney(o.summary.mrr, settings.currency)}
+                          {fmtBilled(o.summary, settings.currency)}
                         </td>
                         <td>{fmtDate(o.expectedCloseDate, settings)}</td>
                         <td>{o.ownerName ?? "—"}</td>
@@ -874,12 +876,12 @@ export default async function CompanyPage({
         )}
 
         {tab === "billing" && billing && (
-          <CompanyBillingTab companyId={id} data={billing} picture={picture} finance={finance} xero={xero} subscriptions={subscriptions} hosting={hosting} settings={settings} canApprove={can(me.role, "invoice.approve")} canReview={can(me.role, "discrepancy.review")} canWrite={can(me.role, "contract.write")} canManageIntegrations={can(me.role, "integration.manage")} />
+          <CompanyBillingTab companyId={id} data={billing} picture={picture} finance={finance} xero={xero} subscriptions={subscriptions} hosting={hosting} settings={settings} canApprove={can(me.role, "invoice.approve")} canReview={can(me.role, "discrepancy.review")} canWrite={can(me.role, "contract.write")} canManageIntegrations={can(me.role, "integration.manage")} matching={matching} />
         )}
         {tab === "contracts" && (
           <>
             <Card
-              title={`Contracts · ${fmtMoney(monthlyBilled, settings.currency)}/month${quarterlyBilled > 0 ? ` + ${fmtMoney(quarterlyBilled, settings.currency)}/qtr` : ""}${annualBilled > 0 ? ` + ${fmtMoney(annualBilled, settings.currency)}/yr` : ""}${Math.abs(mrr - monthlyBilled) >= 0.005 ? ` (MRR ${fmtMoney(mrr, settings.currency)} normalised)` : ""}`}
+              title={`Contracts · ${fmtMoney(monthlyBilled, settings.currency)}/month${quarterlyBilled > 0 ? ` + ${fmtMoney(quarterlyBilled, settings.currency)}/qtr` : ""}${annualBilled > 0 ? ` + ${fmtMoney(annualBilled, settings.currency)}/yr` : ""}`}
               padded={false}
               actions={
                 can(me.role, "contract.write") && (

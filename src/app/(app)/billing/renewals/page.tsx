@@ -5,7 +5,7 @@ import { getAppSettings } from "@/lib/settings";
 import { renewalQueue } from "@/services/renewals";
 import { listProducts } from "@/services/catalogue";
 import { Card, Stat } from "@/components/ui/page";
-import { fmtMoney } from "@/lib/format";
+import { billedPerYear, fmtMoney } from "@/lib/format";
 import { param } from "@/lib/utils";
 import { RenewalTable } from "./table";
 import { PriceReviewForm } from "./price-form";
@@ -50,8 +50,8 @@ async function RenewalsView({ asOf, today, filter, currency, settings, canWrite,
     <>
       <p className="text-sm text-slate-600">Every active contract with a renewal date, ordered by when a decision is needed: {leadDays} days before the notice deadline (Settings → General). Each row sets the customer&apos;s renewal against the supplier commitments behind its lines, so a mismatch is visible before the deadline.</p>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Decision overdue" value={overdue.length} hint={`${fmtMoney(overdue.reduce((a, r) => a + r.mrr, 0), currency)} MRR`} tone={overdue.length ? "danger" : "default"} />
-        <Stat label="Decide now" value={due.length} hint={`${fmtMoney(due.reduce((a, r) => a + r.mrr, 0), currency)} MRR`} tone={due.length ? "warn" : "default"} />
+        <Stat label="Decision overdue" value={overdue.length} hint={`${fmtMoney(overdue.reduce((a, r) => a + billedPerYear(r.billed), 0), currency)} a year of invoices`} tone={overdue.length ? "danger" : "default"} />
+        <Stat label="Decide now" value={due.length} hint={`${fmtMoney(due.reduce((a, r) => a + billedPerYear(r.billed), 0), currency)} a year of invoices`} tone={due.length ? "warn" : "default"} />
         <Stat label="Supplier mismatches" value={mismatched.length} hint="commitments ending after or renewing before the agreement" tone={mismatched.length ? "warn" : "default"} />
         <Stat label="Exposure if not renewed" value={fmtMoney(exposure, currency)} hint="supplier cost beyond undecided renewal dates" />
       </div>

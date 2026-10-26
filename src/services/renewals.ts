@@ -48,6 +48,8 @@ export type RenewalRow = {
   daysToDecide: number;
   autoRenew: boolean;
   mrr: number;
+  /** The recurring lines as invoiced, each frequency at its own amount. */
+  billed: { monthlyBilled: number; quarterlyBilled: number; annualBilled: number };
   monthlyCost: number;
   services: RenewalService[];
   mismatches: string[];
@@ -134,6 +136,7 @@ export async function renewalQueue(asOf = new Date().toISOString().slice(0, 10),
       daysToDecide,
       autoRenew: c.autoRenew,
       mrr: round2(summary.mrr),
+      billed: { monthlyBilled: round2(summary.monthlyBilled), quarterlyBilled: round2(summary.quarterlyBilled), annualBilled: round2(summary.annualBilled) },
       monthlyCost: round2(services.reduce((a, s) => a + (s.monthlyCost ?? 0), 0)),
       services,
       mismatches,
