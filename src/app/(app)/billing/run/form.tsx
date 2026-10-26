@@ -141,6 +141,7 @@ export function BillingRunForm({ asOf, rows, currency, settings }: { asOf: strin
                         {r.contractName}
                       </Link>{" "}
                       · {r.billingFrequency} · {r.lineCount} recurring line{r.lineCount === 1 ? "" : "s"}
+                      {r.oneOffs.length > 0 && <Badge tone="blue" className="ml-1" title={r.oneOffs.map((o) => o.description).join(", ")}>+ {r.oneOffs.length} one-off · {fmtMoney(r.oneOffNet, currency)}</Badge>}
                     </div>
                   </td>
                   <td className="whitespace-nowrap align-top text-xs">{r.period ? `${fmtDate(r.period.periodStart, settings)} – ${fmtDate(r.period.periodEnd, settings)}` : "—"}</td>

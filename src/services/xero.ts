@@ -11,7 +11,7 @@ import { billingPeriodFor } from "@/lib/billing";
 import { getXeroClient, type XeroConfig, type XeroCredentials } from "@/connectors/xero";
 import { buildAuthorizeUrl, exchangeCode, listTenants, xeroAppConfig, xeroDate, xeroDateOnly } from "@/connectors/xero/live";
 import type { XeroContactRaw, XeroInvoiceRaw, XeroItemRaw, XeroPaymentRaw, XeroRepeatingInvoiceRaw } from "@/connectors/xero/types";
-import { buildLinesForItems, contractWithLines, draftLineEntries, itemsSpan, planManualItems, planSpanItems, type PlannedItem } from "./billing-coverage";
+import { buildLinesForItems, contractWithLines, draftLineEntries, itemsSpan, planManualItems, planSpanItems, type PlannedItem, buildOneOffLines, oneOffCoveredBy, type DraftLineEntry } from "./billing-coverage";
 import { createLink, getConnection, getCredentials, getLink, getLinkByExternal, listLinks, markEventProcessed, raiseConflict, recordInboundEvent, runOutbound, runSync, setConnectionConfig, setCredentials, updateConnection } from "./integrations";
 import { companySchema, contactSchema } from "@/lib/validation";
 import { createCompany, findDuplicateCompanies } from "./companies";
@@ -537,10 +537,25 @@ export type PrepareInvoiceInput = {
   /** From the billing run: exactly these line periods. Otherwise the period above (or today's) decides. */
   items?: PlannedItem[] | null;
   /** A consolidated customer draft: these agreements and their line periods, one invoice for the customer. */
-  contracts?: { contractId: string; items: PlannedItem[] }[] | null;
+  contracts?: { contractId: string; items: PlannedItem[]; oneOffLineIds?: string[] | null }[] | null;
+  /** One-off and hardware lines of the contract to invoice (each exactly once). */
+  oneOffLineIds?: string[] | null;
+  /** An ad hoc invoice for the customer: typed lines, no agreement or opportunity behind them. */
+  adHoc?: { reference?: string | null; lines: { description: string; quantity: number; unitAmount: number; hardware?: boolean }[] } | null;
   /** The invoice date to put on the draft (and the date the due date counts from). Today when not given. */
   invoiceDate?: string | null;
 };
+
+/** Refuses one-off lines a non-cancelled draft already carries; a one-off is invoiced once. */
+async function checkOneOffsFree(contractId: string, lineIds: string[], entries: DraftLineEntry[]) {
+  for (const id of lineIds) {
+    const e = oneOffCoveredBy(entries, id);
+    if (e) {
+      const [d] = await db.select({ reference: invoiceDrafts.reference }).from(invoiceDrafts).where(eq(invoiceDrafts.id, e.draftId)).limit(1);
+      throw new ActionError(`One of those one-off lines is already on draft ${d?.reference ?? e.draftId} (${e.status}). Cancel that draft first if it is wrong.`);
+    }
+  }
+}
 
 export async function prepareInvoiceDraft(input: PrepareInvoiceInput, actorUserId: string | null) {
   const conn = await getConnection("xero");
@@ -556,7 +571,20 @@ export async function prepareInvoiceDraft(input: PrepareInvoiceInput, actorUserI
   let contractIds: string[] | null = null;
   /** What the reference is built from: the agreements' CRM references (or names), or the opportunity's title. */
   const refParts: string[] = [];
-  if (input.contracts?.length) {
+  /** True when the draft carries nothing but one-off lines (the reference says so). */
+  let oneOffOnly = false;
+  if (input.adHoc) {
+    if (!input.adHoc.lines.length) throw new ActionError("Add at least one line.");
+    const [co] = await db.select({ name: companies.name }).from(companies).where(eq(companies.id, input.companyId)).limit(1);
+    if (!co) throw new ActionError("Company not found.");
+    for (const l of input.adHoc.lines) {
+      if (!l.description.trim()) throw new ActionError("Every line needs a description.");
+      lines.push({ description: l.description.trim(), quantity: l.quantity, unitAmount: round(l.unitAmount), accountCode: l.hardware ? (cfg.hardwareAccountCode ?? accountCode) : accountCode, taxType });
+    }
+    description ??= `${co.name} — ad hoc invoice`;
+    refParts.push(input.adHoc.reference?.trim() || co.name);
+    input = { ...input, contractId: null, opportunityId: null, periodStart: null, periodEnd: null };
+  } else if (input.contracts?.length) {
     // Consolidated: every agreement's lines, grouped by agreement, in one draft for the customer.
     const names: string[] = [];
     let missed = 0;
@@ -568,21 +596,27 @@ export async function prepareInvoiceDraft(input: PrepareInvoiceInput, actorUserI
       if (!found) throw new ActionError("Contract not found.");
       const { contract: c, lines: cl } = found;
       if (c.companyId !== input.companyId) throw new ActionError(`${c.name} belongs to another customer; a consolidated invoice covers one customer.`);
-      if (!part.items.length) continue;
+      const oneOffIds = part.oneOffLineIds ?? [];
+      if (!part.items.length && !oneOffIds.length) continue;
       const entries = (await draftLineEntries([c.id])).get(c.id) ?? [];
-      const built = await buildLinesForItems(c, cl, part.items, entries, accountCode, taxType);
+      const built = part.items.length ? await buildLinesForItems(c, cl, part.items, entries, accountCode, taxType) : [];
+      if (oneOffIds.length) await checkOneOffsFree(c.id, oneOffIds, entries);
+      built.push(...buildOneOffLines(cl, oneOffIds, accountCode, cfg.hardwareAccountCode, taxType));
       lines.push(...built.map((l) => ({ ...l, description: input.contracts!.length > 1 ? `${c.name} · ${l.description}` : l.description })));
-      const span = itemsSpan(part.items)!;
-      spanStart = spanStart === null || span.periodStart < spanStart ? span.periodStart : spanStart;
-      spanEnd = spanEnd === null || span.periodEnd > spanEnd ? span.periodEnd : spanEnd;
+      const span = itemsSpan(part.items);
+      if (span) {
+        spanStart = spanStart === null || span.periodStart < spanStart ? span.periodStart : spanStart;
+        spanEnd = spanEnd === null || span.periodEnd > spanEnd ? span.periodEnd : spanEnd;
+      }
       missed += part.items.filter((i) => i.missed).length;
       names.push(c.name);
       refParts.push(c.reference?.trim() || c.name);
-      settle.push({ contractId: c.id, periodEnd: span.periodEnd });
+      if (span) settle.push({ contractId: c.id, periodEnd: span.periodEnd });
       contractIds.push(c.id);
       purchaseOrderRef ??= c.purchaseOrderRef;
     }
     if (!lines.length) throw new ActionError("Nothing to invoice for those agreements.");
+    oneOffOnly = spanStart === null;
     description ??= `${names.join(" + ")} — consolidated billing${missed ? ` (includes ${missed} missed period${missed === 1 ? "" : "s"})` : ""}`;
     input = { ...input, contractId: null, periodStart: spanStart, periodEnd: spanEnd };
   } else if (input.contractId) {
@@ -590,9 +624,11 @@ export async function prepareInvoiceDraft(input: PrepareInvoiceInput, actorUserI
     if (!found) throw new ActionError("Contract not found.");
     const { contract: c, lines: cl } = found;
     const entries = (await draftLineEntries([c.id])).get(c.id) ?? [];
+    const oneOffIds = input.oneOffLineIds ?? [];
     let items: PlannedItem[];
     if (input.items?.length) items = input.items;
     else if (input.periodStart && input.periodEnd) items = planManualItems(c, cl, input.periodStart, input.periodEnd);
+    else if (oneOffIds.length) items = [];
     else {
       // No period given: the contract's current period for every recurring line, whether or not it was invoiced (a deliberate manual action).
       const today = new Date().toISOString().slice(0, 10);
@@ -600,16 +636,25 @@ export async function prepareInvoiceDraft(input: PrepareInvoiceInput, actorUserI
       if (!current) throw new ActionError("This contract has no billing period for today: it has not started, has ended, or does not recur. Enter a period.");
       items = planManualItems(c, cl, current.periodStart, current.periodEnd);
     }
-    if (!items.length) throw new ActionError("Nothing to invoice for that period: no recurring line is due in it.");
-    lines = await buildLinesForItems(c, cl, items, entries, accountCode, taxType);
-    const span = itemsSpan(items)!;
+    if (!items.length && !oneOffIds.length) throw new ActionError("Nothing to invoice for that period: no recurring line is due in it.");
+    lines = items.length ? await buildLinesForItems(c, cl, items, entries, accountCode, taxType) : [];
+    if (oneOffIds.length) {
+      await checkOneOffsFree(c.id, oneOffIds, entries);
+      const oneOffLines = buildOneOffLines(cl, oneOffIds, accountCode, cfg.hardwareAccountCode, taxType);
+      if (oneOffLines.length !== new Set(oneOffIds).size) throw new ActionError("One of those lines is not a one-off line of this contract.");
+      lines.push(...oneOffLines);
+    }
+    const span = itemsSpan(items);
     const missed = items.filter((i) => i.missed).length;
-    description ??= `${c.name} — ${c.billingFrequency} billing${missed ? ` (includes ${missed} missed period${missed === 1 ? "" : "s"})` : ""}`;
-    settledPeriodEnd = span.periodEnd;
-    settle.push({ contractId: c.id, periodEnd: span.periodEnd });
+    oneOffOnly = !span;
+    description ??= span ? `${c.name} — ${c.billingFrequency} billing${missed ? ` (includes ${missed} missed period${missed === 1 ? "" : "s"})` : ""}${oneOffIds.length ? ` (includes ${oneOffIds.length} one-off line${oneOffIds.length === 1 ? "" : "s"})` : ""}` : `${c.name} — one-off`;
+    if (span) {
+      settledPeriodEnd = span.periodEnd;
+      settle.push({ contractId: c.id, periodEnd: span.periodEnd });
+    }
     refParts.push(c.reference?.trim() || c.name);
     purchaseOrderRef = c.purchaseOrderRef;
-    input = { ...input, periodStart: span.periodStart, periodEnd: span.periodEnd };
+    input = { ...input, periodStart: span?.periodStart ?? null, periodEnd: span?.periodEnd ?? null };
   } else if (input.opportunityId) {
     const [o] = await db.select().from(opportunities).where(eq(opportunities.id, input.opportunityId)).limit(1);
     if (!o) throw new ActionError("Opportunity not found.");
@@ -627,7 +672,7 @@ export async function prepareInvoiceDraft(input: PrepareInvoiceInput, actorUserI
   const invoiceDate = input.invoiceDate || today;
   const due = new Date(new Date(invoiceDate + "T00:00:00Z").getTime() + (cfg.dueDays ?? 30) * 86400000).toISOString().slice(0, 10);
   const subTotal = lines.reduce((a, l) => a + l.quantity * l.unitAmount, 0);
-  const refBase = refParts.length ? `${[...new Set(refParts)].join(" + ")} ${(input.periodStart ?? invoiceDate).slice(0, 7)}` : "";
+  const refBase = refParts.length ? `${[...new Set(refParts)].join(" + ")}${oneOffOnly ? " one-off" : ""} ${(input.periodStart ?? invoiceDate).slice(0, 7)}` : "";
   const id = await db.transaction(async (tx) => {
     const [row] = await tx.insert(invoiceDrafts).values({ companyId: input.companyId, contractId: input.contractId ?? null, contractIds, purchaseOrderRef, opportunityId: input.opportunityId ?? null, reference: `pending-${crypto.randomUUID()}`, description, currencyCode: settings.currency, invoiceDate, dueDate: due, periodStart: input.periodStart ?? null, periodEnd: input.periodEnd ?? null, lines, subTotal: String(round(subTotal)), preparedByUserId: actorUserId }).returning({ id: invoiceDrafts.id });
     await tx.update(invoiceDrafts).set({ reference: await uniqueReference(tx, refBase, row.id) }).where(eq(invoiceDrafts.id, row.id));

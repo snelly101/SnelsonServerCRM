@@ -18,6 +18,8 @@ import { TaskList } from "@/components/task-list";
 import { TaskDialog } from "@/components/task-dialog";
 import { fmtDate, fmtMoney, fmtRelative } from "@/lib/format";
 import { PrepareInvoiceButton } from "@/components/prepare-invoice-button";
+import { BillOneOffButton } from "@/components/bill-one-off-button";
+import { oneOffLinesFor } from "@/services/billing-coverage";
 import { FREQUENCY_LABELS } from "@/lib/validation-sales";
 import { companyDeviceOverview, listDiscrepancies } from "@/services/ninjaone";
 import { contractBillingPicture } from "@/services/billing-picture";
@@ -39,6 +41,7 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
   const lineOptions = (lineMap.get(contract.companyId) ?? []).map((l) => ({ id: l.id, description: l.description, contractName: l.contractName, contractStatus: l.contractStatus }));
   const renewal = renewalRows[0] ?? null;
   const proposal = contract.externalProposalId ? await proposalForContract(contract.externalProposalId) : null;
+  const oneOffs = can(me.role, "invoice.prepare") && contract.status === "active" ? await oneOffLinesFor(id) : [];
   const contractDiscrepancies = (await listDiscrepancies({ companyId: contract.companyId })).filter((d) => d.contractId === id && (d.status === "open" || d.status === "accepted"));
   const c = settings.currency;
   const today = new Date().toISOString().slice(0, 10);
@@ -67,6 +70,7 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
           (canWrite || can(me.role, "invoice.prepare")) && (
             <>
               {can(me.role, "invoice.prepare") && contract.status === "active" && <PrepareInvoiceButton companyId={contract.companyId} contractId={id} billingFrequency={contract.billingFrequency} currency={c} />}
+              {oneOffs.length > 0 && <BillOneOffButton contractId={id} lines={oneOffs} currency={c} />}
               {canWrite && (
                 <>
                   <ButtonLink href={`/contracts/${id}/edit`} variant="secondary">

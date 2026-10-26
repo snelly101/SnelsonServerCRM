@@ -56,19 +56,26 @@ describe("billing run (demo adapter)", () => {
     const byId = new Map(preview.map((r) => [r.contractId, r]));
     expect(byId.has(monthly) && byId.has(quarterly) && byId.has(oneOffOnly) && byId.has(future)).toBe(true);
     expect(preview.some((r) => r.contractName === "Draft MSA")).toBe(false);
-    // Monthly: 10 × 40 plus the annual licence spread (1200 / 12); the one-off line is not recurring.
-    expect(byId.get(monthly)).toMatchObject({ period: { periodStart: "2026-09-15", periodEnd: "2026-10-14" }, net: 500, lineCount: 2, skipReason: null });
+    // Monthly: 10 × 40 plus the annual licence spread (1200 / 12), plus the one-off Setup line, billed once with this run.
+    expect(byId.get(monthly)).toMatchObject({ period: { periodStart: "2026-09-15", periodEnd: "2026-10-14" }, net: 1000, oneOffNet: 500, lineCount: 2, skipReason: null });
     expect(byId.get(quarterly)).toMatchObject({ period: { periodStart: "2026-10-01", periodEnd: "2026-12-31" }, net: 300, lineCount: 1, skipReason: null });
-    expect(byId.get(oneOffOnly)!.skipReason).toBe("no recurring lines");
+    // Nothing recurs on the project-only contract, but its one-off line has never been invoiced, so it has a row.
+    expect(byId.get(oneOffOnly)).toMatchObject({ net: 999, oneOffNet: 999, skipReason: null });
     expect(byId.get(future)!.skipReason).toBe("starts 2027-01-01");
 
     const run = await runBillingRun("2026-10-02", [monthly, quarterly, oneOffOnly, future], admin.id);
-    expect(run.created.map((c) => c.contractId).sort()).toEqual([monthly, quarterly].sort());
-    expect(run.skipped.map((s) => s.contractId).sort()).toEqual([oneOffOnly, future].sort());
+    expect(run.created.map((c) => c.contractId).sort()).toEqual([monthly, quarterly, oneOffOnly].sort());
+    expect(run.skipped.map((s) => s.contractId)).toEqual([future]);
     const monthlyDraft = (await db.select().from(invoiceDrafts).where(eq(invoiceDrafts.contractId, monthly)))[0];
     expect(monthlyDraft).toMatchObject({ periodStart: "2026-09-15", periodEnd: "2026-10-14", status: "draft" });
-    expect(Number(monthlyDraft.subTotal)).toBe(500);
-    expect(monthlyDraft.lines.map((l) => l.description)).toEqual(["Users (2026-09-15 to 2026-10-14)", "Annual licence (2026-09-15 to 2026-10-14)"]);
+    expect(Number(monthlyDraft.subTotal)).toBe(1000);
+    expect(monthlyDraft.lines.map((l) => l.description)).toEqual(["Users (2026-09-15 to 2026-10-14)", "Annual licence (2026-09-15 to 2026-10-14)", "Setup"]);
+    // The project-only contract's draft carries nothing but its one-off, and says so.
+    const projectDraft = (await db.select().from(invoiceDrafts).where(eq(invoiceDrafts.contractId, oneOffOnly)))[0];
+    expect(projectDraft).toMatchObject({ periodStart: null, description: "Project only — one-off" });
+    expect(projectDraft.reference).toMatch(/one-off 2026-10$/);
+    // Once invoiced, the one-offs are never proposed again: the project-only contract is back to nothing to bill.
+    expect((await previewBillingRun("2026-10-02")).find((r) => r.contractId === oneOffOnly)!.skipReason).toBe("no recurring lines");
 
     // Second run for the same date: the period is already drafted, nothing new.
     const again = await previewBillingRun("2026-10-02");
