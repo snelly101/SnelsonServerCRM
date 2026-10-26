@@ -78,6 +78,17 @@ export const contactSchema = z.object({
 });
 export type ContactInput = z.infer<typeof contactSchema>;
 
+/** The optional first contact entered on the new-company form; field names are prefixed so errors land on the right inputs. */
+export const firstContactSchema = z.object({
+  contactFirstName: trimmed.min(1, "First name is required").max(100),
+  contactLastName: trimmed.max(100).optional().or(z.literal("")).transform((v) => v ?? ""),
+  contactEmail: optionalEmail,
+  contactPhone: optionalText,
+  contactJobTitle: optionalText,
+  contactRole: z.enum(contactRoleValues).optional().or(z.literal("")).transform((v) => (v ? v : null)),
+});
+export type FirstContactInput = z.infer<typeof firstContactSchema>;
+
 export const tagSchema = z.object({
   name: trimmed.min(1).max(50),
   color: z.enum(["slate", "red", "orange", "amber", "green", "teal", "blue", "indigo", "purple", "pink"]).default("slate"),

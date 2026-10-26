@@ -5,8 +5,8 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireActionPermission } from "@/lib/session";
 import { runAction, type ActionResult } from "@/lib/action-result";
-import { companySchema, formToObject, noteSchema, siteSchema } from "@/lib/validation";
-import { archiveCompany, createCompany, findDuplicateCompanies, updateCompany } from "@/services/companies";
+import { companySchema, firstContactSchema, formToObject, noteSchema, siteSchema } from "@/lib/validation";
+import { archiveCompany, createCompanyWithContact, findDuplicateCompanies, updateCompany } from "@/services/companies";
 import { archiveSite, upsertSite } from "@/services/contacts";
 import { validateCustomFields } from "@/services/settings";
 import { logActivity } from "@/lib/audit";
@@ -27,9 +27,13 @@ export async function createCompanyAction(_prev: ActionResult<string> | null, fd
     const input = readCompanyForm(fd);
     input.customFields = await validateCustomFields("company", input.customFields);
     const force = fd.get("confirmDuplicate") === "true";
-    const id = await createCompany(input, u.id, { skipDuplicateCheck: force });
+    // The first contact is optional: anything typed in its section turns validation on.
+    const typed = ["contactFirstName", "contactLastName", "contactEmail", "contactPhone", "contactJobTitle"].some((k) => String(fd.get(k) ?? "").trim());
+    const contact = typed ? firstContactSchema.parse(formToObject(fd)) : null;
+    const { companyId } = await createCompanyWithContact(input, contact, u.id, { skipDuplicateCheck: force });
     revalidatePath("/companies");
-    return id;
+    if (contact) revalidatePath("/contacts");
+    return companyId;
   });
   if (res.ok) redirect(`/companies/${res.data}`);
   return res;
