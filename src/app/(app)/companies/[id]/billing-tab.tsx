@@ -9,6 +9,7 @@ import { AgreementLines } from "@/components/billing/agreement-lines";
 import { ServiceLineSelect } from "@/components/billing/service-line-select";
 import { STATE_TONE } from "@/components/service-register";
 import { MatchServiceDialog, type CatalogueOption, type ContractOption } from "@/components/billing/match-service";
+import { NewInvoiceButton } from "@/components/new-invoice-button";
 import { SubscriptionsPanel } from "@/components/subscriptions-panel";
 import { HostingPanel } from "@/components/hosting-panel";
 import { InvoicesSection } from "./invoices-section";
@@ -41,6 +42,9 @@ type Props = {
   canManageIntegrations: boolean;
   /** Agreements and catalogue products for the matching dialog (write permission only). */
   matching: { contracts: ContractOption[]; products: CatalogueOption[] };
+  /** Shows New invoice (ad hoc draft) when the person may prepare invoices. */
+  canPrepare: boolean;
+  companyName: string;
 };
 
 /**
@@ -49,7 +53,7 @@ type Props = {
  * and what the next invoice will be. Essentials first; supplier detail,
  * invoice history and renewals behind expandable sections.
  */
-export function CompanyBillingTab({ companyId, data, picture, finance, xero, subscriptions, hosting, settings, canApprove, canReview, canWrite, canManageIntegrations, matching }: Props) {
+export function CompanyBillingTab({ companyId, data, picture, finance, xero, subscriptions, hosting, settings, canApprove, canReview, canWrite, canManageIntegrations, matching, canPrepare, companyName }: Props) {
   const c = data.currency;
   const t = picture.totals;
   const active = picture.agreements.filter((a) => a.status === "active");
@@ -60,6 +64,12 @@ export function CompanyBillingTab({ companyId, data, picture, finance, xero, sub
   const decided = picture.otherServices.filter((r) => r.state !== "unmapped");
   return (
     <div className="space-y-4">
+      {canPrepare && (
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <span className="text-xs text-slate-500">Something not on an agreement?</span>
+          <NewInvoiceButton companyId={companyId} companyName={companyName} currency={c} />
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
         <Stat label="Billed monthly" value={fmtMoney(t.billed.monthly, c)} hint={[t.billed.quarterly > 0 ? `+ ${fmtMoney(t.billed.quarterly, c)}/qtr` : null, t.billed.annual > 0 ? `+ ${fmtMoney(t.billed.annual, c)}/yr` : null, `${active.length} active agreement${active.length === 1 ? "" : "s"}`].filter(Boolean).join(" · ")} />
         <Stat label="Supplier cost / month" value={t.costMonthly === null ? "unknown" : fmtMoney(t.costMonthly, c)} hint={t.unknownCostLines ? `${t.unknownCostLines} line${t.unknownCostLines === 1 ? "" : "s"} with cost unknown` : "from Pax8 where linked, else recorded"} />

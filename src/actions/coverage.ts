@@ -68,6 +68,7 @@ const createLineSchema = z.object({
   contractId: z.uuid().nullish(),
   newContract: z.object({ name: z.string().trim().min(1, "Give the agreement a name").max(200), startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Start date is required"), billingFrequency: z.enum(["monthly", "quarterly", "annual"]) }).nullish(),
   line: contractLineSchema.omit({ id: true }),
+  effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Start date must be a date").nullish(),
 });
 
 /** Creates a contract line for an integration's service (on an existing agreement or a new draft) and charges the service on it. */
@@ -76,7 +77,7 @@ export async function createLineForServiceAction(input: z.input<typeof createLin
     const u = await requireActionPermission("contract.write");
     const p = createLineSchema.parse(input);
     const { createLineForService } = await import("@/services/service-matching");
-    const r = await createLineForService({ source: p.source, sourceRowId: p.sourceRowId, contractId: p.contractId ?? null, newContract: p.newContract ?? null, line: p.line }, u.id);
+    const r = await createLineForService({ source: p.source, sourceRowId: p.sourceRowId, contractId: p.contractId ?? null, newContract: p.newContract ?? null, line: p.line, effectiveFrom: p.effectiveFrom ?? null }, u.id);
     revalidate(r.companyId);
     revalidatePath("/contracts", "layout");
     return r;

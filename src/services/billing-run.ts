@@ -7,7 +7,7 @@ import { billingPeriodFor, PERIOD_MONTHS, type BillingPeriod } from "@/lib/billi
 import { getLink } from "./integrations";
 import { prepareInvoiceDraft } from "./xero";
 import { lineChangesFor } from "./contracts";
-import { buildLinesForItems, coveringDraft, draftLineEntries, isRecurring, planItems, type PlannedItem } from "./billing-coverage";
+import { buildLinesForItems, coveringDraft, draftLineEntries, isRecurring, planItems, type PlannedItem, uninvoicedOneOffs, buildOneOffLines } from "./billing-coverage";
 import { inArray } from "drizzle-orm";
 
 /**
@@ -38,6 +38,9 @@ export type BillingRunRow = {
   period: BillingPeriod | null;
   /** Everything the draft would carry: each line's period, with earlier uncovered periods marked missed. */
   items: PlannedItem[];
+  /** One-off and hardware lines no draft has carried yet; billed once, with this run. */
+  oneOffs: { lineId: string; description: string; amount: number }[];
+  oneOffNet: number;
   missedCount: number;
   /** Net amount the draft would carry. */
   net: number;
@@ -74,7 +77,11 @@ export async function previewBillingRun(asOf: string): Promise<BillingRunRow[]> 
     const items = period ? planItems(c, cl, entries, asOf) : [];
     // Same maths as the draft itself, so the preview shows pro-rated amounts, catch-ups and credits.
     const built = items.length ? await buildLinesForItems(c, cl, items, entries, "", "", history) : [];
-    const net = Math.round(built.reduce((a, l) => a + l.quantity * l.unitAmount, 0) * 100) / 100;
+    const oneOffLines = uninvoicedOneOffs(cl, entries);
+    const oneOffs = oneOffLines.map((l) => ({ lineId: l.id, description: l.description, amount: Math.round(Number(l.quantity) * Number(l.unitPrice) * 100) / 100 }));
+    const oneOffNet = Math.round(oneOffs.reduce((a, o) => a + o.amount, 0) * 100) / 100;
+    const builtAll = [...built, ...buildOneOffLines(cl, oneOffs.map((o) => o.lineId), "", "", "")];
+    const net = Math.round(builtAll.reduce((a, l) => a + l.quantity * l.unitAmount, 0) * 100) / 100;
     const covering = period ? coveringDraft(entries, recurring.map((l) => l.id), period) : null;
     // Previous comparable draft: the one whose period ends the day before this one starts, else the latest that started earlier.
     let previous: BillingRunRow["previous"] = null;
@@ -93,7 +100,8 @@ export async function previewBillingRun(asOf: string): Promise<BillingRunRow[]> 
     }
     const existing = covering ? { id: covering.draftId, reference: covering.draftId, status: covering.status } : null;
     const xeroLinked = Boolean(await getLink("xero", "company", c.companyId));
-    const skipReason = !PERIOD_MONTHS[c.billingFrequency]
+    // A contract with nothing recurring to bill still has a row when one-off lines wait to be invoiced (once the contract has started).
+    const recurringSkip = !PERIOD_MONTHS[c.billingFrequency]
       ? "one-off contract: nothing recurs"
       : !period
         ? c.startDate > asOf
@@ -106,7 +114,8 @@ export async function previewBillingRun(asOf: string): Promise<BillingRunRow[]> 
               ? `already drafted (${existing.status})`
               : "nothing due: every line period is invoiced"
             : null;
-    out.push({ contractId: c.id, contractName: c.name, companyId: c.companyId, companyName: r.companyName, billingFrequency: c.billingFrequency, period, items, missedCount: items.filter((i) => i.missed).length, net, lines: built, previous, lineCount: recurring.length, xeroLinked, existingDraft: existing, skipReason });
+    const skipReason = recurringSkip && oneOffs.length && c.startDate <= asOf ? null : recurringSkip;
+    out.push({ contractId: c.id, contractName: c.name, companyId: c.companyId, companyName: r.companyName, billingFrequency: c.billingFrequency, period, items, oneOffs, oneOffNet, missedCount: items.filter((i) => i.missed).length, net, lines: builtAll, previous, lineCount: recurring.length, xeroLinked, existingDraft: existing, skipReason });
   }
   // Draft references for the "already drafted" links.
   const draftIds = out.map((o) => o.existingDraft?.id).filter((x): x is string => Boolean(x));
@@ -135,7 +144,7 @@ export async function runBillingRun(asOf: string, contractIds: string[], actorUs
   const due: BillingRunRow[] = [];
   for (const row of preview) {
     if (!chosen.has(row.contractId)) continue;
-    if (row.skipReason || !row.items.length) {
+    if (row.skipReason || (!row.items.length && !row.oneOffs.length)) {
       skipped.push({ contractId: row.contractId, contractName: row.contractName, reason: row.skipReason ?? "nothing due" });
       continue;
     }
@@ -147,11 +156,11 @@ export async function runBillingRun(asOf: string, contractIds: string[], actorUs
   for (const rows of groups.values()) {
     if (rows.length === 1) {
       const row = rows[0];
-      const draftId = await prepareInvoiceDraft({ companyId: row.companyId, contractId: row.contractId, items: row.items, invoiceDate }, actorUserId);
+      const draftId = await prepareInvoiceDraft({ companyId: row.companyId, contractId: row.contractId, items: row.items, oneOffLineIds: row.oneOffs.map((o) => o.lineId), invoiceDate }, actorUserId);
       created.push({ draftId, contractId: row.contractId, contractName: row.contractName, companyName: row.companyName, net: row.net, missed: row.missedCount, consolidated: 0 });
       continue;
     }
-    const draftId = await prepareInvoiceDraft({ companyId: rows[0].companyId, contracts: rows.map((r) => ({ contractId: r.contractId, items: r.items })), invoiceDate }, actorUserId);
+    const draftId = await prepareInvoiceDraft({ companyId: rows[0].companyId, contracts: rows.map((r) => ({ contractId: r.contractId, items: r.items, oneOffLineIds: r.oneOffs.map((o) => o.lineId) })), invoiceDate }, actorUserId);
     created.push({ draftId, contractId: rows[0].contractId, contractName: rows.map((r) => r.contractName).join(" + "), companyName: rows[0].companyName, net: Math.round(rows.reduce((a, r) => a + r.net, 0) * 100) / 100, missed: rows.reduce((a, r) => a + r.missedCount, 0), consolidated: rows.length });
   }
   const unknown = contractIds.filter((id) => !preview.some((p) => p.contractId === id));

@@ -23,6 +23,8 @@ export type CreateLineForService = {
   /** ...or on a new draft agreement for the customer. */
   newContract?: { name: string; startDate: string; billingFrequency: "monthly" | "quarterly" | "annual" } | null;
   line: Omit<ContractLineInput, "id">;
+  /** The day the service started being supplied, so an active agreement bills it from then. Today when not given. */
+  effectiveFrom?: string | null;
 };
 
 export async function createLineForService(input: CreateLineForService, actorUserId: string) {
@@ -40,7 +42,7 @@ export async function createLineForService(input: CreateLineForService, actorUse
   }
   const line: ContractLineInput = { ...input.line, id: null };
   const provider = PROVIDER_OF_SOURCE[input.source];
-  const added = await addContractLine(contractId, line, actorUserId, `Added to charge ${row.name} (${provider})`);
+  const added = await addContractLine(contractId, line, actorUserId, `Added to charge ${row.name} (${provider})`, input.effectiveFrom ?? null);
   await setServiceLink({ source: input.source, sourceRowId: input.sourceRowId, role: "charged", contractLineId: added.lineId }, actorUserId);
   if (provider !== "ninjaone") {
     const { runQuantityChecks } = await import("./quantity-check");

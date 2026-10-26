@@ -173,6 +173,7 @@ function NewLine({ row, contracts, products, currency, onDone }: { row: Register
   const [synced, setSynced] = useState(d.synced);
   const [managedDevice, setManagedDevice] = useState(d.countsAsManagedDevice);
   const [ownCycle, setOwnCycle] = useState(true);
+  const [startsOn, setStartsOn] = useState(today());
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const router = useRouter();
@@ -243,6 +244,11 @@ function NewLine({ row, contracts, products, currency, onDone }: { row: Register
         <Field label="Description" htmlFor={id("desc")} className="md:col-span-2">
           <Input id={id("desc")} value={description} onChange={(e) => setDescription(e.target.value)} maxLength={300} />
         </Field>
+        {contract?.status === "active" && (
+          <Field label="Starts on" htmlFor={id("starts")} help="The day the customer started having it. The next invoice bills it pro rata from this day, a whole period after that." className="md:col-span-2">
+            <Input id={id("starts")} type="date" value={startsOn} onChange={(e) => setStartsOn(e.target.value)} className="w-44" />
+          </Field>
+        )}
         <Field label="Quantity" htmlFor={id("qty")} help={`${row.quantity} supplied by ${row.providerLabel}`}>
           <Input id={id("qty")} type="number" min={0} step="any" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
         </Field>
@@ -282,7 +288,7 @@ function NewLine({ row, contracts, products, currency, onDone }: { row: Register
         </p>
       )}
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs text-slate-500">{contract?.status === "active" ? "The line is dated from today; the next invoice pro-rates it." : "The agreement is a draft; nothing is invoiced until it is active."}</span>
+        <span className="text-xs text-slate-500">{contract?.status === "active" ? `The line is dated from ${startsOn || "today"}; the next invoice pro-rates it.` : "The agreement is a draft; nothing is invoiced until it is active."}</span>
         <span className="flex gap-2">
           <DialogClose asChild>
             <Button variant="secondary">Cancel</Button>
@@ -297,6 +303,7 @@ function NewLine({ row, contracts, products, currency, onDone }: { row: Register
                   sourceRowId: row.rowId,
                   contractId: contractId === NEW ? null : contractId,
                   newContract: contractId === NEW ? { name: newName, startDate: newStart, billingFrequency: newFrequency } : null,
+                  effectiveFrom: contract?.status === "active" ? startsOn || null : null,
                   line: { productId: productId || "", siteId: "", description, revenueType: "recurring", pricingModel: pricingModel as "per_user" | "per_device" | "fixed", billingFrequency: frequency, quantity: Number(quantity), unitPrice: Number(unitPrice), unitCost: unitCost === "" ? null : Number(unitCost), countsAsManagedDevice: pricingModel === "per_device" && managedDevice, invoiceSchedule: differentCycle && ownCycle ? "own" : "contract", reductionPolicy: "next_period", quantityRule: synced ? "synced" : "fixed" },
                 });
                 if (!r.ok) return setError(r.error);

@@ -81,6 +81,40 @@ export async function pushContactToXeroAction(companyId: string): Promise<Action
   });
 }
 
+/** Drafts the chosen one-off / hardware lines of a contract, dated as asked; each line can be invoiced once. */
+export async function prepareOneOffInvoiceAction(input: { contractId: string; lineIds: string[]; invoiceDate?: string }): Promise<ActionResult<{ draftId: string }>> {
+  return runAction(async () => {
+    const u = await requireActionPermission("invoice.prepare");
+    const p = z.object({ contractId: z.uuid(), lineIds: z.array(z.uuid()).min(1, "Tick at least one line"), invoiceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }).parse({ ...input, invoiceDate: input.invoiceDate || undefined });
+    const { contractWithLines } = await import("@/services/billing-coverage");
+    const found = await contractWithLines(p.contractId);
+    if (!found) throw new ActionError("Contract not found.");
+    const draftId = await prepareInvoiceDraft({ companyId: found.contract.companyId, contractId: p.contractId, oneOffLineIds: p.lineIds, invoiceDate: p.invoiceDate }, u.id);
+    revalidateXero();
+    revalidatePath(`/contracts/${p.contractId}`);
+    return { draftId };
+  });
+}
+
+/** An ad hoc draft for a customer: typed lines, an invoice date and a reference of the person's choosing. */
+export async function prepareAdHocInvoiceAction(input: { companyId: string; invoiceDate?: string; reference?: string; lines: { description: string; quantity: number; unitAmount: number; hardware?: boolean }[] }): Promise<ActionResult<{ draftId: string }>> {
+  return runAction(async () => {
+    const u = await requireActionPermission("invoice.prepare");
+    const p = z
+      .object({
+        companyId: z.uuid(),
+        invoiceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        reference: z.string().trim().max(120).optional(),
+        lines: z.array(z.object({ description: z.string().trim().min(1, "Every line needs a description").max(300), quantity: z.coerce.number().min(0).max(1_000_000), unitAmount: z.coerce.number().min(-1_000_000).max(1_000_000), hardware: z.boolean().optional() })).min(1, "Add at least one line").max(50),
+      })
+      .parse({ ...input, invoiceDate: input.invoiceDate || undefined, reference: input.reference || undefined });
+    const draftId = await prepareInvoiceDraft({ companyId: p.companyId, adHoc: { reference: p.reference ?? null, lines: p.lines }, invoiceDate: p.invoiceDate }, u.id);
+    revalidateXero();
+    revalidatePath(`/companies/${p.companyId}`);
+    return { draftId };
+  });
+}
+
 export async function prepareInvoiceAction(input: { companyId: string; contractId?: string; opportunityId?: string; periodStart?: string; periodEnd?: string; invoiceDate?: string }): Promise<ActionResult<{ draftId: string }>> {
   return runAction(async () => {
     const u = await requireActionPermission("invoice.prepare");

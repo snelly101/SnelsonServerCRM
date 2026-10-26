@@ -876,7 +876,7 @@ export default async function CompanyPage({
         )}
 
         {tab === "billing" && billing && (
-          <CompanyBillingTab companyId={id} data={billing} picture={picture} finance={finance} xero={xero} subscriptions={subscriptions} hosting={hosting} settings={settings} canApprove={can(me.role, "invoice.approve")} canReview={can(me.role, "discrepancy.review")} canWrite={can(me.role, "contract.write")} canManageIntegrations={can(me.role, "integration.manage")} matching={matching} />
+          <CompanyBillingTab companyId={id} data={billing} picture={picture} finance={finance} xero={xero} subscriptions={subscriptions} hosting={hosting} settings={settings} canApprove={can(me.role, "invoice.approve")} canReview={can(me.role, "discrepancy.review")} canWrite={can(me.role, "contract.write")} canManageIntegrations={can(me.role, "integration.manage")} matching={matching} canPrepare={can(me.role, "invoice.prepare")} companyName={company.name} />
         )}
         {tab === "contracts" && (
           <>

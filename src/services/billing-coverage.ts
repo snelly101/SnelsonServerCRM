@@ -51,6 +51,42 @@ export function lineSchedule(c: Pick<ContractRow, "billingFrequency">, l: Pick<C
 }
 
 export const isRecurring = (l: Pick<ContractLineRow, "revenueType" | "billingFrequency">) => l.revenueType === "recurring" && l.billingFrequency !== "one_off";
+/** A line invoiced once: a project, hardware, or a recurring line with a one-off frequency. */
+export const isOneOff = (l: Pick<ContractLineRow, "revenueType" | "billingFrequency">) => !isRecurring(l);
+
+/**
+ * One-off lines of a contract no draft has carried yet. A one-off line counts
+ * as invoiced as soon as any non-cancelled draft has a line built from it,
+ * so it is proposed by the run (or billed from the contract page) once.
+ */
+export function uninvoicedOneOffs(lines: ContractLineRow[], entries: DraftLineEntry[]) {
+  const invoiced = new Set(entries.map((e) => e.line.contractLineId).filter((x): x is string => Boolean(x)));
+  return lines.filter((l) => isOneOff(l) && !invoiced.has(l.id));
+}
+
+/** The draft that already carries a one-off line, if any. */
+export function oneOffCoveredBy(entries: DraftLineEntry[], lineId: string) {
+  return entries.find((e) => e.line.contractLineId === lineId) ?? null;
+}
+
+/** Draft lines for one-off contract lines: quantity × unit price, hardware to the hardware account. Not calculated, so they carry no `calc`. */
+export function buildOneOffLines(lines: ContractLineRow[], lineIds: string[], accountCode: string, hardwareAccountCode: string | null | undefined, taxType: string): InvoiceDraftLine[] {
+  const wanted = new Set(lineIds);
+  return lines.filter((l) => wanted.has(l.id) && isOneOff(l)).map((l) => ({ description: l.description, quantity: Number(l.quantity), unitAmount: Math.round(Number(l.unitPrice) * 100) / 100, accountCode: l.revenueType === "hardware" ? (hardwareAccountCode || accountCode) : accountCode, taxType, contractLineId: l.id }));
+}
+
+export type OneOffLineStatus = { id: string; description: string; revenueType: string; quantity: number; unitPrice: number; amount: number; invoicedOn: { draftId: string; status: string } | null };
+
+/** Every one-off line of a contract with the draft that carries it, for the contract page's Bill one-off dialog. */
+export async function oneOffLinesFor(contractId: string): Promise<OneOffLineStatus[]> {
+  const found = await contractWithLines(contractId);
+  if (!found) return [];
+  const entries = (await draftLineEntries([contractId])).get(contractId) ?? [];
+  return found.lines.filter(isOneOff).map((l) => {
+    const e = oneOffCoveredBy(entries, l.id);
+    return { id: l.id, description: l.description, revenueType: l.revenueType, quantity: Number(l.quantity), unitPrice: Number(l.unitPrice), amount: Math.round(Number(l.quantity) * Number(l.unitPrice) * 100) / 100, invoicedOn: e ? { draftId: e.draftId, status: e.status } : null };
+  });
+}
 
 /** Every line of every non-cancelled draft of these contracts. */
 export async function draftLineEntries(contractIds: string[]): Promise<Map<string, DraftLineEntry[]>> {

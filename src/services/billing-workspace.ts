@@ -141,6 +141,7 @@ export async function billingWorkspace(asOf: string, currency: string): Promise<
     if (stalePax8.has(r.companyId)) attention.push("Pax8 data is stale (last fetched more than 3 hours ago)");
     if (staleNinja.has(r.companyId)) attention.push("NinjaOne data is stale (last fetched more than 3 hours ago)");
     if (r.missedCount) attention.push(`${r.missedCount} missed period${r.missedCount === 1 ? "" : "s"} included`);
+    if (r.oneOffs.length) attention.push(`${r.oneOffs.length} one-off line${r.oneOffs.length === 1 ? "" : "s"} included (${money(r.oneOffNet, currency)}): ${r.oneOffs.map((o) => o.description).join(", ")}`);
     const ownCycleDue = r.items.filter((i) => i.months !== ({ monthly: 1, quarterly: 3, annual: 12 } as Record<string, number>)[r.billingFrequency]).map((i) => i.description);
     const reasons = explainDifference(r.lines, r.previous?.lines ?? null, currency, { missed: r.missedCount, ownCycleDue: [...new Set(ownCycleDue)] });
     const delta = r.previous ? round2(r.net - r.previous.net) : null;
