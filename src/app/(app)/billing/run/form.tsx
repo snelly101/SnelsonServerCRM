@@ -5,7 +5,7 @@ import { useActionState, useState } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
-import { SubmitButton, FormMessage } from "@/components/ui/form";
+import { Input, SubmitButton, FormMessage } from "@/components/ui/form";
 import { runBillingRunAction } from "@/actions/billing";
 import { fmtDate, fmtMoney, type DisplaySettings } from "@/lib/format";
 import type { WorkspaceRow } from "@/services/billing-workspace";
@@ -28,8 +28,8 @@ export function BillingRunForm({ asOf, rows, currency, settings }: { asOf: strin
     const { created, skipped } = result.data;
     return (
       <div className="space-y-4">
-        <Alert tone="success" title={`${created.length} draft invoice${created.length === 1 ? "" : "s"} prepared`}>
-          Review each one on the Finance page, then approve to create it in Xero as a draft. Nothing has been sent to Xero yet.
+        <Alert tone="success" title={`${created.length} draft invoice${created.length === 1 ? "" : "s"} prepared, dated ${fmtDate(result.data.invoiceDate, settings)}`}>
+          Review each one, then approve to create it in Xero as a draft. Nothing has been sent to Xero yet.
         </Alert>
         {created.length > 0 && (
           <table className="tbl">
@@ -84,6 +84,15 @@ export function BillingRunForm({ asOf, rows, currency, settings }: { asOf: strin
     <form action={formAction} className="space-y-3">
       <FormMessage result={result} />
       <input type="hidden" name="asOf" value={asOf} />
+      <div className="flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+        <label className="flex flex-col gap-1 text-xs text-slate-600" htmlFor="run-invoice-date">
+          Invoice date
+          <Input id="run-invoice-date" name="invoiceDate" type="date" defaultValue={asOf} required className="w-40" />
+        </label>
+        <p className="pb-1.5 text-xs text-slate-500">
+          Every draft this run creates is dated this day; the due date counts from it. Each draft&apos;s reference is the agreement&apos;s CRM reference and the month, e.g. <span className="font-mono">MSA-9125 {asOf.slice(0, 7)}</span>.
+        </p>
+      </div>
       <label className="flex items-center gap-2 text-sm text-slate-700">
         <input type="checkbox" name="consolidate" value="true" defaultChecked className="h-4 w-4 rounded border-slate-300 text-brand-600" />
         One draft per customer where several agreements are due (lines grouped by agreement; one invoice for the customer)

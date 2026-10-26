@@ -72,7 +72,7 @@ describe("billing run (demo adapter)", () => {
 
     // Second run for the same date: the period is already drafted, nothing new.
     const again = await previewBillingRun("2026-10-02");
-    expect(again.find((r) => r.contractId === monthly)!.skipReason).toMatch(/^already drafted \(CRM-/);
+    expect(again.find((r) => r.contractId === monthly)!.skipReason).toMatch(/^already drafted \(.+ 2026-09, draft\)$/);
     const rerun = await runBillingRun("2026-10-02", [monthly, quarterly], admin.id);
     expect(rerun.created).toHaveLength(0);
     expect(rerun.skipped).toHaveLength(2);

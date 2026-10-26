@@ -13,7 +13,8 @@ export async function runBillingRunAction(_prev: ActionResult<BillingRunResult> 
     const u = await requireActionPermission("invoice.prepare");
     const asOf = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Run date is required").parse(fd.get("asOf"));
     const contractIds = z.array(z.uuid()).min(1, "Tick at least one contract").parse(fd.getAll("contractIds[]").map(String));
-    const result = await runBillingRun(asOf, contractIds, u.id, { consolidate: fd.get("consolidate") === "true" });
+    const invoiceDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invoice date must be a date").optional().parse(String(fd.get("invoiceDate") ?? "") || undefined);
+    const result = await runBillingRun(asOf, contractIds, u.id, { consolidate: fd.get("consolidate") === "true", invoiceDate });
     revalidatePath("/billing", "layout");
     revalidatePath("/contracts", "layout");
     return result;

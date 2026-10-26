@@ -116,7 +116,8 @@ export async function billingFindings(opts: { asOf?: string; staleDays?: number 
     .select({ invoiceId: xeroInvoices.invoiceId, number: xeroInvoices.invoiceNumber, reference: xeroInvoices.reference, date: xeroInvoices.date, total: xeroInvoices.total, currency: xeroInvoices.currencyCode, companyId: xeroInvoices.companyId, companyName: companies.name, url: xeroInvoices.onlineInvoiceUrl })
     .from(xeroInvoices)
     .innerJoin(companies, eq(companies.id, xeroInvoices.companyId))
-    .where(and(eq(xeroInvoices.type, "ACCREC"), gte(xeroInvoices.date, since), notInArray(xeroInvoices.status, ["DRAFT", "VOIDED", "DELETED"]), or(isNull(xeroInvoices.reference), sql`${xeroInvoices.reference} not like 'CRM-%'`)))
+    // An invoice the CRM created is known by its Xero id on the draft (older drafts also by their CRM- reference); anything else was raised outside the CRM.
+    .where(and(eq(xeroInvoices.type, "ACCREC"), gte(xeroInvoices.date, since), notInArray(xeroInvoices.status, ["DRAFT", "VOIDED", "DELETED"]), sql`${xeroInvoices.invoiceId} not in (select xero_invoice_id from invoice_drafts where xero_invoice_id is not null)`, or(isNull(xeroInvoices.reference), sql`${xeroInvoices.reference} not like 'CRM-%'`)))
     .orderBy(desc(xeroInvoices.date))
     .limit(100);
   for (const i of outside) findings.push({ kind: "outside_crm_invoice", severity: "slate", companyId: i.companyId, companyName: i.companyName, title: `${i.number ?? i.invoiceId}${i.reference ? ` · ${i.reference}` : ""}`, detail: i.date, amount: i.total === null ? null : round2(Number(i.total)), currency: i.currency, href: `/companies/${i.companyId}?tab=invoices` });
