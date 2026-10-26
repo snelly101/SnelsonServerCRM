@@ -230,8 +230,11 @@ export default async function Pax8Page() {
                 automatically.
               </li>
               <li>
-                The Pax8 price is the partner cost. <em>Use as cost</em> on the
-                Subscriptions tab copies it onto the contract line so margin on
+                Pax8 reports two prices per subscription: its partner cost (our
+                buy price) and the customer price. Only the partner cost is ever
+                treated as cost; the customer price is offered as a starting sell
+                price when a line is created from a subscription. <em>Use as cost</em> on the
+                Subscriptions tab copies the partner cost onto the contract line so margin on
                 the Contracts page is real. Ordering and cancellations (and
                 quantity changes while that setting is off) stay in the{" "}
                 <Link

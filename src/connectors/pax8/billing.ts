@@ -8,7 +8,7 @@ import { matchBySkuOrName, type BillingAdapter, type SuppliedService } from "@/l
 /** Subscription statuses that are being supplied (and so should be paid for). */
 export const BILLED_STATUSES = ["Active", "Activated", "PendingCancel"];
 
-/** Monthly partner cost per unit, from the per-term price. Null for one-off or unknown terms. */
+/** A per-term amount per unit as a monthly figure: our cost from `partnerCost`, or the customer price from `price`. Null for one-off or unknown terms. */
 export function monthlyUnitCost(price: string | number | null, billingTerm: string | null): number | null {
   const p = price === null || price === "" ? null : Number(price);
   const months = termMonths(billingTerm);
@@ -18,7 +18,9 @@ export function monthlyUnitCost(price: string | number | null, billingTerm: stri
 
 /**
  * Pax8 as a supplier: every billed subscription of a linked company is a
- * service with a licence count and a partner cost per month.
+ * service with a licence count and a partner cost per month. The cost is
+ * Pax8's `partnerCost` (our buy price); its `price` is the customer's price
+ * and is only ever offered as a starting sell price.
  */
 export const pax8BillingAdapter: BillingAdapter = {
   provider: "pax8",
@@ -32,7 +34,8 @@ export const pax8BillingAdapter: BillingAdapter = {
         .where(and(sql`${pax8Subscriptions.companyId} is not null`, companyIds ? inArray(pax8Subscriptions.companyId, companyIds) : undefined, eq(pax8Subscriptions.externalStatus, "active"), inArray(pax8Subscriptions.status, BILLED_STATUSES))),
     ]);
     return subs.map((s): SuppliedService => {
-      const unit = monthlyUnitCost(s.price, s.billingTerm);
+      const unit = monthlyUnitCost(s.partnerCost, s.billingTerm);
+      const customer = monthlyUnitCost(s.price, s.billingTerm);
       return {
         key: `pax8_subscription:${s.id}`,
         source: "pax8_subscription",
@@ -47,6 +50,7 @@ export const pax8BillingAdapter: BillingAdapter = {
         quantity: s.quantity,
         monthlyCost: unit === null ? null : Math.round(unit * s.quantity * 100) / 100,
         costKnown: true,
+        customerMonthlyPrice: customer,
         renewsOn: s.commitmentEndsOn,
         status: s.status,
         syncedAt: s.fetchedAt,

@@ -120,7 +120,7 @@ export function SubscriptionsPanel({
               <strong>{totals.costStale}</strong> contract line
               {totals.costStale === 1 ? "" : "s"} carr
               {totals.costStale === 1 ? "ies" : "y"} a unit cost that differs
-              from the Pax8 price.
+              from the Pax8 partner cost.
             </>
           )}
         </div>
@@ -175,7 +175,7 @@ export function SubscriptionsPanel({
                 <th>Product</th>
                 <th className="w-[11%] text-right">Qty</th>
                 <th className="w-[17%]">Term</th>
-                <th className="w-[14%] text-right">Cost / unit</th>
+                <th className="w-[14%] text-right" title="Our buy price per unit per term (Pax8 partner cost)">Cost / unit</th>
                 <th className="w-[30%]">Billed by</th>
               </tr>
             </thead>
@@ -237,15 +237,20 @@ export function SubscriptionsPanel({
                     )}
                   </td>
                   <td className="text-right text-xs tabular-nums">
-                    {s.price !== null ? (
+                    {s.partnerCost !== null ? (
                       <>
-                        <div>{money(s.price)}</div>
+                        <div>{money(s.partnerCost)}</div>
                         {s.monthlyUnitCost !== null &&
                           s.billingTerm?.toLowerCase() !== "monthly" && (
                             <div className="text-slate-500">
                               ≈ {money(s.monthlyUnitCost)}/mo
                             </div>
                           )}
+                        {s.price !== null && (
+                          <div className="text-slate-400" title="What Pax8 would bill the customer per unit per term; not our cost">
+                            customer {money(s.price)}
+                          </div>
+                        )}
                         {s.line && s.marginPerUnitMonthly !== null && (
                           <div
                             className={
@@ -259,7 +264,9 @@ export function SubscriptionsPanel({
                         )}
                       </>
                     ) : (
-                      <span className="text-slate-400">n/a</span>
+                      <span className="text-slate-400" title={s.price !== null ? `Pax8 reports a customer price of ${money(s.price)} but no partner cost yet; it arrives with the next sync` : "Pax8 reports no partner cost"}>
+                        {s.price !== null ? `cost pending · customer ${money(s.price)}` : "n/a"}
+                      </span>
                     )}
                   </td>
                   <td>

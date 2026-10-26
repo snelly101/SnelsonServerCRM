@@ -155,14 +155,16 @@ const sub = (
   companyId: string,
   productId: string,
   quantity: number,
-  price: number,
+  partnerCost: number,
   over: Partial<Pax8SubscriptionRaw> = {},
 ): Pax8SubscriptionRaw => ({
   id,
   companyId,
   productId,
   quantity,
-  price,
+  // Like the real API: `partnerCost` is what we pay, `price` is the customer's price (a 20% uplift in demo).
+  partnerCost,
+  price: Math.round(partnerCost * 1.2 * 100) / 100,
   currency: "GBP",
   status: "Active",
   billingTerm: "Monthly",
@@ -194,7 +196,8 @@ const subscriptions: Pax8SubscriptionRaw[] = [
   // Bramley: matches.
   sub("s-1006", C["Bramley & Sons Accountants"], "p-m365-bp", 9, 16.6, {
     billingTerm: "Annual",
-    price: 182.6,
+    partnerCost: 182.6,
+    price: 219.12,
     commitmentTerm: { term: "Annual", endDate: dateOnly(22) },
   }),
   // Ridgeway: two fewer than billed.
@@ -225,7 +228,8 @@ function itemsFor(invoice: Pax8InvoiceRaw): Pax8InvoiceItemRaw[] {
     if (s.status === "Cancelled" && monthsAgo < 2) continue;
     if (s.billingTerm === "Annual" && monthsAgo !== 2) continue;
     const qty = s.id === "s-1004" && monthsAgo === 2 ? 32 : (s.quantity ?? 0);
-    const unit = Number(s.price);
+    const unit = Number(s.partnerCost);
+    const customer = Number(s.price);
     items.push({
       id: `${invoice.id}:${s.id}`,
       type: "Subscription",
@@ -235,9 +239,11 @@ function itemsFor(invoice: Pax8InvoiceRaw): Pax8InvoiceItemRaw[] {
       description:
         products.find((p) => p.id === s.productId)?.name ?? s.productId,
       quantity: qty,
-      unitPrice: unit,
-      total: Math.round(qty * unit * 100) / 100,
-      currency: "GBP",
+      price: customer,
+      total: Math.round(qty * customer * 100) / 100,
+      cost: unit,
+      costTotal: Math.round(qty * unit * 100) / 100,
+      currencyCode: "GBP",
       term: s.billingTerm,
       startPeriod: monthStart(monthsAgo),
       endPeriod: monthEnd(monthsAgo),
@@ -248,7 +254,7 @@ function itemsFor(invoice: Pax8InvoiceRaw): Pax8InvoiceItemRaw[] {
 }
 for (const inv of invoices)
   inv.total =
-    Math.round(itemsFor(inv).reduce((a, i) => a + Number(i.total), 0) * 100) /
+    Math.round(itemsFor(inv).reduce((a, i) => a + Number(i.costTotal), 0) * 100) /
     100;
 
 export class DemoPax8Client implements Pax8Client {

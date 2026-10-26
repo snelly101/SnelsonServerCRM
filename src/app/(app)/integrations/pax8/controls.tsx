@@ -954,7 +954,7 @@ export function Pax8ReconciliationTable({
                     "—"
                   )}
                   {r.allocation && r.allocation.unallocated > 0 && <div className="text-red-700">{money(r.allocation.unallocated, r.currency)} unallocated</div>}
-                  {r.allocation && r.allocation.findings.price_differs > 0 && <div className="text-amber-700">{r.allocation.findings.price_differs} price differ{r.allocation.findings.price_differs === 1 ? "s" : ""}</div>}
+                  {r.allocation && r.allocation.findings.price_differs > 0 && <div className="text-amber-700">{r.allocation.findings.price_differs} cost differ{r.allocation.findings.price_differs === 1 ? "s" : ""}</div>}
                 </td>
               </tr>
             );

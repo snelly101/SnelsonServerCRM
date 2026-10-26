@@ -37,6 +37,8 @@ export type SuppliedService = {
   monthlyCost: number | null;
   /** False when the provider carries no pricing at all (NinjaOne, 20i), so a null cost means "unknown", not "free". */
   costKnown: boolean;
+  /** The supplier's price to the customer per unit per month where it reports one (Pax8's customer price): a starting sell price when a line is created from the service. */
+  customerMonthlyPrice?: number | null;
   /** Supplier commitment end, domain expiry, or null. */
   renewsOn: string | null;
   status: string | null;
