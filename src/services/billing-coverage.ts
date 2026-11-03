@@ -128,13 +128,22 @@ export function belongsTo(e: DraftLineEntry, lineId: string, p: { periodStart: s
   return c.from >= p.periodStart && c.from <= p.periodEnd;
 }
 
-/** Does a non-cancelled draft already carry this period of this line? */
+/**
+ * Does a non-cancelled draft already carry this period of this line? A
+ * period or pro-rata line starting on the period's first day covers it. So
+ * does an increase or decrease dated inside the period: a line that started
+ * mid-period (quantity 0 on the first day) is billed as nothing but an
+ * "added from" line, and that invoice is the period's invoice for it; it must
+ * not be proposed again next run as "just the pro rata".
+ */
 export function isCovered(entries: DraftLineEntry[], lineId: string, p: BillingPeriod): boolean {
   return entries.some((e) => {
     if (e.line.contractLineId !== lineId) return false;
     const c = e.line.calc;
     if (!c) return e.periodStart === p.periodStart;
-    return (c.kind === "period" || c.kind === "prorata") && c.from === p.periodStart;
+    if (c.kind === "period" || c.kind === "prorata") return c.from === p.periodStart;
+    if (c.kind === "increase" || c.kind === "decrease") return c.from > p.periodStart && c.from <= p.periodEnd;
+    return false;
   });
 }
 

@@ -74,8 +74,12 @@ export async function previewBillingRun(asOf: string): Promise<BillingRunRow[]> 
     const recurring = cl.filter(isRecurring);
     const entries = entriesByContract.get(c.id) ?? [];
     const period = billingPeriodFor(c.startDate, c.billingFrequency, asOf, c.endDate, c.billingDay);
-    const items = period ? planItems(c, cl, entries, asOf) : [];
+    const planned = period ? planItems(c, cl, entries, asOf) : [];
     // Same maths as the draft itself, so the preview shows pro-rated amounts, catch-ups and credits.
+    const builtAllPlanned = planned.length ? await buildLinesForItems(c, cl, planned, entries, "", "", history) : [];
+    // A line whose quantity is still 0 for the whole period (it starts later) puts nothing on the draft and is not due yet.
+    const items = planned.filter((i) => builtAllPlanned.some((l) => l.contractLineId === i.lineId));
+    const startsLater = planned.length > 0 && items.length === 0;
     const built = items.length ? await buildLinesForItems(c, cl, items, entries, "", "", history) : [];
     const oneOffLines = uninvoicedOneOffs(cl, entries);
     const oneOffs = oneOffLines.map((l) => ({ lineId: l.id, description: l.description, amount: Math.round(Number(l.quantity) * Number(l.unitPrice) * 100) / 100 }));
@@ -112,7 +116,9 @@ export async function previewBillingRun(asOf: string): Promise<BillingRunRow[]> 
           : !items.length
             ? existing
               ? `already drafted (${existing.status})`
-              : "nothing due: every line period is invoiced"
+              : startsLater
+                ? "nothing due yet: the lines start later"
+                : "nothing due: every line period is invoiced"
             : null;
     const skipReason = recurringSkip && oneOffs.length && c.startDate <= asOf ? null : recurringSkip;
     out.push({ contractId: c.id, contractName: c.name, companyId: c.companyId, companyName: r.companyName, billingFrequency: c.billingFrequency, period, items, oneOffs, oneOffNet, missedCount: items.filter((i) => i.missed).length, net, lines: builtAll, previous, lineCount: recurring.length, xeroLinked, existingDraft: existing, skipReason });

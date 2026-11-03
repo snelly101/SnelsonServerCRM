@@ -164,12 +164,15 @@ export const contractLineSchema = lineSchema.extend({
   invoiceSchedule: z.enum(invoiceScheduleValues).default("contract"),
   reductionPolicy: z.enum(reductionPolicyValues).default("next_period"),
   quantityRule: z.enum(quantityRuleValues).default("fixed"),
+  /** Active contracts: the day this line's quantity or price change takes effect; empty means the form's "changes take effect from" date. */
+  effectiveFrom: optionalDate,
 });
-/** Schedule and reduction policy are optional for callers that build lines in code (imports, tests); the form always sends them. */
-export type ContractLineInput = Omit<z.infer<typeof contractLineSchema>, "invoiceSchedule" | "reductionPolicy" | "quantityRule"> & {
+/** Schedule, reduction policy and the per-line date are optional for callers that build lines in code (imports, tests); the form always sends them. */
+export type ContractLineInput = Omit<z.infer<typeof contractLineSchema>, "invoiceSchedule" | "reductionPolicy" | "quantityRule" | "effectiveFrom"> & {
   invoiceSchedule?: (typeof invoiceScheduleValues)[number];
   reductionPolicy?: (typeof reductionPolicyValues)[number];
   quantityRule?: (typeof quantityRuleValues)[number];
+  effectiveFrom?: string | null;
 };
 
 export const taskSchema = z.object({
