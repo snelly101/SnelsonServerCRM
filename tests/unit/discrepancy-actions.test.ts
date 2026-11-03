@@ -10,6 +10,7 @@ import { demoNinjaAddDevice, demoNinjaReset } from "@/connectors/ninjaone/demo";
 import { linkOrganization, listDiscrepancies, reopenExpiredExceptions, runDiscrepancyCheck, syncNinjaOne } from "@/services/ninjaone";
 import { discrepancyOptions, previewDiscrepancyResolution, resolveDiscrepancy } from "@/services/discrepancy-actions";
 import { discrepancyImpact } from "@/lib/discrepancy-impact";
+import { billingPeriodFor } from "@/lib/billing";
 import { makeUser } from "./helpers";
 
 let admin: { id: string };
@@ -64,7 +65,11 @@ describe("discrepancy actions (NinjaOne demo adapter)", () => {
     expect(dentalOpts.line).toMatchObject({ quantity: 18, newQuantity: 19 });
     expect(dentalOpts.impact.amend_line?.perPeriod).toBe(12);
     expect((await discrepancyOptions(freight.id)).kinds).toEqual(["amend_line", "reduce_at_renewal", "exception", "dismiss"]);
-    expect((await previewDiscrepancyResolution(dental.id, "amend_line", "2026-10-10")).thisPeriod).toBe(8.52);
+    // The preview is for the period containing today, so the expectation is built from that period rather than a fixed date.
+    const current = billingPeriodFor("2026-01-01", "monthly", new Date().toISOString().slice(0, 10), null, null)!;
+    const tenth = `${current.periodStart.slice(0, 8)}10`;
+    const daysLeft = Math.round((Date.parse(current.periodEnd) - Date.parse(tenth)) / 86400000) + 1;
+    expect((await previewDiscrepancyResolution(dental.id, "amend_line", tenth)).thisPeriod).toBe(Math.round((12 * daysLeft / current.fullDays) * 100) / 100);
 
     // Amend: the line takes 19 from the chosen date, the change is in the history, the item is resolved and stays so after the re-check.
     const amended = await resolveDiscrepancy(dental.id, { kind: "amend_line", effectiveFrom: "2026-10-10", reason: "New PC agreed" }, admin.id);

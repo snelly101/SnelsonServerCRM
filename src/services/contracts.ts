@@ -206,16 +206,19 @@ function lineValues(contractId: string, l: ContractLineInput, i: number) {
  * price change on a recurring line, every recurring line added (from 0) and
  * every recurring line removed (to 0) is written to `contract_line_changes`
  * with the value before and after, the effective day, the actor and the
- * reason, so the billing engine can reconstruct the quantity on any day.
+ * reason, so the billing engine can reconstruct the quantity on any day. A
+ * line can carry its own `effectiveFrom` (two starters on different days in
+ * one edit); the form's date applies to the rest.
  */
 async function syncLines(tx: Tx, contractId: string, lines: ContractLineInput[], effectiveFrom: string | null, actorUserId: string | null = null, reason: string | null = null) {
   const existing = await tx.select().from(contractLines).where(eq(contractLines.contractId, contractId));
   const byId = new Map(existing.map((l) => [l.id, l]));
   const keep = new Set<string>();
   const changes: (typeof contractLineChanges.$inferInsert)[] = [];
-  const record = (lineId: string | null, description: string, field: "quantity" | "unit_price", prev: number | string | null, next: number | string | null) => {
-    if (!effectiveFrom) return;
-    changes.push({ contractId, contractLineId: lineId, lineDescription: description, field, previousValue: prev === null ? null : String(Number(prev)), newValue: next === null ? null : String(Number(next)), effectiveFrom, reason, actorUserId });
+  const record = (lineId: string | null, description: string, field: "quantity" | "unit_price", prev: number | string | null, next: number | string | null, when: string | null = null) => {
+    const day = when || effectiveFrom;
+    if (!day) return;
+    changes.push({ contractId, contractLineId: lineId, lineDescription: description, field, previousValue: prev === null ? null : String(Number(prev)), newValue: next === null ? null : String(Number(next)), effectiveFrom: day, reason, actorUserId });
   };
   for (const [i, l] of lines.entries()) {
     const values = lineValues(contractId, l, i);
@@ -223,14 +226,14 @@ async function syncLines(tx: Tx, contractId: string, lines: ContractLineInput[],
     if (current) {
       keep.add(current.id);
       if (values.revenueType === "recurring") {
-        if (Number(current.quantity) !== Number(l.quantity)) record(current.id, values.description, "quantity", current.quantity, l.quantity);
-        if (Number(current.unitPrice) !== Number(l.unitPrice)) record(current.id, values.description, "unit_price", current.unitPrice, l.unitPrice);
+        if (Number(current.quantity) !== Number(l.quantity)) record(current.id, values.description, "quantity", current.quantity, l.quantity, l.effectiveFrom ?? null);
+        if (Number(current.unitPrice) !== Number(l.unitPrice)) record(current.id, values.description, "unit_price", current.unitPrice, l.unitPrice, l.effectiveFrom ?? null);
       }
       await tx.update(contractLines).set({ ...values, updatedAt: new Date() }).where(eq(contractLines.id, current.id));
     } else {
       const [row] = await tx.insert(contractLines).values(values).returning({ id: contractLines.id });
       keep.add(row.id);
-      if (values.revenueType === "recurring") record(row.id, values.description, "quantity", 0, l.quantity);
+      if (values.revenueType === "recurring") record(row.id, values.description, "quantity", 0, l.quantity, l.effectiveFrom ?? null);
     }
   }
   const gone = existing.filter((l) => !keep.has(l.id));

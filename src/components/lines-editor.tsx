@@ -27,6 +27,8 @@ export type EditableLine = {
   reductionPolicy?: (typeof reductionPolicyValues)[number];
   /** Contracts only: fixed (the agreed quantity bills) or synced (the integrations' count should bill; differences are proposed changes). */
   quantityRule?: (typeof quantityRuleValues)[number];
+  /** Active contracts only: the day a quantity or price change on this line takes effect; empty uses the form's date. */
+  effectiveFrom?: string;
 };
 
 export type ProductOption = {
@@ -61,6 +63,7 @@ export function LinesEditor({
   showSite,
   sites = [],
   quantityLabel = "Qty",
+  showEffectiveFrom = false,
 }: {
   initial: EditableLine[];
   products: ProductOption[];
@@ -68,6 +71,8 @@ export function LinesEditor({
   showSite?: boolean;
   sites?: { id: string; name: string }[];
   quantityLabel?: string;
+  /** Active contracts: a per-line "from" date under the quantity, for changes that took effect on different days. */
+  showEffectiveFrom?: boolean;
 }) {
   const [lines, setLines] = useState<EditableLine[]>(initial.length ? initial : []);
   const summary = useMemo(() => summariseLines(lines), [lines]);
@@ -164,6 +169,12 @@ export function LinesEditor({
                 </div>
                 <div className="sm:col-span-2">
                   <Input aria-label="Quantity" name={`lines[${i}][quantity]`} type="number" min={0} step="1" value={l.quantity} onChange={(e) => update(l.key, { quantity: Number(e.target.value) })} />
+                  {showEffectiveFrom && l.revenueType === "recurring" && (
+                    <label className="mt-1 block">
+                      <span className="sr-only">Change effective from</span>
+                      <Input aria-label="Change effective from" name={`lines[${i}][effectiveFrom]`} type="date" value={l.effectiveFrom ?? ""} onChange={(e) => update(l.key, { effectiveFrom: e.target.value })} className="h-7 py-0 text-[11px]" title="The day this line's change takes effect. Empty: the date below the lines." />
+                    </label>
+                  )}
                 </div>
                 <div className="sm:col-span-2">
                   <Input aria-label="Unit price" name={`lines[${i}][unitPrice]`} type="number" min={0} step="0.01" value={l.unitPrice} onChange={(e) => update(l.key, { unitPrice: Number(e.target.value) })} />
